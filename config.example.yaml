@@ -1,0 +1,138 @@
+# Job Scalper configuration. Copy to config.yaml and edit.
+# See CONTEXT.md for the vocabulary used here.
+
+# Where collected postings are stored.
+database: scalper.db
+
+# The global search that drives every source at collect time (ADR 0005).
+# Job Scalper is company-agnostic: sources are searched by these criteria,
+# not by naming employers. `report --profile` re-scores the results afterward,
+# so `search` should be broad and the profile narrow.
+search:
+  # Query terms. Each is searched independently and results are unioned (OR).
+  # Keep these broad — precise ranking happens at report time via the profile.
+  # Tag/keyword sources (remotive, jobicy) work best with single-tech tokens
+  # like "java"; broad-feed sources match any term whose words all appear.
+  terms:
+    - python backend
+    - platform engineer
+    - software engineer
+    - java
+    - golang
+  location: remote          # hint; most sources here are remote-only and ignore it
+  remote: true
+  limit_per_source: 100     # cap postings pulled from each source per run
+
+# Sources to collect from. Each is company-agnostic: it searches the whole
+# market, not a single employer. Add a source by adding one entry here.
+# "search" sources issue a native query; "broad-feed" sources pull a recent
+# feed and filter locally against the terms above (ADR 0005).
+# Any source may set `limit:` to override the global search.limit_per_source —
+# useful to stop a high-volume source from dominating the store.
+sources:
+  - type: remotive          # https://remotive.com — keyword search, remote-only
+  - type: remoteok          # https://remoteok.com — recent remote feed, filtered locally
+  - type: jobicy            # https://jobicy.com — tag search, remote-only
+  - type: arbeitnow         # https://www.arbeitnow.com — paginated feed, filtered locally
+  - type: themuse           # https://www.themuse.com — category feed, filtered locally
+  - type: workingnomads     # https://www.workingnomads.com — remote feed, filtered locally
+  - type: himalayas         # https://himalayas.app — remote feed + salary, filtered locally
+  - type: weworkremotely    # https://weworkremotely.com — programming RSS, filtered locally
+  - type: hackernews        # HN monthly "Who is hiring?" thread (Algolia API), filtered locally
+    limit: 25               # its thread has 300+ comments — cap so it doesn't swamp the store
+  - type: reddit            # job subreddits via public RSS — no account needed
+    # subreddits: [forhire, remotejs, jobbit]    # override the defaults
+    # hiring_only: true       # keep only "[Hiring]" posts — right for mixed subs
+                              # like r/forhire; set false for dedicated job boards
+                              # (r/java_jobs, r/techjobs) where every post is a listing
+    # delay: 3                # seconds between subreddits; raise if you see HTTP 429
+    # Reddit rate-limits anonymous clients (HTTP 429), much harder from datacenter
+    # IPs than home connections — so this works best run locally. Throttled or
+    # missing subreddits are skipped without failing the run.
+
+  # Adzuna aggregates many boards but needs a FREE app_id/app_key.
+  # Register at https://developer.adzuna.com, then uncomment and fill in
+  # (or set ADZUNA_APP_ID / ADZUNA_APP_KEY env vars). Without keys it is skipped.
+  # - type: adzuna
+  #   app_id: "YOUR_APP_ID"
+  #   app_key: "YOUR_APP_KEY"
+  #   country: gb            # gb, us, ca, au, de, … (determines salary currency)
+  #   max_pages: 2
+
+# Named search Profiles. `scalper report --profile <name>` selects one and
+# scores the collected postings against it.
+profiles:
+  backend:
+    # Title patterns: a posting whose title contains any of these scores full
+    # title-match; otherwise it falls back to token overlap.
+    titles:
+      - backend engineer
+      - software engineer
+      - platform engineer
+      - python
+    # Skills the role should require. Coverage = how many you "have" appear.
+    required_skills:
+      - python
+      - postgres
+      - api
+      - docker
+      - aws
+    nice_to_have_skills:
+      - kubernetes
+      - terraform
+      - kafka
+    # Free-text keywords that, if present, nudge the score up.
+    keywords:
+      - distributed systems
+      - microservices
+    # Postings containing any of these are dropped outright.
+    exclude_keywords:
+      - clearance
+      - on-site only
+      - senior staff
+    # Hard filters.
+    remote_only: true
+    salary_floor: 0            # 0 = no floor; postings with unknown salary are kept
+    freshness_days: 30         # drop postings published/updated older than this
+    # Scoring weights (relative; renormalized over components that produce a value).
+    # `semantic` is wired but inert until the embeddings layer is added.
+    weights:
+      skill_coverage: 0.45
+      title_match: 0.30
+      keyword: 0.10
+      semantic: 0.15
+
+  # A Java-focused profile. Run with: scalper report --profile java
+  java:
+    titles:
+      - java engineer
+      - java developer
+      - backend engineer
+      - software engineer
+    required_skills:
+      - java
+      - spring
+      - postgres
+      - kafka
+      - aws
+    nice_to_have_skills:
+      - kotlin
+      - kubernetes
+      - microservices
+    keywords:
+      - spring boot
+      - distributed systems
+    # JavaScript roles often surface under a bare "java" search; exclude them so
+    # the Java profile stays clean.
+    exclude_keywords:
+      - javascript
+      - clearance
+      - on-site only
+    remote_only: true
+    salary_floor: 0
+    freshness_days: 30
+    weights:
+      skill_coverage: 0.45
+      title_match: 0.30
+      keyword: 0.10
+      semantic: 0.15

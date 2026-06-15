@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "job-scalper"
+version = "0.1.0"
+description = "Personal job scalper: collect remote tech jobs from many sources, score against your criteria, report as HTML."
+requires-python = ">=3.11"
+dependencies = [
+    "httpx>=0.27",
+    "pydantic>=2.6",
+    "pyyaml>=6.0",
+    "jinja2>=3.1",
+]
+
+[project.optional-dependencies]
+# Layered on later: semantic similarity (Stage 1) and LLM enrichment (Stage 2).
+semantic = ["sentence-transformers>=2.7"]
+llm = ["anthropic>=0.39"]
+scrape = ["playwright>=1.44"]
+dev = ["pytest>=8.0"]
+
+[project.scripts]
+scalper = "scalper.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+scalper = ["templates/*.html"]

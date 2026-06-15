@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+
+# Scalper local state
+*.db
+*.sqlite
+*.sqlite3
+config.yaml
+reports/
+report.html
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
