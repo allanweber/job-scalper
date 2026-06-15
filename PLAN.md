@@ -12,10 +12,11 @@ global `search:` block (`SearchQuery`) and the adapter contract is `fetch(query)
 
 **Done:**
 - ✅ `JobPosting` + `SearchQuery` models, SQLite store, collect/report split (ADR 0002/0005)
-- ✅ Adapter contract + registry (ADR 0001/0005); **11 company-agnostic adapters**:
+- ✅ Adapter contract + registry (ADR 0001/0005); **13 company-agnostic adapters**:
   remotive + jobicy + adzuna (search), remoteok + arbeitnow + themuse + workingnomads +
   himalayas (broad feed), weworkremotely (RSS), hackernews (Who's Hiring), reddit (Atom RSS).
-  All keyless except adzuna (free key; skipped when unset).
+  All keyless except adzuna (free key; skipped when unset). Plus two **hard (scraped)**
+  sources — linkedin + indeed — anonymous only, behind `[scrape]`, off by default.
 - ✅ Stage 1 deterministic scoring + hard filters (ADR 0003)
 - ✅ Self-contained HTML report (client-side sort/filter)
 - ✅ `backend` + `java` profiles; java tech tokens in the global search
@@ -30,6 +31,12 @@ global `search:` block (`SearchQuery`) and the adapter contract is `fetch(query)
   skills, low-confidence flag), cached in SQLite by uid + profile hash + model; `--enrich` /
   `--top` / `--enrich-model` flags + `llm:` config block. Fails soft to Stage 1 when the
   dep/key is absent; never affects the deterministic Match %.
+
+- ✅ **Phase 4: hard sources** — LinkedIn + Indeed scraped via a shared Playwright helper
+  (`sources/_browser.py`) behind the `[scrape]` extra, **anonymous only**, off by default.
+  `tier = hard`, surfaced as a report badge + footer note. Parsing isolated and tested
+  offline; every fetch fails soft (blocked / challenged / extra-absent → no postings, never
+  aborts collect).
 
 **Designed, not yet built:** the `add-source` self-building command (ADR 0004) — its
 `build_model` per-task slot and the swappable `LLMProvider` registry it reuses already exist.
@@ -117,23 +124,32 @@ Note: there are no public *Java-only* job-board APIs; Java focus is delivered by
 - **Acceptance:** each adapter searches live with the global query and its postings
       score/report like the rest.
 
-## Phase 4 — Hard sources (LinkedIn, Indeed)
+## Phase 4 — Hard sources (LinkedIn, Indeed) ✅
 
 Goal: best-effort coverage of the hostile sources via self-hosted Playwright, **anonymous
 only, never the user's credentials**, low-frequency (ADR design + CONTEXT.md). Treat as
 fragile gap-fillers, not the backbone.
 
-- [ ] Add `[scrape]` extra (playwright) + `playwright install` doc step.
-- [ ] `scalper/sources/_browser.py`: shared headless-browser helper (stealth-ish config,
-      polite delays, per-source rate caps, retry/backoff, timeout, graceful failure).
-- [ ] **LinkedIn** adapter: anonymous guest jobs endpoints only; map to `JobPosting`;
-      expect breakage — keep parsing isolated and well-logged.
-- [ ] **Indeed** adapter: Cloudflare-aware; accept partial/failed runs without aborting
-      `collect` (already isolated per-source in the CLI).
-- [ ] Mark these `tier = hard`; surface tier in the report so reliability is legible.
-- [ ] Document the risk + low-frequency guidance in README.
+- [x] `[scrape]` extra (playwright) already declared; `playwright install chromium` documented.
+- [x] `scalper/sources/_browser.py`: shared headless-browser helper — lazy Playwright import
+      (so adapters register without the extra), stealth-ish context (realistic UA, hidden
+      `navigator.webdriver`), polite inter-fetch delays, retry/backoff, hard timeout, and a
+      `get()` that never raises (returns rendered HTML or `None`).
+- [x] **LinkedIn** adapter: anonymous *guest* search endpoint only; parsing isolated in pure
+      module functions (`parse_search_cards`); search source (terms unioned + deduped). Logs
+      and skips when blocked / `[scrape]` absent.
+- [x] **Indeed** adapter: Cloudflare-aware (`is_challenge_page`); extracts the embedded
+      `mosaic-provider-jobcards` JSON via a brace-balanced scanner; accepts partial/failed runs.
+- [x] Both `tier = hard`; report surfaces a `hard` badge per row + a footer note (tier derived
+      from the adapter registry at render time — no store migration).
+- [x] Documented the risk + low-frequency / run-locally guidance in README and config.example.
+- [x] Offline parsing tests with captured payloads (guest fragment + Indeed results page),
+      fail-soft paths, dedup/limit, remote inference, tier lookup.
 - **Acceptance:** when reachable, hard sources contribute postings; when blocked, the run
-      logs and continues without failing other sources.
+      logs and continues without failing other sources. (Verified offline: parsers + adapters
+      drive from captured payloads; fail-soft returns `[]` with a one-line hint when `[scrape]`
+      is absent or a page is challenged. Live browser path not exercised — `[scrape]` not
+      installed in this env.)
 
 ## Phase 5
 

@@ -101,6 +101,28 @@ per-request logs while keeping the usage summary. Costs are estimated from a bui
 table; if your model isn't listed it shows `n/a` — set `llm.input_price_per_mtok` /
 `llm.output_price_per_mtok` (USD per 1M tokens) to override.
 
+### Hard sources — LinkedIn & Indeed (optional, off by default)
+
+LinkedIn and Indeed have no public API and actively resist automation, so they
+can't be reached like the structured sources above. When enabled, they're scraped
+with a self-hosted headless browser (Playwright) — **anonymously only, never with
+your own account or credentials** — and the results are tagged `hard` in the report
+so you can see they're best-effort.
+
+```bash
+pip install -e '.[scrape]'
+playwright install chromium        # one-time browser download
+```
+
+Then uncomment the `linkedin` / `indeed` entries in `config.yaml`. **Treat these as
+fragile gap-fillers, not the backbone:** their markup changes often and they throttle
+or block automated traffic — much harder from datacenter/cloud IPs than from a home
+connection, so they work best run locally and **at low frequency** (once a day at
+most). A blocked page, a markup change, or a missing `[scrape]` extra makes the source
+contribute nothing and log a one-line note; it never aborts the run or affects the
+other sources. LinkedIn uses its unauthenticated *guest* search endpoint; Indeed is
+Cloudflare-aware and skips cleanly when challenged.
+
 Schedule collection with cron, e.g. nightly:
 
 ```cron
@@ -110,8 +132,9 @@ Schedule collection with cron, e.g. nightly:
 ## Configuration
 
 `config.yaml` holds the database path, a global `search:` block, a list of sources, and
-named profiles. See `config.example.yaml` for a documented template. Eleven company-agnostic
-adapters ship today (all keyless except Adzuna):
+named profiles. See `config.example.yaml` for a documented template. Thirteen company-agnostic
+adapters ship today — eleven structured (all keyless except Adzuna) plus two optional hard
+(scraped) sources, off by default:
 
 | Adapter | Endpoint | Shape | Notes |
 | --- | --- | --- | --- |
@@ -126,6 +149,12 @@ adapters ship today (all keyless except Adzuna):
 | `weworkremotely` | weworkremotely.com RSS | broad feed (RSS) | |
 | `hackernews` | hn.algolia.com API | broad feed | monthly "Who is hiring?" thread |
 | `reddit` | reddit.com `.rss` | broad feed (Atom) | no account; rate-limited, best run locally |
+| `linkedin` | guest jobs endpoint | **hard** (scraped) | anonymous; needs `[scrape]`; off by default |
+| `indeed` | results page | **hard** (scraped) | anonymous, Cloudflare-aware; needs `[scrape]`; off by default |
+
+Adapters are tiered: *structured* sources have official APIs/feeds and form the reliable
+backbone; *hard* sources (LinkedIn, Indeed) are scraped anonymously, best-effort, and off
+by default (see [Hard sources](#hard-sources--linkedin--indeed-optional-off-by-default)).
 
 Search sources issue a native query; broad-feed sources pull a recent feed and filter
 locally against `search.terms`. There are no public Java-only boards, so Java focus comes
@@ -150,16 +179,16 @@ run.
 Implemented:
 - ✅ `JobPosting` model + SQLite store
 - ✅ Company-agnostic, query-driven sources + adapter registry (ADR 0005)
-- ✅ 11 adapters: Remotive/Jobicy/Adzuna (search) + RemoteOK/Arbeitnow/The Muse/Working Nomads/Himalayas/We Work Remotely/Hacker News/Reddit (feeds)
+- ✅ 11 structured adapters: Remotive/Jobicy/Adzuna (search) + RemoteOK/Arbeitnow/The Muse/Working Nomads/Himalayas/We Work Remotely/Hacker News/Reddit (feeds)
+- ✅ 2 hard adapters: LinkedIn + Indeed via self-hosted Playwright, anonymous only, off by default — `pip install -e .[scrape]`
 - ✅ Stage 1 deterministic scoring + hard filters
 - ✅ Semantic similarity in Stage 1 (local sentence-transformers, cached) — `pip install -e .[semantic]`
 - ✅ Stage 2 LLM enrichment: summary + skill-gap on the shortlist, cached, swappable provider — `pip install -e .[llm]`
-- ✅ Self-contained HTML report (client-side sort/filter)
-- ✅ Tests for scoring, semantic, enrichment, and adapter parsing
+- ✅ Self-contained HTML report (client-side sort/filter, tier badges)
+- ✅ Tests for scoring, semantic, enrichment, and adapter parsing (structured + hard)
 
 Layered on next (designed, not yet built):
 - ⏳ Generic mapping-driven RSS/JSON adapter (declarative tier for `add-source`)
-- ⏳ Hard sources (LinkedIn, Indeed) via self-hosted Playwright, anonymous only — `[scrape]`
 - ⏳ `add-source <url>` self-building command, tiered + approval-gated (ADR 0004)
 
 ## Tests

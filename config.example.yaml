@@ -59,6 +59,23 @@ sources:
   #   country: gb            # gb, us, ca, au, de, … (determines salary currency)
   #   max_pages: 2
 
+  # ---- Hard sources (LinkedIn, Indeed) — OFF by default ----
+  # These have no public API and resist automation, so they're scraped with a
+  # self-hosted headless browser, ANONYMOUSLY (no login, never your account).
+  # They are fragile gap-fillers, not the backbone: markup changes and blocks
+  # are expected, and a blocked source just contributes nothing — it never
+  # fails the run. Tagged `hard` in the report so partial coverage is legible.
+  #
+  # Needs the `[scrape]` extra:  pip install -e '.[scrape]' && playwright install chromium
+  # Run them LOW-FREQUENCY (e.g. once a day at most) to stay polite and unblocked.
+  # - type: linkedin
+  #   max_pages: 2            # pages of 25 per search term (keep small)
+  #   delay: 3                # seconds between page fetches
+  # - type: indeed
+  #   domain: www.indeed.com  # or ca.indeed.com, de.indeed.com, …
+  #   max_pages: 1            # Indeed is the most hostile — stay light
+  #   delay: 4
+
 # Optional Stage 2 LLM enrichment (ADR 0003). Runs only on the top-scored
 # postings, so cost is bounded by `top_n`, not collection volume. Requires the
 # `[llm]` extra (`pip install -e '.[llm]'`) and ANTHROPIC_API_KEY in the env.

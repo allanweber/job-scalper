@@ -7,14 +7,22 @@ from pathlib import Path
 
 from jinja2 import Environment, PackageLoader, select_autoescape
 
+import scalper.sources  # noqa: F401 — import side-effect populates the adapter REGISTRY
 from scalper.config import Profile
 from scalper.enrich import Enrichment
 from scalper.scoring import ScoredPosting
+from scalper.sources.base import REGISTRY, TIER_HARD, TIER_STRUCTURED
 
 _env = Environment(
     loader=PackageLoader("scalper", "templates"),
     autoescape=select_autoescape(["html"]),
 )
+
+
+def _tier(source: str) -> str:
+    """The acquisition tier of a posting's source (defaults to structured)."""
+    cls = REGISTRY.get(source)
+    return getattr(cls, "tier", TIER_STRUCTURED) if cls is not None else TIER_STRUCTURED
 
 
 def _excerpt(text: str, limit: int = 320) -> str:
@@ -34,6 +42,8 @@ def _row(scored: ScoredPosting, enrichment: Enrichment | None = None) -> dict:
         "timezone": p.timezone or "",
         "salary": p.salary_display or "",
         "source": p.source,
+        "tier": _tier(p.source),
+        "hard": _tier(p.source) == TIER_HARD,
         "url": p.url,
         "published": p.published_at.date().isoformat() if p.published_at else "",
         "matched_skills": scored.matched_skills,
@@ -52,13 +62,15 @@ def render_report(
     enrichments: dict[str, Enrichment] | None = None,
 ) -> str:
     enrichments = enrichments or {}
+    rows = [_row(s, enrichments.get(s.posting.uid)) for s in scored]
     template = _env.get_template("report.html")
     return template.render(
         profile_name=profile_name,
         profile=profile,
-        rows=[_row(s, enrichments.get(s.posting.uid)) for s in scored],
+        rows=rows,
         total=len(scored),
         enriched=bool(enrichments),
+        has_hard=any(r["hard"] for r in rows),
         generated_at=datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
     )
 
