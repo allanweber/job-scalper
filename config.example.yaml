@@ -59,6 +59,22 @@ sources:
   #   country: gb            # gb, us, ca, au, de, … (determines salary currency)
   #   max_pages: 2
 
+# Optional Stage 2 LLM enrichment (ADR 0003). Runs only on the top-scored
+# postings, so cost is bounded by `top_n`, not collection volume. Requires the
+# `[llm]` extra (`pip install -e '.[llm]'`) and ANTHROPIC_API_KEY in the env.
+# Trigger per-run with `scalper report --enrich`, or set `enabled: true` here.
+# With --enrich, prompts/responses stream to stderr and a token/cost summary to
+# stdout; add --quiet-llm to keep only the summary.
+llm:
+  provider: anthropic
+  enrich_model: claude-haiku-4-5      # cheap model for per-job summaries
+  top_n: 10                           # how many top postings to enrich
+  enabled: false
+  # Override cost-report pricing (USD per 1M tokens) if the built-in estimate is
+  # stale or your model isn't recognized. Leave unset to use the built-in table.
+  # input_price_per_mtok: 1.0
+  # output_price_per_mtok: 5.0
+
 # Named search Profiles. `scalper report --profile <name>` selects one and
 # scores the collected postings against it.
 profiles:

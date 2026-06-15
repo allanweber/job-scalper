@@ -25,8 +25,14 @@ global `search:` block (`SearchQuery`) and the adapter contract is `fetch(query)
   `[semantic]` extra, SQLite embedding cache, `--no-semantic` flag; fails soft to the
   deterministic blend when the dep/model is absent.
 
-**Inert until built:** the Stage 2 LLM layer. The `semantic` component is now live (with
-the `[semantic]` extra); the `semantic_scorer` hook in `scoring.py` is where it plugs in.
+- ✅ **Phase 2: Stage 2 LLM enrichment** — `LLMProvider` registry + Anthropic provider
+  behind the `[llm]` extra; `Enricher` summarizes the top-N shortlist (summary + have/missing
+  skills, low-confidence flag), cached in SQLite by uid + profile hash + model; `--enrich` /
+  `--top` / `--enrich-model` flags + `llm:` config block. Fails soft to Stage 1 when the
+  dep/key is absent; never affects the deterministic Match %.
+
+**Designed, not yet built:** the `add-source` self-building command (ADR 0004) — its
+`build_model` per-task slot and the swappable `LLMProvider` registry it reuses already exist.
 
 ---
 
@@ -51,27 +57,37 @@ literally contain the skill keywords. Local embeddings, zero marginal cost (ADR 
       breakdown and reorders results; without it, behavior is unchanged (verified live —
       report falls back to deterministic scores and prints an install hint).
 
-## Phase 2 — Stage 2 LLM enrichment
+## Phase 2 — Stage 2 LLM enrichment ✅
 
 Goal: on the shortlist only, generate the summary + skill-gap narrative (ADR 0003).
 Cheap model by default, behind a swappable interface (ADR 0004 per-task model config).
 
-- [ ] `scalper/llm/base.py`: `LLMProvider` protocol (`complete(prompt, *, model, ...)`),
-      plus a registry/factory keyed by provider name.
-- [ ] `scalper/llm/anthropic_provider.py`: default impl, model `claude-haiku-4-5` for
-      enrichment. Extra: `[llm]`. Read API key from env (`ANTHROPIC_API_KEY`).
-- [ ] `scalper/enrich.py`: take top-N scored postings (threshold/`--top` from config/CLI),
-      produce a structured result (1–2 sentence summary, have/missing skill notes,
-      optional low-confidence flag). Keep prompt small (title + trimmed description +
-      profile criteria) to bound cost.
-- [ ] Cache enrichment in SQLite keyed by `uid` + profile hash + model so re-reports are free.
-- [ ] Config: `llm:` block (provider, enrich model, build model, top_n, on/off);
+- [x] `scalper/llm/base.py`: `LLMProvider` protocol (`complete(prompt, *, model, ...)`),
+      plus a registry/factory keyed by provider name (fails soft to `None`).
+- [x] `scalper/llm/anthropic_provider.py`: default impl, model `claude-haiku-4-5` for
+      enrichment. Extra: `[llm]`. Reads API key from env (`ANTHROPIC_API_KEY`); lazy SDK import.
+- [x] `scalper/enrich.py`: takes top-N scored postings (`--top`/`llm.top_n`), produces a
+      structured `Enrichment` (1–2 sentence summary, matches/gaps, low-confidence flag).
+      Prompt is small (criteria + title + trimmed description) to bound cost; JSON reply
+      parsed fail-soft.
+- [x] Caches enrichment in SQLite (`enrichments` table) keyed by `uid` + profile hash +
+      model, so re-reports are free until profile/model/shortlist change.
+- [x] Config: `llm:` block (provider, enrich_model, build_model, top_n, enabled);
       per-task model selection (enrich vs. build) lands here for ADR 0004 reuse.
-- [ ] Report: render summary + skill-gap into the detail panel; gracefully omit when
-      enrichment is disabled or unavailable.
-- [ ] Tests: enrichment with a stub provider (no network); cache hit; disabled path.
+- [x] Report: renders summary + matches/gaps into the detail panel behind `enriched`;
+      gracefully omits (Stage 1 only) when enrichment is disabled or unavailable.
+- [x] Observability: `complete()` returns a `Completion` (text + token usage); `--enrich`
+      streams each request/response to stderr and prints a token + estimated-cost summary
+      (built-in price table, overridable via `llm.input/output_price_per_mtok`). `--quiet-llm`
+      keeps the summary only. Cache hits are logged and counted as free.
+- [x] Tests: enrichment with a stub provider (no network); cache hit / no-recompute;
+      profile-change invalidation; top-N bounding; JSON parse edge cases; disabled path;
+      usage accumulation, cost (built-in/override/unknown), and request/response logging.
 - **Acceptance:** `scalper report --profile X --enrich` adds LLM summaries to the top N
-      only; cost is bounded by `top_n`, not collection volume; re-runs hit cache.
+      only; cost is bounded by `top_n`, not collection volume; re-runs hit cache. (Verified:
+      stub-provider render caches to the store and re-serves with 0 calls; without `[llm]`/key
+      the CLI prints an install hint and renders Stage 1 unchanged. Live Anthropic path not
+      exercised here — `[llm]` not installed in this env.)
 
 ## Phase 3 — More structured adapters
 

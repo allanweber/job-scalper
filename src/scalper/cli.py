@@ -9,6 +9,7 @@ from pathlib import Path
 
 from scalper import __version__
 from scalper.config import load_config
+from scalper.enrich import build_enricher, format_usage
 from scalper.report import render_report, write_report
 from scalper.scoring import score_all
 from scalper.semantic import DEFAULT_MODEL, build_semantic_scorer, sentence_transformers_available
@@ -86,13 +87,35 @@ def cmd_report(args: argparse.Namespace) -> int:
 
         scored = score_all(profile, postings, semantic_scorer=scorer)
 
+        enrichments = {}
+        if args.enrich or config.llm.enabled:
+            top_n = args.top if args.top is not None else config.llm.top_n
+            # Stream each request/response to stderr so it's visible but doesn't
+            # pollute the report summary on stdout; --quiet-llm silences it.
+            log = None if args.quiet_llm else (lambda msg: print(msg, file=sys.stderr))
+            enricher = build_enricher(
+                config.llm, store,
+                model=args.enrich_model or config.llm.enrich_model,
+                logger=log,
+            )
+            if enricher is None:
+                print("note: enrichment off — install it with: pip install -e '.[llm]' "
+                      "and set ANTHROPIC_API_KEY")
+            else:
+                try:
+                    enrichments = enricher.enrich(profile, scored, top_n)
+                    print(format_usage(enricher.usage, config.llm))
+                except Exception as e:  # noqa: BLE001 — enrichment is optional; never abort report
+                    _err(f"enrichment failed ({e}); rendering deterministic report.")
+
     if args.limit:
         scored = scored[: args.limit]
 
-    html = render_report(args.profile, profile, scored)
+    html = render_report(args.profile, profile, scored, enrichments)
     out = write_report(args.out, html)
+    enriched_note = f", {len(enrichments)} enriched" if enrichments else ""
     print(f"Scored {len(postings)} stored posting(s) → {len(scored)} matched profile "
-          f"'{args.profile}'. Report: {out}")
+          f"'{args.profile}'{enriched_note}. Report: {out}")
     for s in scored[:10]:
         print(f"  {s.percent:3d}%  {s.posting.title}  —  {s.posting.company}")
 
@@ -119,6 +142,14 @@ def build_parser() -> argparse.ArgumentParser:
                           help="skip the local semantic-similarity component")
     p_report.add_argument("--model", default=DEFAULT_MODEL,
                           help=f"sentence-transformers model for semantic scoring (default: {DEFAULT_MODEL})")
+    p_report.add_argument("--enrich", action="store_true",
+                          help="add Stage 2 LLM summaries to the top-scored postings (needs '.[llm]')")
+    p_report.add_argument("--top", type=int, default=None,
+                          help="how many top postings to enrich (default: llm.top_n from config)")
+    p_report.add_argument("--enrich-model", default=None,
+                          help="override the LLM model used for enrichment")
+    p_report.add_argument("--quiet-llm", action="store_true",
+                          help="suppress per-request/response LLM logs (keep the usage summary)")
     p_report.add_argument("--open", action="store_true", help="open the report in a browser")
     p_report.set_defaults(func=cmd_report)
 

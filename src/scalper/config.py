@@ -34,6 +34,30 @@ class Profile(BaseModel):
     weights: Weights = Field(default_factory=Weights)
 
 
+class LLMConfig(BaseModel):
+    """Stage 2 LLM enrichment settings (ADR 0003) with per-task models (ADR 0004).
+
+    Enrichment runs on the shortlist only, so cost is bounded by `top_n`, not by
+    collection volume. `build_model` is reserved for the `add-source` codegen task
+    (ADR 0004) and unused by enrichment.
+    """
+
+    #: Provider key in the LLM registry (currently only "anthropic").
+    provider: str = "anthropic"
+    #: Cheap model for per-job enrichment (summary + skill-gap).
+    enrich_model: str = "claude-haiku-4-5"
+    #: Stronger model reserved for `add-source` mapping/codegen (ADR 0004).
+    build_model: str = "claude-sonnet-4-6"
+    #: How many top-scored postings to enrich per report.
+    top_n: int = 10
+    #: Enrich without needing the `--enrich` flag when true.
+    enabled: bool = False
+    #: Override USD price per 1M tokens for cost reporting. When unset, a built-in
+    #: estimate table is used (and "n/a" is shown if the model is unknown).
+    input_price_per_mtok: float | None = None
+    output_price_per_mtok: float | None = None
+
+
 class SourceConfig(BaseModel):
     """A Source Definition: which adapter to build and its parameters."""
 
@@ -51,6 +75,7 @@ class Config(BaseModel):
     search: SearchQuery = Field(default_factory=SearchQuery)
     sources: list[SourceConfig] = Field(default_factory=list)
     profiles: dict[str, Profile] = Field(default_factory=dict)
+    llm: LLMConfig = Field(default_factory=LLMConfig)
 
     def profile(self, name: str) -> Profile:
         try:
@@ -81,4 +106,5 @@ def load_config(path: str | Path) -> Config:
         search=SearchQuery.model_validate(data.get("search", {})),
         sources=sources,
         profiles=profiles,
+        llm=LLMConfig.model_validate(data.get("llm", {})),
     )

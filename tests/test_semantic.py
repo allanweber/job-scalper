@@ -89,7 +89,8 @@ def test_build_gated_on_dependency():
 def test_identical_text_scores_near_one():
     scorer = _stub_scorer()
     profile = Profile(titles=[], required_skills=["python", "backend"], keywords=[])
-    posting = _posting(title="Backend Engineer", description="python backend role")
+    # Same vocabulary on both sides → cosine of normalized bag-of-words == 1.0.
+    posting = _posting(title="Backend", description="python")
     assert scorer(profile, posting) == pytest.approx(1.0)
 
 
@@ -115,7 +116,7 @@ def test_semantic_feeds_into_blended_score():
         titles=[], required_skills=["python", "backend"], keywords=[],
         weights=Weights(skill_coverage=0.0, title_match=0.0, keyword=0.0, semantic=1.0),
     )
-    posting = _posting(title="Backend Engineer", description="python backend")
+    posting = _posting(title="Backend", description="python")
     scored = score_posting(profile, posting, semantic_scorer=scorer)
     assert scored.breakdown.semantic == pytest.approx(1.0)
     assert scored.percent == 100

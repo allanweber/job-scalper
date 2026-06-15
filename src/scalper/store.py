@@ -42,6 +42,17 @@ CREATE TABLE IF NOT EXISTS embeddings (
     vec    BLOB NOT NULL,
     PRIMARY KEY (uid, model)
 );
+
+-- Cached Stage 2 LLM enrichments (ADR 0003 / Phase 2). Keyed by posting uid +
+-- a hash of the profile criteria + the model, so re-reports are free and any
+-- change to the profile or model recomputes cleanly. `data` is JSON.
+CREATE TABLE IF NOT EXISTS enrichments (
+    uid          TEXT NOT NULL,
+    profile_hash TEXT NOT NULL,
+    model        TEXT NOT NULL,
+    data         TEXT NOT NULL,
+    PRIMARY KEY (uid, profile_hash, model)
+);
 """
 
 
@@ -161,6 +172,38 @@ class JobStore:
             "INSERT INTO embeddings (uid, model, vec) VALUES (?, ?, ?) "
             "ON CONFLICT(uid, model) DO UPDATE SET vec=excluded.vec",
             [(uid, model, vec) for uid, vec in items],
+        )
+        self._conn.commit()
+
+    # --- LLM enrichment cache (Phase 2) -----------------------------------
+
+    def get_enrichments(self, uids: list[str], profile_hash: str, model: str) -> dict[str, str]:
+        """Return cached `{uid: data_json}` for the given uids under (profile, model)."""
+        if not uids:
+            return {}
+        out: dict[str, str] = {}
+        for i in range(0, len(uids), 500):
+            chunk = uids[i : i + 500]
+            placeholders = ",".join("?" * len(chunk))
+            rows = self._conn.execute(
+                f"SELECT uid, data FROM enrichments "
+                f"WHERE profile_hash = ? AND model = ? AND uid IN ({placeholders})",
+                (profile_hash, model, *chunk),
+            )
+            for row in rows:
+                out[row["uid"]] = row["data"]
+        return out
+
+    def put_enrichments(
+        self, profile_hash: str, model: str, items: list[tuple[str, str]]
+    ) -> None:
+        """Insert/replace `(uid, data_json)` enrichments for (profile, model)."""
+        if not items:
+            return
+        self._conn.executemany(
+            "INSERT INTO enrichments (uid, profile_hash, model, data) VALUES (?, ?, ?, ?) "
+            "ON CONFLICT(uid, profile_hash, model) DO UPDATE SET data=excluded.data",
+            [(uid, profile_hash, model, data) for uid, data in items],
         )
         self._conn.commit()
 

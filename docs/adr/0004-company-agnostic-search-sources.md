@@ -1,4 +1,4 @@
-# 0005 — Company-agnostic search sources, query-driven collect
+# 0004 — Company-agnostic search sources, query-driven collect
 
 - Status: Accepted
 - Date: 2026-06-15

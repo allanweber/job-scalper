@@ -8,6 +8,7 @@ from pathlib import Path
 from jinja2 import Environment, PackageLoader, select_autoescape
 
 from scalper.config import Profile
+from scalper.enrich import Enrichment
 from scalper.scoring import ScoredPosting
 
 _env = Environment(
@@ -21,9 +22,10 @@ def _excerpt(text: str, limit: int = 320) -> str:
     return text if len(text) <= limit else text[:limit].rsplit(" ", 1)[0] + "…"
 
 
-def _row(scored: ScoredPosting) -> dict:
+def _row(scored: ScoredPosting, enrichment: Enrichment | None = None) -> dict:
     p = scored.posting
     return {
+        "enrichment": enrichment.model_dump() if enrichment else None,
         "percent": scored.percent,
         "title": p.title,
         "company": p.company,
@@ -43,13 +45,20 @@ def _row(scored: ScoredPosting) -> dict:
     }
 
 
-def render_report(profile_name: str, profile: Profile, scored: list[ScoredPosting]) -> str:
+def render_report(
+    profile_name: str,
+    profile: Profile,
+    scored: list[ScoredPosting],
+    enrichments: dict[str, Enrichment] | None = None,
+) -> str:
+    enrichments = enrichments or {}
     template = _env.get_template("report.html")
     return template.render(
         profile_name=profile_name,
         profile=profile,
-        rows=[_row(s) for s in scored],
+        rows=[_row(s, enrichments.get(s.posting.uid)) for s in scored],
         total=len(scored),
+        enriched=bool(enrichments),
         generated_at=datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
     )
 
