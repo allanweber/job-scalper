@@ -21,28 +21,35 @@ global `search:` block (`SearchQuery`) and the adapter contract is `fetch(query)
 - ✅ `backend` + `java` profiles; java tech tokens in the global search
 - ✅ Tests (28 passing); verified live (283 postings across the active sources, cross-company)
 
-**Inert until built:** the `semantic` scoring component (weight renormalizes out) and the
-Stage 2 LLM layer. The `semantic_scorer` hook in `scoring.py` is the wiring point.
+- ✅ **Phase 1: semantic similarity** — local `sentence-transformers` scorer behind the
+  `[semantic]` extra, SQLite embedding cache, `--no-semantic` flag; fails soft to the
+  deterministic blend when the dep/model is absent.
+
+**Inert until built:** the Stage 2 LLM layer. The `semantic` component is now live (with
+the `[semantic]` extra); the `semantic_scorer` hook in `scoring.py` is where it plugs in.
 
 ---
 
-## Phase 1 — Semantic similarity (Stage 1 completion)
+## Phase 1 — Semantic similarity (Stage 1 completion) ✅
 
 Goal: turn on the `semantic` component so scoring catches relevant roles that don't
 literally contain the skill keywords. Local embeddings, zero marginal cost (ADR 0003).
 
-- [ ] Add `scalper/semantic.py`: a `SemanticScorer` implementation using
-      `sentence-transformers` (default model `all-MiniLM-L6-v2` or `bge-small-en-v1.5`).
-- [ ] Build the profile "criteria text" (titles + skills + keywords) once per report;
-      embed each posting's `search_text`; score = cosine similarity in [0,1].
-- [ ] Cache posting embeddings in SQLite keyed by `uid` + model name (recompute only on
-      new/changed postings) so reports stay fast.
-- [ ] Make it optional: import lazily; if `sentence-transformers` isn't installed, the
-      hook returns `None` and weights renormalize (current behavior). Extra: `[semantic]`.
-- [ ] Wire into `cmd_report` (pass the scorer to `score_all`) behind a `--no-semantic` flag.
-- [ ] Tests: cosine of identical text ≈ 1.0; unrelated text low; cache hit path.
-- **Acceptance:** with `[semantic]` installed, semantic column appears in the report
-      breakdown and meaningfully reorders results; without it, behavior is unchanged.
+- [x] Added `scalper/semantic.py`: a `SemanticScorer` using `sentence-transformers`
+      (default model `all-MiniLM-L6-v2`; override with `report --model`).
+- [x] Builds the profile "criteria text" (titles + skills + keywords), embeds each
+      posting's `search_text`, scores = cosine similarity clamped to [0,1].
+- [x] Caches posting embeddings in SQLite (`embeddings` table) keyed by `uid` + model
+      name; `prepare()` batch-embeds only cache misses so reports stay fast.
+- [x] Optional: lazy import; if `sentence-transformers` isn't installed,
+      `build_semantic_scorer` returns `None` and weights renormalize (prior behavior).
+      Extra: `[semantic]`. Model-load failures fail soft to deterministic scoring.
+- [x] Wired into `cmd_report` (passes the scorer to `score_all`) behind `--no-semantic`.
+- [x] Tests: cosine of identical text ≈ 1.0; unrelated ≈ 0.0; blended score; store
+      cache round-trip / no-recompute (stub model, so no heavy dep in CI).
+- **Acceptance:** with `[semantic]` installed, a `semantic` bar appears in the report
+      breakdown and reorders results; without it, behavior is unchanged (verified live —
+      report falls back to deterministic scores and prints an install hint).
 
 ## Phase 2 — Stage 2 LLM enrichment
 

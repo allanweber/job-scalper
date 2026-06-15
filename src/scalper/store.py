@@ -32,6 +32,16 @@ CREATE TABLE IF NOT EXISTS postings (
 );
 CREATE INDEX IF NOT EXISTS idx_postings_dedup ON postings(dedup_key);
 CREATE INDEX IF NOT EXISTS idx_postings_published ON postings(published_at);
+
+-- Cached semantic embeddings (ADR 0003 / Phase 1). Keyed by posting uid + the
+-- model that produced the vector, so changing models invalidates cleanly and
+-- reports only recompute new/changed postings. `vec` is raw float32 bytes.
+CREATE TABLE IF NOT EXISTS embeddings (
+    uid    TEXT NOT NULL,
+    model  TEXT NOT NULL,
+    vec    BLOB NOT NULL,
+    PRIMARY KEY (uid, model)
+);
 """
 
 
@@ -123,6 +133,36 @@ class JobStore:
 
     def count(self) -> int:
         return self._conn.execute("SELECT COUNT(*) FROM postings").fetchone()[0]
+
+    # --- semantic embedding cache (Phase 1) -------------------------------
+
+    def get_embeddings(self, uids: list[str], model: str) -> dict[str, bytes]:
+        """Return cached `{uid: vec_bytes}` for the given uids under `model`."""
+        if not uids:
+            return {}
+        out: dict[str, bytes] = {}
+        # Chunk to stay under SQLite's variable limit on large stores.
+        for i in range(0, len(uids), 500):
+            chunk = uids[i : i + 500]
+            placeholders = ",".join("?" * len(chunk))
+            rows = self._conn.execute(
+                f"SELECT uid, vec FROM embeddings WHERE model = ? AND uid IN ({placeholders})",
+                (model, *chunk),
+            )
+            for row in rows:
+                out[row["uid"]] = row["vec"]
+        return out
+
+    def put_embeddings(self, model: str, items: list[tuple[str, bytes]]) -> None:
+        """Insert/replace `(uid, vec_bytes)` embeddings for `model`."""
+        if not items:
+            return
+        self._conn.executemany(
+            "INSERT INTO embeddings (uid, model, vec) VALUES (?, ?, ?) "
+            "ON CONFLICT(uid, model) DO UPDATE SET vec=excluded.vec",
+            [(uid, model, vec) for uid, vec in items],
+        )
+        self._conn.commit()
 
     @staticmethod
     def _row_to_posting(row: sqlite3.Row) -> JobPosting:

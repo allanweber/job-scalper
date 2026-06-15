@@ -19,8 +19,9 @@ Sources are searched by *criteria*, not by naming employers: the `search:` block
 collection broadly, and each `--profile` re-scores the results narrowly at report time.
 
 Scoring is a two-stage funnel (ADR 0003). This slice implements **Stage 1**: hard
-filters (remote, freshness, excludes, salary floor) plus a deterministic, explainable
-Match % (skill coverage + title + keyword; semantic and LLM layers come later).
+filters (remote, freshness, excludes, salary floor) plus an explainable Match % blending
+skill coverage + title + keyword + an optional local **semantic** similarity component
+(the Stage 2 LLM layer comes later).
 
 Every source is a self-contained adapter returning normalized `JobPosting`s (ADR 0001).
 
@@ -39,6 +40,21 @@ cp config.example.yaml config.yaml   # then edit sources + profiles
 scalper collect                      # populate the local store (slow)
 scalper report --profile backend --open   # score + open HTML report (instant)
 ```
+
+### Semantic scoring (optional)
+
+The Match % includes a local semantic-similarity component that catches relevant roles
+which don't contain your exact skill words. It's off until you install the extra:
+
+```bash
+pip install -e '.[semantic]'        # pulls sentence-transformers (+ torch)
+scalper report --profile backend    # first run downloads the model, then caches embeddings
+```
+
+Without the extra, `report` simply falls back to the deterministic score (skill + title +
+keyword) and prints a one-line install hint. Use `--no-semantic` to skip it even when
+installed, or `--model <name>` to pick a different sentence-transformers model. Embeddings
+are cached in the store keyed by posting + model, so only new postings are encoded.
 
 Schedule collection with cron, e.g. nightly:
 
@@ -91,11 +107,11 @@ Implemented:
 - ✅ Company-agnostic, query-driven sources + adapter registry (ADR 0005)
 - ✅ 11 adapters: Remotive/Jobicy/Adzuna (search) + RemoteOK/Arbeitnow/The Muse/Working Nomads/Himalayas/We Work Remotely/Hacker News/Reddit (feeds)
 - ✅ Stage 1 deterministic scoring + hard filters
+- ✅ Semantic similarity in Stage 1 (local sentence-transformers, cached) — `pip install -e .[semantic]`
 - ✅ Self-contained HTML report (client-side sort/filter)
-- ✅ Tests for scoring and adapter parsing
+- ✅ Tests for scoring, semantic, and adapter parsing
 
 Layered on next (designed, not yet built):
-- ⏳ Semantic similarity in Stage 1 (local sentence-transformers) — `pip install -e .[semantic]`
 - ⏳ Stage 2 LLM enrichment: summary + skill-gap (Haiku default, swappable provider) — `[llm]`
 - ⏳ Generic mapping-driven RSS/JSON adapter (declarative tier for `add-source`)
 - ⏳ Hard sources (LinkedIn, Indeed) via self-hosted Playwright, anonymous only — `[scrape]`

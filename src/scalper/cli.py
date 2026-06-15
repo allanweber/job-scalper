@@ -11,6 +11,7 @@ from scalper import __version__
 from scalper.config import load_config
 from scalper.report import render_report, write_report
 from scalper.scoring import score_all
+from scalper.semantic import DEFAULT_MODEL, build_semantic_scorer, sentence_transformers_available
 from scalper.sources import build_adapter
 from scalper.store import JobStore
 
@@ -71,7 +72,20 @@ def cmd_report(args: argparse.Namespace) -> int:
     with JobStore(db) as store:
         postings = list(store.iter_postings())
 
-    scored = score_all(profile, postings)
+        scorer = build_semantic_scorer(
+            store, model_name=args.model, enabled=not args.no_semantic
+        )
+        if scorer is not None:
+            try:
+                scorer.prepare(postings)
+            except Exception as e:  # noqa: BLE001 — semantic is optional; never abort report
+                _err(f"semantic scoring unavailable ({e}); using deterministic scores.")
+                scorer = None
+        elif not args.no_semantic and not sentence_transformers_available():
+            print("note: semantic scoring off — install it with: pip install -e '.[semantic]'")
+
+        scored = score_all(profile, postings, semantic_scorer=scorer)
+
     if args.limit:
         scored = scored[: args.limit]
 
@@ -101,6 +115,10 @@ def build_parser() -> argparse.ArgumentParser:
     p_report.add_argument("-p", "--profile", required=True, help="profile name from config")
     p_report.add_argument("-o", "--out", default="report.html", help="output HTML path")
     p_report.add_argument("--limit", type=int, default=None, help="cap number of results")
+    p_report.add_argument("--no-semantic", action="store_true",
+                          help="skip the local semantic-similarity component")
+    p_report.add_argument("--model", default=DEFAULT_MODEL,
+                          help=f"sentence-transformers model for semantic scoring (default: {DEFAULT_MODEL})")
     p_report.add_argument("--open", action="store_true", help="open the report in a browser")
     p_report.set_defaults(func=cmd_report)
 
