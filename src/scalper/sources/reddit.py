@@ -1,4 +1,4 @@
-"""Reddit job-subreddit adapter — company-agnostic (ADR 0005).
+"""Reddit job-subreddit adapter — company-agnostic .
 
 Reddit's JSON API requires OAuth and 403s anonymous library clients, but the
 public per-subreddit Atom feeds are reachable without auth or registration:

@@ -4,15 +4,9 @@ Living roadmap of remaining work to finish the project. Decisions behind these t
 live in [`docs/adr/`](docs/adr/); vocabulary in [`CONTEXT.md`](CONTEXT.md). Update the
 status boxes as work lands.
 
-## Status snapshot (2026-06-16)
-
-**Pivot (ADR 0005):** sources are now **company-agnostic** and **query-driven**. The early
-company-keyed ATS adapters (greenhouse/lever/ashby) were removed; `collect` is driven by a
-global `search:` block (`SearchQuery`) and the adapter contract is `fetch(query)`.
-
 **Done:**
-- ✅ `JobPosting` + `SearchQuery` models, SQLite store, collect/report split (ADR 0002/0005)
-- ✅ Adapter contract + registry (ADR 0001/0005); **13 company-agnostic adapters**:
+- ✅ `JobPosting` + `SearchQuery` models, SQLite store, collect/report split (ADR 0002/0004)
+- ✅ Adapter contract + registry (ADR 0001/0004); **13 company-agnostic adapters**:
   remotive + jobicy + adzuna (search), remoteok + arbeitnow + themuse + workingnomads +
   himalayas (broad feed), weworkremotely (RSS), hackernews (Who's Hiring), reddit (Atom RSS).
   All keyless except adzuna (free key; skipped when unset). Plus two **hard (scraped)**
@@ -114,7 +108,7 @@ Cheap model by default, behind a swappable interface (ADR 0004 per-task model co
 ## Phase 3 — More structured adapters
 
 Goal: broaden coverage with more company-agnostic API/RSS sources (the reliable backbone).
-Each is one new module + registration; the core stays untouched (ADR 0001/0005). Each must
+Each is one new module + registration; the core stays untouched (ADR 0001/0004). Each must
 consume `SearchQuery` — a search source issues a native query, a broad-feed source filters
 locally with `matches_any_term`.
 

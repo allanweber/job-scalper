@@ -2,7 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-06-15
-- Amended by: ADR 0005 (sources are company-agnostic; `fetch` takes a `SearchQuery`)
+- Amended by: ADR 0004 (sources are company-agnostic; `fetch` takes a `SearchQuery`)
 
 ## Context
 

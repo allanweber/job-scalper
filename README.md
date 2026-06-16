@@ -37,7 +37,7 @@ key design decisions.
 Collection and reporting are decoupled through a local SQLite store (ADR 0002):
 
 - **`collect`** — slow, occasional. Searches every configured source with the global
-  `search:` query (ADR 0005), normalizes postings, and stores them. Cron-friendly; no daemon.
+  `search:` query (ADR 0004), normalizes postings, and stores them. Cron-friendly; no daemon.
 - **`report`** — instant. Scores stored postings against a named profile and renders HTML.
 
 Sources are searched by *criteria*, not by naming employers: the `search:` block drives
@@ -249,7 +249,7 @@ run.
 
 Implemented:
 - ✅ `JobPosting` model + SQLite store
-- ✅ Company-agnostic, query-driven sources + adapter registry (ADR 0005)
+- ✅ Company-agnostic, query-driven sources + adapter registry 
 - ✅ 11 structured adapters: Remotive/Jobicy/Adzuna (search) + RemoteOK/Arbeitnow/The Muse/Working Nomads/Himalayas/We Work Remotely/Hacker News/Reddit (feeds)
 - ✅ 2 hard adapters: LinkedIn + Indeed via self-hosted Playwright, anonymous only, off by default — `pip install -e .[scrape]`
 - ✅ Stage 1 deterministic scoring + hard filters

@@ -1,4 +1,4 @@
-"""Jobicy adapter — company-agnostic remote-job search (ADR 0005).
+"""Jobicy adapter — company-agnostic remote-job search .
 
 Jobicy exposes a public, keyless JSON API of remote jobs across all employers:
     https://jobicy.com/api/v2/remote-jobs?count=<n>&tag=<term>

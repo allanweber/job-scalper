@@ -30,20 +30,20 @@ company). Sources fall into tiers by how they're accessed:
   IP bans, litigation history). Examples: LinkedIn, Indeed. Accessed only via
   anonymous/guest paths (self-hosted Playwright) — never the user's own credentials.
 
-By how they consume the Search Query, sources also split into two shapes (ADR 0005):
+By how they consume the Search Query, sources also split into two shapes :
 a **search source** issues a native query (e.g. Remotive), while a **broad-feed source**
 pulls a recent feed and filters locally (e.g. RemoteOK).
 
 ### Search Query
 The criteria passed into every Source at collect time: query terms, location hint,
 remote flag, and a per-source result cap. Job Scalper searches *by* this, not by naming
-employers. Configured once globally under `search:` (ADR 0005); distinct from a Profile,
+employers. Configured once globally under `search:` ; distinct from a Profile,
 which is applied later at report time for scoring.
 
 ### Adapter
 The module implementing a single Source. Exposes `fetch(query) -> list[JobPosting]`,
 owning its own auth, pagination, parsing, and native filtering, and returns
-already-normalized Job Postings. See ADR 0001 / ADR 0005.
+already-normalized Job Postings. See ADR 0001 / ADR 0004.
 
 ### Generic Adapter
 A hand-written, well-tested Adapter that is parameterized rather than site-specific:
@@ -122,11 +122,11 @@ Profile; a peek looks without marking.
 ### Collect / Report
 The two decoupled operations. **Collect** is slow and occasional: search all Sources with
 the global Search Query → normalize → store. **Report** is instant and frequent: score the
-stored postings against a Profile → render HTML. See ADR 0002 / ADR 0005.
+stored postings against a Profile → render HTML. See ADR 0002 / ADR 0004.
 
 ## Decisions log
 - Sources are company-agnostic: searched by criteria, not by enumerating employers;
-  `collect` is driven by a global `search:` query (ADR 0005). The early company-keyed ATS
+  `collect` is driven by a global `search:` query . The early company-keyed ATS
   adapters (Greenhouse/Lever/Ashby) were removed.
 - Data acquisition: API/RSS-first backbone (Remotive, RemoteOK, Arbeitnow, Adzuna, HN);
   LinkedIn + Indeed required as hard sources via self-hosted Playwright (anonymous/guest only).

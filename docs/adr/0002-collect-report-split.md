@@ -2,7 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-06-15
-- Amended by: ADR 0005 (`collect` is driven by a global `search:` query; `report`
+- Amended by: ADR 0004 (`collect` is driven by a global `search:` query; `report`
   still re-scores against any profile independently)
 
 ## Context

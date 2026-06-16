@@ -1,4 +1,4 @@
-"""Himalayas adapter — company-agnostic remote-job feed (ADR 0005).
+"""Himalayas adapter — company-agnostic remote-job feed .
 
 Himalayas exposes a public, keyless, paginated JSON API of remote jobs across
 all employers:

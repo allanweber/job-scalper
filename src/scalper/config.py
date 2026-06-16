@@ -74,7 +74,7 @@ class SourceConfig(BaseModel):
 
 class Config(BaseModel):
     database: str = "scalper.db"
-    # The global search spec that drives every source at collect time (ADR 0005).
+    # The global search spec that drives every source at collect time .
     search: SearchQuery = Field(default_factory=SearchQuery)
     sources: list[SourceConfig] = Field(default_factory=list)
     profiles: dict[str, Profile] = Field(default_factory=dict)

@@ -1,4 +1,4 @@
-"""RemoteOK adapter — company-agnostic remote-job feed (ADR 0005).
+"""RemoteOK adapter — company-agnostic remote-job feed .
 
 RemoteOK exposes a single public JSON endpoint of recent remote jobs across all
 employers:

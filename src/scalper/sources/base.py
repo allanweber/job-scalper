@@ -1,4 +1,4 @@
-"""Source adapter contract and registry (ADR 0001 / ADR 0005).
+"""Source adapter contract and registry (ADR 0001 / ADR 0004).
 
 Every Source is a self-contained adapter exposing
 `fetch(query) -> list[JobPosting]`. Sources are company-agnostic: they are

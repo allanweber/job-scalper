@@ -1,4 +1,4 @@
-"""Arbeitnow adapter — company-agnostic job-board feed (ADR 0005).
+"""Arbeitnow adapter — company-agnostic job-board feed .
 
 Arbeitnow exposes a public, keyless, paginated JSON feed of jobs across all
 employers:

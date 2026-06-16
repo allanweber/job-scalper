@@ -1,4 +1,4 @@
-"""We Work Remotely adapter — company-agnostic remote-job RSS feed (ADR 0005).
+"""We Work Remotely adapter — company-agnostic remote-job RSS feed .
 
 We Work Remotely publishes per-category RSS feeds of remote jobs across all
 employers, e.g.:

@@ -1,4 +1,4 @@
-"""Hacker News "Who is hiring?" adapter — company-agnostic (ADR 0005).
+"""Hacker News "Who is hiring?" adapter — company-agnostic .
 
 Each month user `whoishiring` posts an "Ask HN: Who is hiring?" thread whose
 top-level comments are individual job posts. This adapter finds the latest such

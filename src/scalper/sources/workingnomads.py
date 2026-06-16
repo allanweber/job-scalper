@@ -1,4 +1,4 @@
-"""Working Nomads adapter — company-agnostic remote-job feed (ADR 0005).
+"""Working Nomads adapter — company-agnostic remote-job feed .
 
 Working Nomads exposes a public, keyless JSON endpoint of recent remote jobs
 across all employers:

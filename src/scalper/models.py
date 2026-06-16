@@ -24,7 +24,7 @@ class SearchQuery(BaseModel):
     Job Scalper is company-agnostic: sources are searched by *criteria*, not by
     enumerating employers. Query-based sources (Remotive, Adzuna, LinkedIn, …)
     translate this into their native search request; broad-feed sources that
-    can't search server-side use `terms` to filter locally. See ADR 0005.
+    can't search server-side use `terms` to filter locally. See ADR 0004.
     """
 
     #: Free-text query terms (e.g. "python backend", "platform engineer").

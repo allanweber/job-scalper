@@ -1,4 +1,4 @@
-"""Remotive adapter — company-agnostic remote-job search (ADR 0005).
+"""Remotive adapter — company-agnostic remote-job search .
 
 Remotive exposes a public, keyless JSON API of remote jobs across all employers:
     https://remotive.com/api/remote-jobs?search=<term>&limit=<n>

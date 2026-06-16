@@ -1,4 +1,4 @@
-"""Adzuna adapter — company-agnostic job-search API (ADR 0005).
+"""Adzuna adapter — company-agnostic job-search API .
 
 Adzuna aggregates listings from across the web behind an official search API:
     https://api.adzuna.com/v1/api/jobs/{country}/search/{page}?app_id=..&app_key=..&what=..

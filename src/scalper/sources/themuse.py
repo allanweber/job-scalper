@@ -1,4 +1,4 @@
-"""The Muse adapter — company-agnostic job-board feed (ADR 0005).
+"""The Muse adapter — company-agnostic job-board feed .
 
 The Muse exposes a public, keyless, paginated JSON API of jobs across all
 employers:

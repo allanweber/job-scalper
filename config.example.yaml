@@ -4,7 +4,7 @@
 # Where collected postings are stored.
 database: scalper.db
 
-# The global search that drives every source at collect time (ADR 0005).
+# The global search that drives every source at collect time
 # Job Scalper is company-agnostic: sources are searched by these criteria,
 # not by naming employers. `report --profile` re-scores the results afterward,
 # so `search` should be broad and the profile narrow.
@@ -26,7 +26,7 @@ search:
 # Sources to collect from. Each is company-agnostic: it searches the whole
 # market, not a single employer. Add a source by adding one entry here.
 # "search" sources issue a native query; "broad-feed" sources pull a recent
-# feed and filter locally against the terms above (ADR 0005).
+# feed and filter locally against the terms above.
 # Any source may set `limit:` to override the global search.limit_per_source —
 # useful to stop a high-volume source from dominating the store.
 sources:
