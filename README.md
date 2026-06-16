@@ -3,6 +3,7 @@
 ## Commands
 
 ```bash
+source .venv/bin/activate
 
 scalper collect -s indeed                           # just Indeed
 scalper collect -s indeed linkedin                  # both, in config order
@@ -22,6 +23,10 @@ scalper report --profile backend --since 2026-06-01 # …or on/after a date
 scalper report --profile backend --dedup            # collapse the same job seen on >1 source
 
 scalper sources                                     # list adapters + configured sources with counts
+
+scalper profile from-resume --name backend --resume resume.pdf         # draft, print YAML
+scalper profile from-resume --name backend --resume resume.pdf --write # …and append to config.yaml
+scalper profile from-resume --name backend --resume resume.pdf --write --force # overwrite
 
 ```
 
@@ -125,6 +130,29 @@ Cached postings are logged as `cache hit` and cost nothing. Pass `--quiet-llm` t
 per-request logs while keeping the usage summary. Costs are estimated from a built-in price
 table; if your model isn't listed it shows `n/a` — set `llm.input_price_per_mtok` /
 `llm.output_price_per_mtok` (USD per 1M tokens) to override.
+
+### Resume-driven profiles (optional)
+
+`profile from-resume --resume <file>` reads your resume (PDF, markdown, or plain text —
+`pypdf` ships as a core dependency so PDF works out of the box) and asks the LLM to draft a
+profile's `titles` / `required_skills` / `nice_to_have_skills` / `keywords` for you, instead
+of hand-authoring them. It reuses the same `[llm]` extra/key as enrichment (model from
+`llm.build_model`).
+
+```bash
+pip install -e '.[llm]'              # if not already installed
+export ANTHROPIC_API_KEY=sk-ant-…
+
+scalper profile from-resume --name backend --resume resume.pdf          # prints YAML
+scalper profile from-resume --name backend --resume resume.pdf --write  # …and appends it
+```
+
+`--resume` is required and validated up front — a clear `error:` if the file is missing. By
+default nothing is written — review the printed block and paste it in yourself, or pass
+`--write` to append it under `<name>` in config.yaml (existing comments are preserved).
+`--write` refuses to overwrite a profile that already exists; add `--force` to replace it.
+Without the `[llm]` extra or an API key, the command prints a one-line `error:` hint instead
+of crashing.
 
 ### Hard sources — LinkedIn & Indeed (optional, off by default)
 

@@ -115,9 +115,10 @@ during that run. Answers "what new postings did this run surface, and how do the
 against my Profiles" in one step. Distinct from Report, which never collects.
 
 ### Resume
-The user's own CV, supplied once as a file referenced from config (plain-text/markdown
-canonical; PDF optional). A single shared input the tool reads to draft Profiles and
-Application Drafts. Not a Job Posting and not stored in the postings database.
+The user's own CV, passed explicitly per command via `--resume <file>` (PDF is the
+expected format, parsed with `pypdf`; plain-text/markdown also read as-is). Not stored in
+config and not a Job Posting — never persisted in the postings database. Read fresh by
+both LLM features that need it: drafting a Profile, and drafting Application Drafts.
 
 ### Application Draft
 LLM-generated application material tailored to one Job Posting for one Profile: a cover
@@ -151,15 +152,13 @@ stored postings against a Profile → render HTML. See ADR 0002 / ADR 0004.
 - Report: single self-contained HTML file with client-side sort/filter. `--all-profiles`
   produces one combined file with a tab per Profile (Combined Report); profiles are scored
   independently and empty profiles keep a "0 matched" tab.
-- Posting Status (interested/applied/dismissed) is user-asserted, keyed per posting (`uid`),
-  and set via the CLI `status` verb — the static report never writes back (ADR 0006). A
-  derived per-profile New/Unseen badge tracks what's appeared since the user last reported.
 - Digest scrapes first, then reports only the Fresh Catch (postings first seen during
   that run, via the preserved first-seen `collected_at`). Its "new" is store-relative and
-  per-run — deliberately distinct from the reader-relative, per-Profile New/Unseen badge.
-- Resume is a single configured file shared by two LLM features: drafting a Profile from
-  it, and drafting Application Drafts (cover letter + resume bullets) per posting. Both are
-  `[llm]`-gated and fail-soft; profile drafting prints YAML to review (opt-in `--write`).
+  per-run — what this scrape surfaced that the store didn't already hold. See ADR 0005.
+- Resume is passed per-command via `--resume <file>` (no config-level default), shared by
+  two LLM features: drafting a Profile from it, and drafting Application Drafts (cover
+  letter + resume bullets) per posting. Both are `[llm]`-gated and fail-soft; profile
+  drafting prints YAML to review (opt-in `--write`).
 - Market Insights is a read-only, no-LLM aggregate over the store (skill demand, salary,
   source/volume) — it describes supply, never scores a fit.
 - Scheduling: manual `collect` command, cron-friendly; no daemon.

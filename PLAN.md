@@ -239,6 +239,115 @@ no new collection. See the Combined Report term in `CONTEXT.md`.
 
 ---
 
+## Phase 0 (shared) — Resume ingestion ✅
+
+Groundwork for Phases 9 & 10. Build once, reused by both; no user-facing command of its own.
+
+- [x] Resume is passed explicitly per command (`--resume <file>`) — **no config-level
+      `resume:` option**, so a single config can draft/draft-against different resumes per
+      call. `scalper/resume.py::load_resume(path)` loads markdown/plain-text as-is; PDF is
+      parsed via `pypdf`, a **core dependency** (the user's resume is always a PDF in
+      practice, so it's not gated behind an optional extra).
+- [x] `load_resume` raises `FileNotFoundError` for a missing path (callers map it to their
+      own typed error); otherwise always returns text, no hint-string sentinel.
+- [x] Tests: markdown/text load; real PDF round-trip; missing-file raises.
+- **Acceptance:** ✅ `load_resume(path)` returns resume text for markdown/plain-text/PDF, or
+      raises `FileNotFoundError`; no argparse/print/exit in its call path so the command
+      layer (Phase 9/10) can import it directly. 129 tests pass.
+
+## Phase 9 — Resume-driven profiles ✅
+
+Goal: draft a Profile from the user's Resume so they don't hand-author skills/titles. Reuses
+the `LLMProvider` registry; `[llm]`-gated and fail-soft.
+
+- [x] `scalper profile from-resume --name <X> --resume <file>`: `--resume` is **required**
+      (no config fallback); read it, prompt the LLM to extract `titles`, `required_skills`,
+      `nice_to_have_skills`, `keywords` (`scalper/profile_draft.py`, model =
+      `llm.build_model` by default, overridable via `--model`).
+- [x] **Default prints a ready-to-paste YAML profile block** to stdout. `--write` appends it
+      under `<X>` in `config.yaml` via a text splice that preserves existing comments,
+      **refusing if the name already exists** unless `--force`. `--force` also splices —
+      it replaces only the named profile's own block (`_replace_profile_block`), never
+      re-serializes the whole file, so other profiles/comments/unrelated config are
+      untouched byte-for-byte.
+- [x] Command layer (`commands/profile.py::run_from_resume`) returns a typed
+      `FromResumeResult`; raises `ResumeNotFoundError` / `LLMUnavailableError` /
+      `ProfileNameExistsError` instead of exiting. The CLI owns printing/writing (purity
+      contract).
+- [x] **Every LLM call is always logged** — same observability contract as `report
+      --enrich`: `draft_profile()` streams a REQUEST/RESPONSE block through a `logger`
+      callback and `run_from_resume()` always emits a token/cost summary via `on_info`
+      (`format_usage(..., label="LLM profile-draft usage")`). The CLI wires `on_llm_log`
+      to stderr unless `--quiet-llm`; `on_info` also goes to stderr so stdout stays just
+      the pipeable YAML block. Standing requirement for any future LLM-calling command.
+- [x] **Compound skills are split defensively** — the prompt tells the model one
+      skill/technology per item, and a pydantic validator on `ProfileDraft` splits any
+      `"a / b"`-style item the model still joins, so `required_skills`/
+      `nice_to_have_skills` never carry multiple skills in one string.
+- [x] **Hard-filter defaults are always appended** — `remote_only: true`,
+      `salary_floor: 0`, `freshness_days: 3`, `exclude_non_latin: true`
+      (`DEFAULT_PROFILE_SETTINGS` in `profile_draft.py`) are appended to every drafted
+      profile, since the LLM never extracts them. On a `--force` overwrite, any of
+      these the existing profile already has are kept as-is; only the ones missing
+      get the default filled in.
+- [x] Tests: stub-provider extraction → YAML, compound-skill splitting
+      (`test_profile_draft.py`); `--write` append preserving comments, no-`profiles:`-key
+      bootstrap, name-collision refusal, `--force` overwrite that only touches the named
+      profile, always-on LLM logging, and the missing-resume-file/no-LLM hint paths
+      (`test_commands_profile.py`).
+- **Acceptance:** ✅ `profile from-resume` emits a usable profile block; `--write` persists it
+      (verified live via the CLI); `--force` only replaces the named profile, leaving the
+      rest of `config.yaml` untouched (caught and fixed after an initial full-file
+      re-serialize bug); missing `--resume`/file or no `[llm]`/key → a clean `error:`
+      hint, no crash; every LLM call logs its request/response and usage/cost. 135 tests
+      pass.
+
+## Phase 10 — Application drafts
+
+Goal: tailor application material to one posting. Extends Stage 2; `[llm]`-gated, fail-soft.
+
+- [ ] `scalper draft <uid> --profile <name>`: draft **a cover letter + tailored resume
+      bullets** (markdown), grounded in the posting text + Resume + the Stage-1
+      matched/missing skills.
+- [ ] One posting per call; markdown to stdout, `--out FILE` to save; prints the same
+      token/cost summary as enrich.
+- [ ] Tests: stub-provider draft includes both sections; unknown uid → clean error;
+      disabled/no-key path prints a hint.
+- **Acceptance:** `draft <uid>` produces a cover letter + bullets citing matched/missing
+      skills; bounded to one posting; fail-soft without `[llm]`.
+
+## Phase 11 — Digest (scrape-first, Fresh Catch)
+
+Goal: one verb that collects, then reports only what this run surfaced. See ADR 0005 and the
+**Fresh Catch** term in `CONTEXT.md`. No schema change (relies on preserved `collected_at`).
+
+- [ ] `scalper digest [--all-profiles | -p NAME]`: capture `run_start`, run the collect path,
+      then render only postings with first-seen `collected_at >= run_start` through the
+      existing report renderer (one tab per profile, "N new" counts) to HTML at `--out`.
+- [ ] Concise stdout summary (`7 new since <date> · backend 92% … `). "0 new" exits cleanly.
+      No email/push in v1.
+- [ ] Tests: a posting present before the run is excluded; a genuinely new one is included;
+      0-new path; per-profile counts.
+- **Acceptance:** `digest` scrapes then reports only the Fresh Catch; re-running with nothing
+      new reports 0 and exits cleanly.
+
+## Phase 12 — Market Insights
+
+Goal: a read-only aggregate description of the stored market. **No LLM, no profile.** See the
+**Market Insights** term in `CONTEXT.md`.
+
+- [ ] `scalper insights [--since]`: aggregate the store — demand for the user's skills (union
+      of all profiles' skills as the vocabulary, via the same term-matching scoring uses),
+      salary distribution (min/median/max from `salary_min/max`), postings per source, and
+      weekly collection volume from `collected_at`.
+- [ ] Text summary to stdout; HTML output deferred behind a later `--out`.
+- [ ] Tests: skill-demand ranking over fixture postings; salary stats ignore unparsed rows;
+      per-source + weekly counts.
+- **Acceptance:** `insights` prints skill demand, salary distribution, and volume over the
+      store with no LLM and no profile required.
+
+---
+
 ## Working notes
 
 - Live-verified company-agnostic sources (2026-06-15): a full collect pulled ~208 postings

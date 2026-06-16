@@ -148,12 +148,12 @@ class Usage:
         )
 
 
-def format_usage(usage: Usage, config: LLMConfig | None = None) -> str:
-    """Human-readable token + cost summary for the enrichment run."""
+def format_usage(usage: Usage, config: LLMConfig | None = None, *, label: str = "LLM enrichment usage") -> str:
+    """Human-readable token + cost summary for an LLM run (enrichment, profile draft, …)."""
     ip = config.input_price_per_mtok if config else None
     op = config.output_price_per_mtok if config else None
     lines = [
-        f"LLM enrichment usage ({usage.model}):",
+        f"{label} ({usage.model}):",
         f"  calls:          {usage.calls}  ({usage.cached} served from cache)",
         f"  input tokens:   {usage.input_tokens:,}",
         f"  output tokens:  {usage.output_tokens:,}",

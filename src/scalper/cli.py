@@ -15,6 +15,7 @@ from datetime import datetime, timedelta, timezone
 from scalper import __version__
 from scalper.commands import CommandError
 from scalper.commands.collect import run_collect
+from scalper.commands.profile import run_from_resume
 from scalper.commands.report import run_report, run_report_all
 from scalper.commands.sources import run_sources
 from scalper.config import load_config
@@ -117,6 +118,24 @@ def cmd_report(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_profile_from_resume(args: argparse.Namespace) -> int:
+    config = load_config(args.config)
+    llm_log = None if args.quiet_llm else (lambda msg: print(msg, file=sys.stderr))
+    try:
+        result = run_from_resume(
+            config, args.name, args.resume, config_path=args.config,
+            write=args.write, force=args.force, model=args.model,
+            on_info=_err, on_llm_log=llm_log,
+        )
+    except CommandError as e:
+        _err(str(e))
+        return 1
+    print(result.yaml_block, end="")
+    if result.written_to:
+        print(f"\nWrote profile '{result.name}' to {result.written_to}.")
+    return 0
+
+
 def cmd_sources(args: argparse.Namespace) -> int:
     config = load_config(args.config)
     result = run_sources(config, db=args.db)
@@ -181,6 +200,28 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_sources = sub.add_parser("sources", help="list registered adapters and configured sources + counts")
     p_sources.set_defaults(func=cmd_sources)
+
+    p_profile = sub.add_parser("profile", help="draft a profile from your resume")
+    profile_sub = p_profile.add_subparsers(dest="profile_command", required=True)
+
+    p_from_resume = profile_sub.add_parser(
+        "from-resume", help="extract titles/skills/keywords from a resume into a profile block"
+    )
+    p_from_resume.add_argument("--name", required=True, help="profile name to draft/write")
+    p_from_resume.add_argument("--resume", required=True, metavar="FILE",
+                               help="path to the resume file (PDF, markdown, or plain text)")
+    p_from_resume.add_argument("--write", action="store_true",
+                               help="append the drafted profile under this name in config.yaml "
+                                    "(default: print the YAML block only)")
+    p_from_resume.add_argument("--force", action="store_true",
+                               help="with --write, overwrite an existing profile of the same name")
+    p_from_resume.add_argument("--model", default=None,
+                               help="override the LLM model used for drafting "
+                                    "(default: llm.build_model from config)")
+    p_from_resume.add_argument("--quiet-llm", action="store_true",
+                               help="suppress the per-request/response LLM log (keep the "
+                                    "usage summary); both go to stderr, never stdout")
+    p_from_resume.set_defaults(func=cmd_profile_from_resume)
 
     return parser
 

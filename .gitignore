@@ -7,6 +7,7 @@ build/
 dist/
 .venv/
 venv/
+.pytest_cache/
 
 # Scalper local state
 *.db
@@ -22,3 +23,6 @@ report.html
 .vscode/
 .indeed-profile/
 indeed-debug/
+my-cvs/
+.indeed*
+indeed*
