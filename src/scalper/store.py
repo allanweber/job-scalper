@@ -142,6 +142,21 @@ class JobStore:
         for row in self._conn.execute("SELECT * FROM postings"):
             yield self._row_to_posting(row)
 
+    def get_postings_by_uid(self, uids: list[str]) -> dict[str, JobPosting]:
+        """Return stored `{uid: JobPosting}` for the given uids (missing ones omitted)."""
+        if not uids:
+            return {}
+        out: dict[str, JobPosting] = {}
+        for i in range(0, len(uids), 500):
+            chunk = uids[i : i + 500]
+            placeholders = ",".join("?" * len(chunk))
+            rows = self._conn.execute(
+                f"SELECT * FROM postings WHERE uid IN ({placeholders})", chunk
+            )
+            for row in rows:
+                out[row["uid"]] = self._row_to_posting(row)
+        return out
+
     def count(self) -> int:
         return self._conn.execute("SELECT COUNT(*) FROM postings").fetchone()[0]
 

@@ -304,17 +304,38 @@ the `LLMProvider` registry; `[llm]`-gated and fail-soft.
 
 ## Phase 10 — Application drafts
 
-Goal: tailor application material to one posting. Extends Stage 2; `[llm]`-gated, fail-soft.
+Goal: tailor application material to one or more postings. Extends Stage 2;
+`[llm]`-gated, fail-soft.
 
-- [ ] `scalper draft <uid> --profile <name>`: draft **a cover letter + tailored resume
-      bullets** (markdown), grounded in the posting text + Resume + the Stage-1
-      matched/missing skills.
-- [ ] One posting per call; markdown to stdout, `--out FILE` to save; prints the same
-      token/cost summary as enrich.
-- [ ] Tests: stub-provider draft includes both sections; unknown uid → clean error;
-      disabled/no-key path prints a hint.
-- **Acceptance:** `draft <uid>` produces a cover letter + bullets citing matched/missing
-      skills; bounded to one posting; fail-soft without `[llm]`.
+- [x] `scalper draft <uid> [<uid> ...] -p <profile> --resume <file>`: accepts **one or
+      more uids** in a single call, drafting each independently. Each draft is **a
+      cover letter + tailored resume bullets** in one markdown file, grounded in the
+      posting text + Resume + the Stage-1 matched/missing skills for `<profile>`
+      (`scalper/app_draft.py::draft_application`).
+- [x] **Every draft is always written to its own file** — never just printed — named
+      `[profile]_[position_name]_[uid].md` (`app_draft.py::draft_filename`, each
+      component slugified). Output folder resolution: `--out DIR` arg > config
+      `draft_output_dir` > current directory (`commands/draft.py::run_draft`). The CLI
+      prints one `uid  title — company  →  path` line per posting; prints the same
+      token/cost summary as enrich/profile-draft via `on_info`.
+- [x] Command layer (`commands/draft.py::run_draft`) returns a typed `DraftResult`;
+      raises `ResumeNotFoundError` / `ProfileNotFoundError` / `StoreNotFoundError` /
+      `PostingNotFoundError` (lists every unknown uid before any LLM call) /
+      `LLMUnavailableError` instead of exiting. The CLI owns printing/exit codes.
+- [x] **Every LLM call is always logged** — same observability contract as `report
+      --enrich` / `profile from-resume`: `draft_application()` streams a
+      REQUEST/RESPONSE block through `on_llm_log` and `run_draft()` always emits a
+      token/cost summary via `on_info`. `--quiet-llm` silences only the request/response
+      stream.
+- [x] Tests: stub-provider draft includes both sections, prompt carries
+      matched/missing skills (`test_app_draft.py`); multi-uid drafting, unknown-uid
+      listing, output-folder precedence (`--out` > config `draft_output_dir` > cwd),
+      filename composition, missing-resume/profile/store/LLM paths, always-on LLM
+      logging (`test_commands_draft.py`).
+- **Acceptance:** `draft <uid> [<uid> ...] -p <profile> --resume <file>` produces one
+      cover-letter-plus-bullets file per posting, named by profile/position/uid, saved
+      under the resolved output folder; an unknown uid reports cleanly before calling
+      the LLM; fail-soft without `[llm]`. 153 tests pass.
 
 ## Phase 11 — Digest (scrape-first, Fresh Catch)
 

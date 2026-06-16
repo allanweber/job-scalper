@@ -36,6 +36,7 @@ def _row(scored: ScoredPosting, enrichment: Enrichment | None = None) -> dict:
     p = scored.posting
     return {
         "enrichment": enrichment.model_dump() if enrichment else None,
+        "uid": p.uid,
         "percent": scored.percent,
         "title": p.title,
         "company": p.company,

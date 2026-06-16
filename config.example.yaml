@@ -101,6 +101,13 @@ llm:
   # input_price_per_mtok: 1.0
   # output_price_per_mtok: 5.0
 
+# Default folder `scalper draft <uid>... -p <profile> --resume <file>` saves its
+# Application Drafts into — one file per posting, named
+# "[profile]_[position_name]_[uid].md", holding both the cover letter and resume
+# bullets. `--out DIR` on the command overrides this. If neither is set, drafts
+# save to the current directory.
+# draft_output_dir: drafts
+
 # Named search Profiles. `scalper report --profile <name>` selects one and
 # scores the collected postings against it.
 profiles:

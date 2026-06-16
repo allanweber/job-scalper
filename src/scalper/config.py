@@ -79,6 +79,10 @@ class Config(BaseModel):
     sources: list[SourceConfig] = Field(default_factory=list)
     profiles: dict[str, Profile] = Field(default_factory=dict)
     llm: LLMConfig = Field(default_factory=LLMConfig)
+    #: Default folder `scalper draft` saves its `[profile]_[position]_[uid].md`
+    #: files into. `--out` overrides it; if neither is set, files save to the
+    #: current directory.
+    draft_output_dir: str | None = None
 
     def profile(self, name: str) -> Profile:
         try:
@@ -110,4 +114,5 @@ def load_config(path: str | Path) -> Config:
         sources=sources,
         profiles=profiles,
         llm=LLMConfig.model_validate(data.get("llm", {})),
+        draft_output_dir=data.get("draft_output_dir"),
     )

@@ -15,6 +15,7 @@ from datetime import datetime, timedelta, timezone
 from scalper import __version__
 from scalper.commands import CommandError
 from scalper.commands.collect import run_collect
+from scalper.commands.draft import run_draft
 from scalper.commands.profile import run_from_resume
 from scalper.commands.report import run_report, run_report_all
 from scalper.commands.sources import run_sources
@@ -136,6 +137,23 @@ def cmd_profile_from_resume(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_draft(args: argparse.Namespace) -> int:
+    config = load_config(args.config)
+    llm_log = None if args.quiet_llm else (lambda msg: print(msg, file=sys.stderr))
+    try:
+        result = run_draft(
+            config, args.profile, args.uid, args.resume,
+            db=args.db, out_dir=args.out, model=args.model,
+            on_info=_err, on_llm_log=llm_log,
+        )
+    except CommandError as e:
+        _err(str(e))
+        return 1
+    for d in result.drafts:
+        print(f"{d.uid}  {d.title} — {d.company}  →  {d.written_to}")
+    return 0
+
+
 def cmd_sources(args: argparse.Namespace) -> int:
     config = load_config(args.config)
     result = run_sources(config, db=args.db)
@@ -197,6 +215,24 @@ def build_parser() -> argparse.ArgumentParser:
                           help="suppress per-request/response LLM logs (keep the usage summary)")
     p_report.add_argument("--open", action="store_true", help="open the report in a browser")
     p_report.set_defaults(func=cmd_report)
+
+    p_draft = sub.add_parser(
+        "draft", help="draft a cover letter + resume bullets for one or more postings"
+    )
+    p_draft.add_argument("uid", nargs="+", help="posting uid(s) to draft for (see report output)")
+    p_draft.add_argument("-p", "--profile", required=True, help="profile name from config")
+    p_draft.add_argument("--resume", required=True, metavar="FILE",
+                         help="path to the resume file (PDF, markdown, or plain text)")
+    p_draft.add_argument("--out", default=None, metavar="DIR",
+                         help="folder to save drafts into, one file per posting "
+                              "(default: config draft_output_dir, else the current directory)")
+    p_draft.add_argument("--model", default=None,
+                         help="override the LLM model used for drafting "
+                              "(default: llm.build_model from config)")
+    p_draft.add_argument("--quiet-llm", action="store_true",
+                         help="suppress the per-request/response LLM log (keep the "
+                              "usage summary); both go to stderr, never stdout")
+    p_draft.set_defaults(func=cmd_draft)
 
     p_sources = sub.add_parser("sources", help="list registered adapters and configured sources + counts")
     p_sources.set_defaults(func=cmd_sources)

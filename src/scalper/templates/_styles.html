@@ -9,6 +9,15 @@
   header { padding: 20px 24px; border-bottom: 1px solid var(--line); }
   h1 { margin: 0 0 4px; font-size: 18px; }
   .meta { color: var(--muted); font-size: 13px; }
+  .draft-bar { display: flex; gap: 10px; align-items: center; margin-top: 10px; }
+  .dlabel { color: var(--muted); font-size: 13px; white-space: nowrap; }
+  .dcmd { flex: 1; background: var(--bg); border: 1px solid var(--line); color: var(--text);
+          border-radius: 6px; padding: 7px 10px; font: 13px/1.4 ui-monospace, Consolas, monospace; }
+  .dcmd::placeholder { color: var(--muted); }
+  .draft-bar button { background: var(--accent); border: none; color: #0f1115; font-weight: 600;
+          border-radius: 6px; padding: 7px 14px; cursor: pointer; font: inherit; }
+  .draft-bar button:hover { opacity: .9; }
+  th.selcol, td.selcol { width: 28px; padding: 10px 8px; }
   .tabs { display: flex; gap: 4px; flex-wrap: wrap; padding: 0 24px;
           border-bottom: 1px solid var(--line); background: var(--panel); }
   .tabs button { background: none; border: none; border-bottom: 2px solid transparent;

@@ -1,4 +1,23 @@
 <script>
+  // The draft-bar lives in <header>, outside any .panel, so it's wired once and
+  // reads whichever .panel is currently visible (the active tab, or the only
+  // panel on a single-profile report) to build a `scalper draft` command from
+  // its checked rows.
+  function updateDraftBar() {
+    const bar = document.querySelector('.draft-bar');
+    if (!bar) return;
+    const cmd = bar.querySelector('.dcmd');
+    const count = bar.querySelector('.dcount');
+    const active = document.querySelector('.panel:not([hidden])');
+    const uids = active
+      ? Array.from(active.querySelectorAll('input.pick:checked')).map((cb) => cb.dataset.uid)
+      : [];
+    count.textContent = uids.length;
+    cmd.value = uids.length && active
+      ? `scalper draft ${uids.join(' ')} -p ${active.dataset.name} --resume resume.pdf`
+      : '';
+  }
+
   // Each profile lives in its own .panel; bind controls scoped to that root so
   // multiple tables (combined report) coexist without colliding on ids.
   function initPanel(root) {
@@ -41,7 +60,7 @@
           av = parseFloat(a.dataset[col === 'pct' ? 'pct' : 'pub']) || 0;
           bv = parseFloat(b.dataset[col === 'pct' ? 'pct' : 'pub']) || 0;
         } else {
-          const idx = { title: 1, company: 2, loc: 3, salary: 4, src: 5 }[col];
+          const idx = { title: 2, company: 3, loc: 4, salary: 5, src: 6 }[col];
           av = a.cells[idx].innerText.toLowerCase();
           bv = b.cells[idx].innerText.toLowerCase();
         }
@@ -54,10 +73,25 @@
     }
 
     tbl.tBodies[0].addEventListener('click', (e) => {
+      if (e.target.closest('input.pick')) return;  // checkbox clicks shouldn't toggle the row
       const job = e.target.closest('tr.job');
       if (!job) return;
       const detail = job.nextElementSibling;
       if (detail && detail.classList.contains('detail')) detail.classList.toggle('open');
+    });
+    const pickAll = root.querySelector('.pickall');
+    if (pickAll) {
+      pickAll.addEventListener('change', () => {
+        for (const [job] of pairs()) {
+          if (job.style.display === 'none') continue;
+          const cb = job.querySelector('input.pick');
+          if (cb) cb.checked = pickAll.checked;
+        }
+        updateDraftBar();
+      });
+    }
+    tbl.tBodies[0].addEventListener('change', (e) => {
+      if (e.target.matches('input.pick')) updateDraftBar();
     });
     const sortState = {};
     tbl.tHead.addEventListener('click', (e) => {
@@ -83,6 +117,18 @@
       for (const b of tabs.querySelectorAll('button')) b.classList.toggle('active', b === btn);
       for (const p of document.querySelectorAll('.panel'))
         p.hidden = p.dataset.name !== btn.dataset.target;
+      updateDraftBar();
     });
+  }
+
+  const draftBar = document.querySelector('.draft-bar');
+  if (draftBar) {
+    draftBar.querySelector('.dcopy').addEventListener('click', () => {
+      const cmd = draftBar.querySelector('.dcmd');
+      if (!cmd.value) return;
+      cmd.select();
+      navigator.clipboard?.writeText(cmd.value).catch(() => {});
+    });
+    updateDraftBar();
   }
 </script>

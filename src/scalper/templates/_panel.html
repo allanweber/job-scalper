@@ -20,6 +20,7 @@
 <table class="tbl">
   <thead>
     <tr>
+      <th class="selcol"><input type="checkbox" class="pickall" title="Select all shown"></th>
       <th data-sort="num" data-col="pct">Match</th>
       <th data-sort="str" data-col="title">Title</th>
       <th data-sort="str" data-col="company">Company</th>
@@ -34,6 +35,7 @@
     {% set cls = 'good' if r.percent >= 70 else ('mid' if r.percent >= 40 else 'low') %}
     <tr class="job" data-pct="{{ r.percent }}" data-pub="{{ r.published }}"
         data-search="{{ (r.title ~ ' ' ~ r.company ~ ' ' ~ (r.matched_skills | join(' ')) ~ ' ' ~ r.source ~ ' ' ~ (r.also_seen_on | join(' '))) | lower }}">
+      <td class="selcol"><input type="checkbox" class="pick" data-uid="{{ r.uid }}"></td>
       <td class="pct {{ cls }}">{{ r.percent }}%</td>
       <td><div class="title">{{ r.title }}</div></td>
       <td>{{ r.company }}</td>
@@ -43,7 +45,7 @@
       <td class="sub">{{ r.published or '—' }}</td>
     </tr>
     <tr class="detail">
-      <td colspan="7">
+      <td colspan="8">
         <div class="detail-grid">
           <div>
             <h4>Score breakdown</h4>

@@ -28,6 +28,9 @@ scalper profile from-resume --name backend --resume resume.pdf         # draft, 
 scalper profile from-resume --name backend --resume resume.pdf --write # …and append to config.yaml
 scalper profile from-resume --name backend --resume resume.pdf --write --force # overwrite
 
+scalper draft remotive::123 -p backend --resume resume.pdf             # one posting
+scalper draft remotive::123 remotive::456 -p backend --resume resume.pdf --out drafts/  # several
+
 ```
 
 A personal CLI that searches remote tech jobs across many **company-agnostic** sources
@@ -153,6 +156,31 @@ default nothing is written — review the printed block and paste it in yourself
 `--write` refuses to overwrite a profile that already exists; add `--force` to replace it.
 Without the `[llm]` extra or an API key, the command prints a one-line `error:` hint instead
 of crashing.
+
+### Application drafts (optional)
+
+`draft <uid> [<uid> ...] -p <profile> --resume <file>` asks the LLM to write a cover
+letter plus tailored resume bullets for one or more stored postings (find uids in a
+`report`'s rows or HTML), grounded in the posting text, your resume, and that profile's
+Stage 1 matched/missing skills. Reuses the same `[llm]` extra/key as enrichment (model
+from `llm.build_model`).
+
+```bash
+pip install -e '.[llm]'              # if not already installed
+export ANTHROPIC_API_KEY=sk-ant-…
+
+scalper draft remotive::123 -p backend --resume resume.pdf
+scalper draft remotive::123 remotive::456 -p backend --resume resume.pdf --out drafts/
+```
+
+Every posting is drafted into its **own file**, never just printed: `--out DIR` (or
+`draft_output_dir` in config.yaml, or the current directory if neither is set) gets one
+`[profile]_[position_name]_[uid].md` per posting, holding both sections. An unknown uid
+reports cleanly — listing every uid not found in the store — before any LLM call is
+made. Same logging contract as enrichment/profile-drafting: request/response stream to
+stderr (`--quiet-llm` to silence), a token/cost summary always prints. Without the
+`[llm]` extra or an API key, the command prints a one-line `error:` hint instead of
+crashing.
 
 ### Hard sources — LinkedIn & Indeed (optional, off by default)
 
@@ -284,6 +312,8 @@ Implemented:
 - ✅ Semantic similarity in Stage 1 (local sentence-transformers, cached) — `pip install -e .[semantic]`
 - ✅ Stage 2 LLM enrichment: summary + skill-gap on the shortlist, cached, swappable provider — `pip install -e .[llm]`
 - ✅ Self-contained HTML report (client-side sort/filter, tier badges)
+- ✅ Resume-driven profile drafting (`profile from-resume`) and Application Drafts
+  (`draft`, cover letter + resume bullets per posting) — both `pip install -e .[llm]`
 - ✅ Tests for scoring, semantic, enrichment, and adapter parsing (structured + hard)
 
 Layered on next (designed, not yet built):

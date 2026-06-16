@@ -10,6 +10,11 @@
 <header>
   <h1>Job Scalper — all profiles</h1>
   <div class="meta">{{ panels | length }} profile(s) · generated {{ generated_at }}</div>
+  <div class="draft-bar">
+    <span class="dlabel">Draft command (<span class="dcount">0</span> selected):</span>
+    <input type="text" class="dcmd" readonly placeholder="select postings below to build a `scalper draft` command">
+    <button type="button" class="dcopy">Copy</button>
+  </div>
 </header>
 
 <nav class="tabs">
