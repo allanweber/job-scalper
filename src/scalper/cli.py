@@ -28,11 +28,23 @@ def cmd_collect(args: argparse.Namespace) -> int:
     total_new = total_updated = 0
     if query.terms:
         print(f"Searching for: {', '.join(query.terms)}")
-    with JobStore(db) as store:
-        if not config.sources:
-            _err("no sources configured. Add some under `sources:` in your config.")
+    sources = config.sources
+    if not sources:
+        _err("no sources configured. Add some under `sources:` in your config.")
+        return 1
+    if args.source:
+        wanted = {s.lower() for s in args.source}
+        sources = [sc for sc in sources if sc.type.lower() in wanted]
+        missing = wanted - {sc.type.lower() for sc in config.sources}
+        for name in sorted(missing):
+            _err(f"source {name!r} not found in config; skipping.")
+        if not sources:
+            _err("no matching sources to collect from.")
             return 1
-        for sc in config.sources:
+        print(f"Collecting from: {', '.join(sc.type for sc in sources)}")
+
+    with JobStore(db) as store:
+        for sc in sources:
             try:
                 adapter = build_adapter(sc.type, sc.params)
             except (KeyError, ValueError, TypeError) as e:
@@ -132,6 +144,9 @@ def build_parser() -> argparse.ArgumentParser:
     sub = parser.add_subparsers(dest="command", required=True)
 
     p_collect = sub.add_parser("collect", help="fetch from all sources into the local store")
+    p_collect.add_argument("-s", "--source", nargs="+", metavar="TYPE",
+                           help="collect only these source type(s), e.g. -s indeed linkedin "
+                                "(default: every source in config)")
     p_collect.set_defaults(func=cmd_collect)
 
     p_report = sub.add_parser("report", help="score stored postings against a profile, emit HTML")

@@ -1,5 +1,21 @@
 # Job Scalper
 
+## Commands
+
+```bash
+
+scalper collect -s indeed                           # just Indeed
+scalper collect -s indeed linkedin                  # both, in config order
+scalper collect                                     # all sources (unchanged)
+
+scalper report --profile backend                    # first run downloads the model, then caches embeddings
+scalper report --profile backend --open             # score + open HTML report (instant)
+
+scalper report --profile backend --enrich           # enrich the top N (config llm.top_n)
+scalper report --profile backend --enrich --top 5   # or cap it per run
+
+```
+
 A personal CLI that searches remote tech jobs across many **company-agnostic** sources
 (it ranks the market, it doesn't watch a fixed list of employers), scores each against
 your search criteria, and emits a self-contained HTML report. Single-user, local-first.
@@ -122,6 +138,16 @@ most). A blocked page, a markup change, or a missing `[scrape]` extra makes the 
 contribute nothing and log a one-line note; it never aborts the run or affects the
 other sources. LinkedIn uses its unauthenticated *guest* search endpoint; Indeed is
 Cloudflare-aware and skips cleanly when challenged.
+
+**When Indeed shows a Cloudflare challenge.** The tool never auto-solves one — that's an
+evasion arms race and against Indeed's ToS. Instead, in order of effectiveness: (1) run
+from a **home IP** — datacenter/cloud IPs get challenged far more, and from a residential
+connection a *passive* "checking your browser" challenge usually clears on its own;
+(2) if it persists, set `headless: false` to open a visible window and solve the challenge
+**yourself, by hand**, with `user_data_dir: .indeed-profile` so the cleared cookies are
+reused on later runs; (3) raise `challenge_wait` to give the page (or you) time to clear it.
+For reliable, scrape-free coverage of this kind of listing, prefer **Adzuna** (a free key,
+no browser).
 
 Schedule collection with cron, e.g. nightly:
 

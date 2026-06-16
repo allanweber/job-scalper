@@ -75,6 +75,15 @@ sources:
   #   domain: www.indeed.com  # or ca.indeed.com, de.indeed.com, …
   #   max_pages: 1            # Indeed is the most hostile — stay light
   #   delay: 4
+  #   # Indeed sits behind Cloudflare. The single biggest fix is to run from a
+  #   # home IP (datacenter/cloud IPs get challenged far more). If you still hit
+  #   # a challenge, open a visible browser and solve it yourself ONCE — the
+  #   # cleared cookies are kept in user_data_dir and reused on later runs. We
+  #   # never auto-solve a challenge; a passive one clears on its own, an
+  #   # interactive one is solved by you, by hand.
+  #   headless: false             # show the window so you can solve a challenge
+  #   user_data_dir: .indeed-profile   # persist cookies across runs (gitignore it)
+  #   challenge_wait: 120         # seconds to wait for the challenge to clear
 
 # Optional Stage 2 LLM enrichment (ADR 0003). Runs only on the top-scored
 # postings, so cost is bounded by `top_n`, not collection volume. Requires the
@@ -127,6 +136,7 @@ profiles:
     remote_only: true
     salary_floor: 0            # 0 = no floor; postings with unknown salary are kept
     freshness_days: 30         # drop postings published/updated older than this
+    exclude_non_latin: true    # drop CJK (Chinese/Japanese/Korean) listings; false keeps them
     # Scoring weights (relative; renormalized over components that produce a value).
     # `semantic` is wired but inert until the embeddings layer is added.
     weights:

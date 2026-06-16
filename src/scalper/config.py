@@ -30,6 +30,9 @@ class Profile(BaseModel):
     remote_only: bool = True
     salary_floor: float = 0.0
     freshness_days: int | None = 30
+    #: Drop postings written predominantly in CJK (Chinese/Japanese/Korean)
+    #: script — i.e. non-English listings. On by default; set false to keep them.
+    exclude_non_latin: bool = True
 
     weights: Weights = Field(default_factory=Weights)
 

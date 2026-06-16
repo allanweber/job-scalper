@@ -74,6 +74,28 @@ def test_exclude_keyword_drops():
     assert not kept and "clearance" in reason
 
 
+def test_excludes_cjk_listing_by_default():
+    kept, reason = passes_filters(
+        _profile(),
+        _posting(title="软件工程师", description="后端开发，使用 Python。"),
+    )
+    assert not kept and "CJK" in reason
+
+
+def test_keeps_english_title_with_stray_cjk_city():
+    # A Chinese city name in an otherwise-English listing stays (below threshold).
+    kept, _ = passes_filters(_profile(), _posting(title="Senior Backend Engineer (深圳)"))
+    assert kept
+
+
+def test_exclude_non_latin_can_be_disabled():
+    kept, _ = passes_filters(
+        _profile(exclude_non_latin=False),
+        _posting(title="软件工程师", description="后端开发"),
+    )
+    assert kept
+
+
 def test_freshness_window_drops_old_postings():
     old = datetime.now(timezone.utc) - timedelta(days=60)
     kept, reason = passes_filters(_profile(freshness_days=30), _posting(published_at=old))

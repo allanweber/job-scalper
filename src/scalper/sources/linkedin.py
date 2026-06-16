@@ -82,6 +82,7 @@ class LinkedInAdapter(SourceAdapter):
         delay: float = 3.0,
         timeout: float = 30.0,
         headless: bool = True,
+        user_data_dir: str | None = None,
         fetcher: Fetcher | None = None,
     ):
         # Pages of 25 to pull per search term (kept low — this is a polite,
@@ -90,6 +91,8 @@ class LinkedInAdapter(SourceAdapter):
         self.delay = delay
         self.timeout = timeout
         self.headless = headless
+        # Optional persistent profile dir (reuses cookies across runs).
+        self.user_data_dir = user_data_dir
         # Tests inject a fetcher to supply canned fragments with no browser.
         self._fetcher = fetcher
 
@@ -108,8 +111,8 @@ class LinkedInAdapter(SourceAdapter):
             return []
         try:
             with BrowserSession(
-                headless=self.headless, timeout=self.timeout,
-                delay=self.delay, log=print,
+                headless=self.headless, timeout=self.timeout, delay=self.delay,
+                user_data_dir=self.user_data_dir, log=print,
             ) as session:
                 return self._collect(lambda u: session.get(u), query)
         except Exception as exc:  # noqa: BLE001 — hard source must never abort collect

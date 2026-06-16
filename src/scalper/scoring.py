@@ -36,6 +36,25 @@ def _tokens(text: str) -> set[str]:
     return set(re.findall(r"[a-z0-9]+", text.lower()))
 
 
+# CJK scripts: Hiragana/Katakana, CJK ideographs (+ extensions A & compat), Hangul.
+# A posting whose text is largely these is a non-English listing.
+_CJK = re.compile(r"[぀-ヿ㐀-䶿一-鿿豈-﫿가-힯]")
+_LATIN = re.compile(r"[A-Za-z]")
+
+
+def _is_cjk_dominant(text: str, threshold: float = 0.2) -> bool:
+    """True if CJK characters make up at least `threshold` of the letters.
+
+    A stray Chinese city name in an otherwise-English title stays (below the
+    threshold); a title/body that's mostly CJK is dropped.
+    """
+    cjk = len(_CJK.findall(text))
+    if not cjk:
+        return False
+    latin = len(_LATIN.findall(text))
+    return cjk / (cjk + latin) >= threshold
+
+
 class ScoreBreakdown(BaseModel):
     """Per-component scores in [0,1] (None = component not applicable)."""
 
@@ -67,6 +86,9 @@ def passes_filters(profile: Profile, posting: JobPosting, now: datetime | None =
 
     if profile.remote_only and not posting.remote:
         return False, "not remote"
+
+    if profile.exclude_non_latin and _is_cjk_dominant(f"{posting.title} {posting.description}"):
+        return False, "non-English (CJK) listing"
 
     for bad in profile.exclude_keywords:
         if _contains_term(text, bad):
