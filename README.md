@@ -14,6 +14,12 @@ scalper report --profile backend --open             # score + open HTML report (
 scalper report --profile backend --enrich           # enrich the top N (config llm.top_n)
 scalper report --profile backend --enrich --top 5   # or cap it per run
 
+scalper report --profile backend --since 14         # only postings from the last 14 days
+scalper report --profile backend --since 2026-06-01 # …or on/after a date
+scalper report --profile backend --dedup            # collapse the same job seen on >1 source
+
+scalper sources                                     # list adapters + configured sources with counts
+
 ```
 
 A personal CLI that searches remote tech jobs across many **company-agnostic** sources
@@ -149,11 +155,43 @@ reused on later runs; (3) raise `challenge_wait` to give the page (or you) time 
 For reliable, scrape-free coverage of this kind of listing, prefer **Adzuna** (a free key,
 no browser).
 
-Schedule collection with cron, e.g. nightly:
+Schedule collection with cron, e.g. nightly (collect at 07:00, then rebuild the report):
 
 ```cron
 0 7 * * *  cd /home/allan/projects/job-scalper && .venv/bin/scalper collect
+5 7 * * *  cd /home/allan/projects/job-scalper && .venv/bin/scalper report --profile backend
 ```
+
+Restrict a run to specific sources with `-s/--source` (handy for the slow hard sources):
+
+```bash
+scalper collect -s indeed linkedin   # just these, in config order
+```
+
+### Reporting filters & dedup
+
+All of these are **report-time** and operate on the existing store — no re-collection:
+
+- `--since <DAYS|DATE>` — score only recent postings: a day count (`--since 14`) or an ISO
+  date (`--since 2026-06-01`). Postings with no known publish date are kept.
+- `--dedup` — collapse the same job seen on multiple sources into one row, keeping the
+  best-scoring record and listing the others under "also seen on". Uses the normalized
+  company+title+location key stored at collect time (ADR 0002).
+- `exclude_non_latin: true` (per profile, **on by default**) — drop predominantly
+  CJK (Chinese/Japanese/Korean) listings; set `false` to keep them.
+
+Salary is parsed into a structured range even from sources that report it as free text
+(e.g. Remotive's `"$90k – $120k"`), and a timezone hint is inferred from the location
+string (`UTC+2`, `CET`, `Americas`, …) when the source doesn't supply one.
+
+### Inspecting sources
+
+```bash
+scalper sources   # registered adapters + each configured source's tier and stored count
+```
+
+Lists every configured source with its tier (`structured`/`hard`) and how many postings it
+has in the store, plus adapters that are registered but not yet in your config.
 
 ## Configuration
 

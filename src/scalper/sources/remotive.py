@@ -13,7 +13,7 @@ from __future__ import annotations
 import httpx
 
 from scalper.models import JobPosting, SearchQuery
-from scalper.sources._util import parse_iso_dt, strip_html
+from scalper.sources._util import parse_iso_dt, parse_salary, strip_html
 from scalper.sources.base import TIER_STRUCTURED, SourceAdapter, register
 
 _API = "https://remotive.com/api/remote-jobs"
@@ -54,6 +54,10 @@ class RemotiveAdapter(SourceAdapter):
         return resp.json().get("jobs", [])
 
     def _to_posting(self, job: dict) -> JobPosting:
+        # Remotive's `salary` is free text (e.g. "$90k - $120k"); parse it
+        # best-effort into structured min/max so it sorts and filters like the
+        # rest. Unparseable strings simply leave the fields None.
+        sal_min, sal_max, currency = parse_salary(job.get("salary"))
         return JobPosting(
             source=self.name,
             source_id=str(job.get("id")),
@@ -63,6 +67,9 @@ class RemotiveAdapter(SourceAdapter):
             description=strip_html(job.get("description", "")),
             location=job.get("candidate_required_location") or None,
             remote=True,  # Remotive is remote-only by definition
+            salary_min=sal_min,
+            salary_max=sal_max,
+            salary_currency=currency,
             published_at=parse_iso_dt(job.get("publication_date")),
             raw=job,
         )

@@ -11,6 +11,7 @@ import scalper.sources  # noqa: F401 — import side-effect populates the adapte
 from scalper.config import Profile
 from scalper.enrich import Enrichment
 from scalper.scoring import ScoredPosting
+from scalper.sources._util import extract_timezone
 from scalper.sources.base import REGISTRY, TIER_HARD, TIER_STRUCTURED
 
 _env = Environment(
@@ -39,9 +40,12 @@ def _row(scored: ScoredPosting, enrichment: Enrichment | None = None) -> dict:
         "company": p.company,
         "location": p.location or ("Remote" if p.remote else "—"),
         "remote": p.remote,
-        "timezone": p.timezone or "",
+        # Fall back to a timezone parsed from the location when the source
+        # didn't supply one — reporting-only, so it works on existing stores.
+        "timezone": p.timezone or extract_timezone(p.location) or "",
         "salary": p.salary_display or "",
         "source": p.source,
+        "also_seen_on": scored.also_seen_on,
         "tier": _tier(p.source),
         "hard": _tier(p.source) == TIER_HARD,
         "url": p.url,

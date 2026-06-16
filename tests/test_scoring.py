@@ -2,7 +2,7 @@ from datetime import datetime, timedelta, timezone
 
 from scalper.config import Profile, Weights
 from scalper.models import JobPosting
-from scalper.scoring import passes_filters, score_all, score_posting
+from scalper.scoring import dedup_scored, passes_filters, score_all, score_posting
 
 
 def _posting(**kw):
@@ -100,6 +100,26 @@ def test_freshness_window_drops_old_postings():
     old = datetime.now(timezone.utc) - timedelta(days=60)
     kept, reason = passes_filters(_profile(freshness_days=30), _posting(published_at=old))
     assert not kept and reason == "outside freshness window"
+
+
+def test_dedup_collapses_same_job_across_sources_keeping_best():
+    # Same company/title/location → same dedup_key. Different descriptions give
+    # different scores; the higher-scoring record is kept, the other recorded.
+    strong = _posting(source="remotive", source_id="1",
+                      description="Python, Postgres, Docker, AWS, Kafka.")
+    weak = _posting(source="linkedin", source_id="2", description="Python only.")
+    out = dedup_scored(score_all(_profile(), [strong, weak]))
+    assert len(out) == 1
+    assert out[0].posting.source == "remotive"  # the better match survived
+    assert out[0].also_seen_on == ["linkedin"]
+
+
+def test_dedup_keeps_distinct_jobs():
+    a = _posting(source="remotive", source_id="1", title="Backend Engineer")
+    b = _posting(source="remotive", source_id="2", title="Platform Engineer")
+    out = dedup_scored(score_all(_profile(), [a, b]))
+    assert len(out) == 2
+    assert all(s.also_seen_on == [] for s in out)
 
 
 def test_score_all_sorts_descending_and_filters():

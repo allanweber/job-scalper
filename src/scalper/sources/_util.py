@@ -110,6 +110,104 @@ def looks_remote(*texts: str | None) -> bool:
     return any(t and REMOTE_HINT.search(t) for t in texts)
 
 
+# --- structured-compensation parsing (Phase 5) ----------------------------
+
+_CURRENCY_SYMBOL = {"$": "USD", "€": "EUR", "£": "GBP"}
+_CURRENCY_CODE = re.compile(r"\b(USD|EUR|GBP|CAD|AUD|CHF|SGD|INR|NZD)\b", re.IGNORECASE)
+# A money amount, optionally with thousands separators and a `k`/`m` magnitude.
+_AMOUNT = re.compile(r"(\d[\d,]*(?:\.\d+)?)\s*([kKmM])?")
+# Annual-salary sanity window: drop stray small numbers (hourly rates, "401(k)")
+# and absurd outliers, so a free-text field yields a sensible range or nothing.
+_SALARY_MIN, _SALARY_MAX = 1_000.0, 10_000_000.0
+
+
+def parse_salary(text: str | None) -> tuple[float | None, float | None, str | None]:
+    """Best-effort parse of a free-text compensation string into (min, max, currency).
+
+    Handles the shapes sources like Remotive emit: ``"$90,000 - $120,000"``,
+    ``"€80k–€100k"``, ``"USD 120000"``, ``"Up to $150k"``, ``"$110,000"``. Returns
+    ``(None, None, None)`` when nothing salary-shaped is found. Amounts outside a
+    plausible annual window are ignored, so hourly rates and noise like ``401(k)``
+    don't masquerade as a salary. A single amount becomes the min (max stays
+    ``None``) unless the text says "up to"/"max", which makes it the ceiling.
+    """
+    if not text:
+        return None, None, None
+
+    currency = None
+    for sym, code in _CURRENCY_SYMBOL.items():
+        if sym in text:
+            currency = code
+            break
+    if currency is None:
+        m = _CURRENCY_CODE.search(text)
+        if m:
+            currency = m.group(1).upper()
+
+    amounts: list[float] = []
+    for num, mag in _AMOUNT.findall(text):
+        val = float(num.replace(",", ""))
+        if mag in ("k", "K"):
+            val *= 1_000
+        elif mag in ("m", "M"):
+            val *= 1_000_000
+        if _SALARY_MIN <= val <= _SALARY_MAX:
+            amounts.append(val)
+
+    if not amounts:
+        return None, None, currency
+    if len(amounts) == 1:
+        amt = amounts[0]
+        if re.search(r"\b(up to|max(?:imum)?|under|below)\b", text, re.IGNORECASE):
+            return None, amt, currency
+        return amt, None, currency
+    return min(amounts), max(amounts), currency
+
+
+# --- timezone extraction from location strings (Phase 5) -------------------
+
+# Explicit UTC/GMT offset, e.g. "UTC+2", "GMT -5", "UTC+05:30" -> normalized "UTC+2".
+_TZ_OFFSET = re.compile(r"\b(?:UTC|GMT)\s*([+-])\s*(\d{1,2})(?::?(\d{2}))?\b", re.IGNORECASE)
+# Named timezone abbreviations commonly seen in remote-job location fields.
+_TZ_ABBR = re.compile(
+    r"\b(EST|EDT|PST|PDT|CST|CDT|MST|MDT|CET|CEST|EET|EEST|WET|BST|IST|JST|AEST|UTC|GMT)\b"
+)
+# Coarse multi-timezone region buckets — honest when a posting names a region or
+# country rather than a single zone (a US-remote role spans several zones).
+_TZ_REGIONS: list[tuple[re.Pattern[str], str]] = [
+    (re.compile(r"\bEMEA\b", re.IGNORECASE), "EMEA"),
+    (re.compile(r"\bAPAC\b", re.IGNORECASE), "APAC"),
+    (re.compile(r"\bLATAM\b", re.IGNORECASE), "LATAM"),
+    (re.compile(r"\b(?:Americas|North America|U\.?S\.?A?\.?|United States|Canada)\b", re.IGNORECASE), "Americas"),
+    (re.compile(r"\b(?:Europe|European|EU)\b", re.IGNORECASE), "Europe"),
+    (re.compile(r"\b(?:Asia|Asian|Asia[- ]Pacific)\b", re.IGNORECASE), "Asia"),
+]
+
+
+def extract_timezone(location: str | None) -> str | None:
+    """Pull a timezone hint out of a free-text location, or ``None``.
+
+    Prefers the most precise signal: an explicit ``UTC±N`` offset, then a named
+    abbreviation (``CET``, ``EST``…), then a coarse region bucket (``Europe``,
+    ``Americas``…) for postings that name a region or country instead of a zone.
+    """
+    if not location:
+        return None
+    m = _TZ_OFFSET.search(location)
+    if m:
+        sign, hours = m.group(1), int(m.group(2))
+        mins = m.group(3)
+        suffix = f":{mins}" if mins and mins != "00" else ""
+        return f"UTC{sign}{hours}{suffix}"
+    m = _TZ_ABBR.search(location)
+    if m:
+        return m.group(1).upper()
+    for pattern, label in _TZ_REGIONS:
+        if pattern.search(location):
+            return label
+    return None
+
+
 def matches_any_term(text: str, terms: list[str]) -> bool:
     """True if `text` matches any of `terms` (case-insensitive).
 

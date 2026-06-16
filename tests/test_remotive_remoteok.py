@@ -48,6 +48,19 @@ def test_remotive_normalizes_company_agnostic():
     assert "Python" in p.description and "<" not in p.description
 
 
+def test_remotive_parses_free_text_salary():
+    # Remotive emits salary as free text; the adapter should structure it.
+    job = {**REMOTIVE_JOB, "salary": "$90k - $120k"}
+    p = RemotiveAdapter()._to_posting(job)
+    assert p.salary_min == 90000 and p.salary_max == 120000
+    assert p.salary_currency == "USD"
+
+
+def test_remotive_salary_absent_leaves_fields_none():
+    p = RemotiveAdapter()._to_posting(REMOTIVE_JOB)  # no salary key
+    assert p.salary_min is None and p.salary_max is None
+
+
 def test_remoteok_normalizes_and_parses_salary():
     p = RemoteOKAdapter()._to_posting(REMOTEOK_JOB)
     assert p.source == "remoteok"

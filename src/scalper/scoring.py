@@ -75,6 +75,9 @@ class ScoredPosting(BaseModel):
     missing_skills: list[str]
     matched_nice_to_have: list[str]
     matched_keywords: list[str]
+    #: Other source names the same job was also seen on, set by `dedup_scored`
+    #: when cross-source dedup is enabled (empty otherwise).
+    also_seen_on: list[str] = []
 
 
 # --------------------------------------------------------------------------- filters
@@ -190,3 +193,27 @@ def score_all(
     scored = [score_posting(profile, p, semantic_scorer) for p in kept]
     scored.sort(key=lambda s: s.percent, reverse=True)
     return scored
+
+
+def dedup_scored(scored: list[ScoredPosting]) -> list[ScoredPosting]:
+    """Collapse the same job seen on multiple sources into one row (ADR 0002).
+
+    Reporting-only: groups by the posting's stored `dedup_key` (normalized
+    company+title+location), keeps the highest-scoring record, and records the
+    other sources it appeared on in `also_seen_on`. Input is assumed already
+    sorted by Match % descending (as `score_all` returns), so the first record
+    seen for a key is the one kept; relative order is otherwise preserved.
+    """
+    best: dict[str, ScoredPosting] = {}
+    order: list[str] = []
+    for s in scored:
+        key = s.posting.dedup_key
+        keep = best.get(key)
+        if keep is None:
+            best[key] = s
+            order.append(key)
+            continue
+        other = s.posting.source
+        if other != keep.posting.source and other not in keep.also_seen_on:
+            keep.also_seen_on.append(other)
+    return [best[k] for k in order]

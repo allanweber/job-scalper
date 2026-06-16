@@ -145,6 +145,13 @@ class JobStore:
     def count(self) -> int:
         return self._conn.execute("SELECT COUNT(*) FROM postings").fetchone()[0]
 
+    def counts_by_source(self) -> dict[str, int]:
+        """Stored posting count per source name, ascending by name."""
+        rows = self._conn.execute(
+            "SELECT source, COUNT(*) AS n FROM postings GROUP BY source ORDER BY source"
+        )
+        return {row["source"]: row["n"] for row in rows}
+
     # --- semantic embedding cache (Phase 1) -------------------------------
 
     def get_embeddings(self, uids: list[str], model: str) -> dict[str, bytes]:

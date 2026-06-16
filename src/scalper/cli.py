@@ -5,20 +5,41 @@ from __future__ import annotations
 import argparse
 import sys
 import webbrowser
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from scalper import __version__
 from scalper.config import load_config
 from scalper.enrich import build_enricher, format_usage
 from scalper.report import render_report, write_report
-from scalper.scoring import score_all
+from scalper.scoring import dedup_scored, score_all
 from scalper.semantic import DEFAULT_MODEL, build_semantic_scorer, sentence_transformers_available
-from scalper.sources import build_adapter
+from scalper.sources import REGISTRY, build_adapter
+from scalper.sources.base import TIER_STRUCTURED
 from scalper.store import JobStore
 
 
 def _err(msg: str) -> None:
     print(f"error: {msg}", file=sys.stderr)
+
+
+def _aware(dt: datetime) -> datetime:
+    return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+
+
+def _parse_since(value: str) -> datetime:
+    """Interpret `--since` as either a day count or an ISO date → aware cutoff."""
+    try:
+        return datetime.now(timezone.utc) - timedelta(days=int(value))
+    except ValueError:
+        pass
+    try:
+        dt = datetime.fromisoformat(value)
+    except ValueError:
+        raise ValueError(
+            f"--since must be a number of days or an ISO date (YYYY-MM-DD), got {value!r}"
+        ) from None
+    return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
 
 
 def cmd_collect(args: argparse.Namespace) -> int:
@@ -82,8 +103,23 @@ def cmd_report(args: argparse.Namespace) -> int:
         _err(f"no store at {db}. Run `scalper collect` first.")
         return 1
 
+    if args.since:
+        try:
+            cutoff = _parse_since(args.since)
+        except ValueError as e:
+            _err(str(e))
+            return 1
+
     with JobStore(db) as store:
         postings = list(store.iter_postings())
+
+        if args.since:
+            # Keep postings with no known date (consistent with the freshness
+            # filter); drop those published before the cutoff.
+            postings = [
+                p for p in postings
+                if p.published_at is None or _aware(p.published_at) >= cutoff
+            ]
 
         scorer = build_semantic_scorer(
             store, model_name=args.model, enabled=not args.no_semantic
@@ -98,6 +134,12 @@ def cmd_report(args: argparse.Namespace) -> int:
             print("note: semantic scoring off — install it with: pip install -e '.[semantic]'")
 
         scored = score_all(profile, postings, semantic_scorer=scorer)
+        if args.dedup:
+            before = len(scored)
+            scored = dedup_scored(scored)
+            collapsed = before - len(scored)
+            if collapsed:
+                print(f"Deduped {collapsed} cross-source duplicate(s).")
 
         enrichments = {}
         if args.enrich or config.llm.enabled:
@@ -136,6 +178,39 @@ def cmd_report(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_sources(args: argparse.Namespace) -> int:
+    """List registered adapters and configured sources with stored counts."""
+    config = load_config(args.config)
+    db = args.db or config.database
+
+    counts: dict[str, int] = {}
+    if Path(db).exists():
+        with JobStore(db) as store:
+            counts = store.counts_by_source()
+
+    configured = [sc.type for sc in config.sources]
+    print(f"Configured sources ({len(configured)}) — stored counts from {db}:")
+    for stype in configured:
+        cls = REGISTRY.get(stype)
+        tier = getattr(cls, "tier", TIER_STRUCTURED) if cls else "unregistered"
+        print(f"  {stype:<16} {tier:<12} {counts.get(stype, 0):>6} stored")
+
+    extra = sorted(set(REGISTRY) - set(configured))
+    if extra:
+        print(f"\nRegistered but not in config ({len(extra)}):")
+        print("  " + ", ".join(extra))
+
+    orphan = sorted(set(counts) - set(configured))
+    if orphan:
+        print("\nStored from sources no longer in config:")
+        for stype in orphan:
+            print(f"  {stype:<16} {'':<12} {counts[stype]:>6} stored")
+
+    total = sum(counts.values())
+    print(f"\n{total} posting(s) stored across {len(counts)} source(s).")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="scalper", description="Personal job scalper.")
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
@@ -153,6 +228,12 @@ def build_parser() -> argparse.ArgumentParser:
     p_report.add_argument("-p", "--profile", required=True, help="profile name from config")
     p_report.add_argument("-o", "--out", default="report.html", help="output HTML path")
     p_report.add_argument("--limit", type=int, default=None, help="cap number of results")
+    p_report.add_argument("--since", default=None, metavar="DAYS|DATE",
+                          help="only score postings published within the last N days, or on/after "
+                               "an ISO date (YYYY-MM-DD); postings with no known date are kept")
+    p_report.add_argument("--dedup", action="store_true",
+                          help="collapse the same job seen on multiple sources into one row "
+                               "(keeps the best-scoring, lists the others as 'also seen on')")
     p_report.add_argument("--no-semantic", action="store_true",
                           help="skip the local semantic-similarity component")
     p_report.add_argument("--model", default=DEFAULT_MODEL,
@@ -167,6 +248,9 @@ def build_parser() -> argparse.ArgumentParser:
                           help="suppress per-request/response LLM logs (keep the usage summary)")
     p_report.add_argument("--open", action="store_true", help="open the report in a browser")
     p_report.set_defaults(func=cmd_report)
+
+    p_sources = sub.add_parser("sources", help="list registered adapters and configured sources + counts")
+    p_sources.set_defaults(func=cmd_sources)
 
     return parser
 

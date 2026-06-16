@@ -4,7 +4,7 @@ Living roadmap of remaining work to finish the project. Decisions behind these t
 live in [`docs/adr/`](docs/adr/); vocabulary in [`CONTEXT.md`](CONTEXT.md). Update the
 status boxes as work lands.
 
-## Status snapshot (2026-06-15)
+## Status snapshot (2026-06-16)
 
 **Pivot (ADR 0005):** sources are now **company-agnostic** and **query-driven**. The early
 company-keyed ATS adapters (greenhouse/lever/ashby) were removed; `collect` is driven by a
@@ -20,7 +20,7 @@ global `search:` block (`SearchQuery`) and the adapter contract is `fetch(query)
 - ✅ Stage 1 deterministic scoring + hard filters (ADR 0003)
 - ✅ Self-contained HTML report (client-side sort/filter)
 - ✅ `backend` + `java` profiles; java tech tokens in the global search
-- ✅ Tests (28 passing); verified live (283 postings across the active sources, cross-company)
+- ✅ Tests (100 passing); verified live (470 postings across the active sources, cross-company)
 
 - ✅ **Phase 1: semantic similarity** — local `sentence-transformers` scorer behind the
   `[semantic]` extra, SQLite embedding cache, `--no-semantic` flag; fails soft to the
@@ -37,6 +37,11 @@ global `search:` block (`SearchQuery`) and the adapter contract is `fetch(query)
   `tier = hard`, surfaced as a report badge + footer note. Parsing isolated and tested
   offline; every fetch fails soft (blocked / challenged / extra-absent → no postings, never
   aborts collect).
+
+- ✅ **Phase 5: reporting polish & operability** — `report --dedup` (cross-source dedup with
+  "also seen on"), `report --since <DAYS|DATE>`, free-text salary parsing (Remotive) +
+  location→timezone inference (render-time fallback), and a `scalper sources` command listing
+  configured sources with tiers + stored counts. All report-time, no re-collection.
 
 **Designed, not yet built:** the `add-source` self-building command (ADR 0004) — its
 `build_model` per-task slot and the swappable `LLMProvider` registry it reuses already exist.
@@ -151,15 +156,25 @@ fragile gap-fillers, not the backbone.
       is absent or a page is challenged. Live browser path not exercised — `[scrape]` not
       installed in this env.)
 
-## Phase 5
+## Phase 5 — Reporting polish & operability ✅
 
-- [ ] Optional cross-source dedup as a **reporting-only** toggle (uses the already-stored
-      `dedup_key`; ADR 0002) — keep best record, list "also seen on".
-- [ ] Salary parsing for sources that expose structured compensation (Remotive `salary` is
-      free text; RemoteOK min/max already parsed).
-- [ ] Timezone extraction from location strings (currently mostly `None`).
-- [ ] `scalper sources` command: list registered adapters / configured sources + counts.
-- [ ] Packaging/run docs: cron example (in README), maybe a `--since` report filter.
+All report-time, operating on the existing store (no re-collection); pure helpers tested offline.
+
+- [x] Optional cross-source dedup as a **reporting-only** toggle (`report --dedup`; uses the
+      already-stored `dedup_key`, ADR 0002) — keeps the best-scoring record and lists the
+      others as "also seen on" (`scoring.dedup_scored`; rendered in the source cell).
+- [x] Salary parsing for free-text compensation (`_util.parse_salary`): handles `$`/`€`/`£` +
+      ISO codes, `k`/`m` magnitudes, ranges and "up to", with an annual sanity window so
+      hourly rates / `401(k)` noise are ignored. Wired into Remotive (RemoteOK min/max already
+      parsed).
+- [x] Timezone extraction from location strings (`_util.extract_timezone`): explicit `UTC±N`
+      offsets, named abbreviations (`CET`, `EST`…), then coarse region buckets
+      (`Americas`/`Europe`/`EMEA`…). Applied as a render-time fallback when the source gave none.
+- [x] `scalper sources` command: lists each configured source's tier + stored count
+      (`store.counts_by_source`), plus registered-but-unconfigured adapters and any orphaned
+      stored sources.
+- [x] Packaging/run docs: cron example (collect + report) and `-s/--source` in README; added a
+      `report --since <DAYS|DATE>` filter (day count or ISO date; unknown-date postings kept).
 
 ---
 
