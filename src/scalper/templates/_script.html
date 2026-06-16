@@ -1,0 +1,88 @@
+<script>
+  // Each profile lives in its own .panel; bind controls scoped to that root so
+  // multiple tables (combined report) coexist without colliding on ids.
+  function initPanel(root) {
+    const tbl = root.querySelector('.tbl');
+    if (!tbl) return;  // empty profile: nothing to wire
+    const q = root.querySelector('.q');
+    const minR = root.querySelector('.min');
+    const minOut = root.querySelector('.minOut');
+    const shown = root.querySelector('.shown');
+
+    function pairs() {
+      const rows = Array.from(tbl.tBodies[0].rows);
+      const out = [];
+      for (let i = 0; i < rows.length; i += 2) out.push([rows[i], rows[i + 1]]);
+      return out;
+    }
+
+    function applyFilter() {
+      const term = q.value.trim().toLowerCase();
+      const min = parseInt(minR.value, 10);
+      minOut.textContent = min;
+      let visible = 0;
+      for (const [job, detail] of pairs()) {
+        const pct = parseInt(job.dataset.pct, 10);
+        const hay = job.dataset.search;
+        const ok = pct >= min && (!term || hay.includes(term));
+        job.style.display = ok ? '' : 'none';
+        if (!ok) detail.classList.remove('open');
+        detail.style.display = ok ? '' : 'none';
+        if (ok) visible++;
+      }
+      shown.textContent = visible + ' shown';
+    }
+
+    function sortBy(col, type, asc) {
+      const data = pairs();
+      data.sort(([a], [b]) => {
+        let av, bv;
+        if (type === 'num') {
+          av = parseFloat(a.dataset[col === 'pct' ? 'pct' : 'pub']) || 0;
+          bv = parseFloat(b.dataset[col === 'pct' ? 'pct' : 'pub']) || 0;
+        } else {
+          const idx = { title: 1, company: 2, loc: 3, salary: 4, src: 5 }[col];
+          av = a.cells[idx].innerText.toLowerCase();
+          bv = b.cells[idx].innerText.toLowerCase();
+        }
+        if (av < bv) return asc ? -1 : 1;
+        if (av > bv) return asc ? 1 : -1;
+        return 0;
+      });
+      const body = tbl.tBodies[0];
+      for (const [job, detail] of data) { body.appendChild(job); body.appendChild(detail); }
+    }
+
+    tbl.tBodies[0].addEventListener('click', (e) => {
+      const job = e.target.closest('tr.job');
+      if (!job) return;
+      const detail = job.nextElementSibling;
+      if (detail && detail.classList.contains('detail')) detail.classList.toggle('open');
+    });
+    const sortState = {};
+    tbl.tHead.addEventListener('click', (e) => {
+      const th = e.target.closest('th[data-sort]');
+      if (!th) return;
+      const col = th.dataset.col;
+      sortState[col] = !sortState[col];
+      sortBy(col, th.dataset.sort, sortState[col]);
+    });
+    q.addEventListener('input', applyFilter);
+    minR.addEventListener('input', applyFilter);
+    applyFilter();
+  }
+
+  document.querySelectorAll('.panel').forEach(initPanel);
+
+  // Tab bar (combined report only): toggle which .panel is visible.
+  const tabs = document.querySelector('.tabs');
+  if (tabs) {
+    tabs.addEventListener('click', (e) => {
+      const btn = e.target.closest('button[data-target]');
+      if (!btn) return;
+      for (const b of tabs.querySelectorAll('button')) b.classList.toggle('active', b === btn);
+      for (const p of document.querySelectorAll('.panel'))
+        p.hidden = p.dataset.name !== btn.dataset.target;
+    });
+  }
+</script>

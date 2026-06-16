@@ -8,7 +8,13 @@ import pytest
 
 from scalper.commands import CommandError
 from scalper.commands.collect import NoSourcesError, run_collect
-from scalper.commands.report import ProfileNotFoundError, StoreNotFoundError, run_report
+from scalper.commands.report import (
+    NoProfilesError,
+    ProfileNotFoundError,
+    StoreNotFoundError,
+    run_report,
+    run_report_all,
+)
 from scalper.commands.sources import run_sources
 from scalper.config import Config, Profile, SourceConfig, Weights
 from scalper.models import JobPosting, SearchQuery
@@ -116,6 +122,45 @@ def test_command_errors_share_a_base():
     assert issubclass(NoSourcesError, CommandError)
     assert issubclass(ProfileNotFoundError, CommandError)
     assert issubclass(StoreNotFoundError, CommandError)
+    assert issubclass(NoProfilesError, CommandError)
+
+
+# --- run_report_all (combined report) --------------------------------------
+
+def _config_multi(tmp_path):
+    cfg = _config(tmp_path)
+    # A second profile that filters the seeded (Python) posting out entirely,
+    # so it lands at 0 matched.
+    cfg.profiles["niche"] = Profile(titles=["rust"], required_skills=["rust"],
+                                    exclude_keywords=["python"])
+    return cfg
+
+
+def test_run_report_all_renders_tabs(tmp_path):
+    cfg = _config_multi(tmp_path)
+    _seed(cfg.database)
+    result = run_report_all(cfg, list(cfg.profiles), semantic=False)
+    assert result.total_considered == 1
+    assert len(result.profiles) == 2
+    by_name = {p.profile_name: p for p in result.profiles}
+    assert by_name["backend"].matched == 1
+    assert by_name["niche"].matched == 0  # excluded by its own hard filter
+    assert 'data-target="backend"' in result.html
+    assert 'data-target="niche"' in result.html
+    assert result.html.count('class="panel"') == 2
+
+
+def test_run_report_all_no_profiles_raises(tmp_path):
+    cfg = _config(tmp_path)
+    cfg.profiles.clear()
+    _seed(cfg.database)
+    with pytest.raises(NoProfilesError):
+        run_report_all(cfg, list(cfg.profiles), semantic=False)
+
+
+def test_run_report_all_no_store_raises(tmp_path):
+    with pytest.raises(StoreNotFoundError):
+        run_report_all(_config_multi(tmp_path), ["backend", "niche"], semantic=False)
 
 
 # --- run_sources -----------------------------------------------------------

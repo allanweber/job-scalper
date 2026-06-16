@@ -10,9 +10,12 @@ scalper collect                                     # all sources (unchanged)
 
 scalper report --profile backend                    # first run downloads the model, then caches embeddings
 scalper report --profile backend --open             # score + open HTML report (instant)
+scalper report --all-profiles --open                # one combined report, a tab per profile
 
 scalper report --profile backend --enrich           # enrich the top N (config llm.top_n)
 scalper report --profile backend --enrich --top 5   # or cap it per run
+scalper report --profile backend --enrich --top 5   # or cap it per run
+scalper report --all-profiles --enrich --top 5
 
 scalper report --profile backend --since 14         # only postings from the last 14 days
 scalper report --profile backend --since 2026-06-01 # …or on/after a date
@@ -179,6 +182,10 @@ All of these are **report-time** and operate on the existing store — no re-col
   company+title+location key stored at collect time (ADR 0002).
 - `exclude_non_latin: true` (per profile, **on by default**) — drop predominantly
   CJK (Chinese/Japanese/Korean) listings; set `false` to keep them.
+- `--all-profiles` — score every profile in one run into a single combined HTML report
+  (one tab per profile, each independently sortable/filterable). Mutually exclusive with
+  `--profile`. `--since` applies to the whole run; each profile still applies its own hard
+  filters (including its own freshness window). Empty profiles keep a "0 matched" tab.
 
 Salary is parsed into a structured range even from sources that report it as free text
 (e.g. Remotive's `"$90k – $120k"`), and a timezone hint is inferred from the location

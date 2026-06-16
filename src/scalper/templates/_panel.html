@@ -1,0 +1,95 @@
+{# One profile's controls + results table. Expects a `panel` dict:
+   profile_name, profile, rows, total. JS binds to elements within `.panel`. #}
+{% if panel.show_head %}
+<div class="panel-head">
+  <span class="meta">{{ panel.total }} matched ·
+    {% if panel.profile.remote_only %}remote only · {% endif %}
+    {% if panel.profile.freshness_days %}last {{ panel.profile.freshness_days }} days{% endif %}</span>
+</div>
+{% endif %}
+
+{% if panel.rows %}
+<div class="controls">
+  <input type="search" class="q" placeholder="Filter by title, company, skill…" autocomplete="off">
+  <label>Min match <output class="minOut">0</output>%
+    <input type="range" class="min" min="0" max="100" value="0" step="5">
+  </label>
+  <span class="meta shown"></span>
+</div>
+
+<table class="tbl">
+  <thead>
+    <tr>
+      <th data-sort="num" data-col="pct">Match</th>
+      <th data-sort="str" data-col="title">Title</th>
+      <th data-sort="str" data-col="company">Company</th>
+      <th data-sort="str" data-col="loc">Location</th>
+      <th data-sort="str" data-col="salary">Salary</th>
+      <th data-sort="str" data-col="src">Source</th>
+      <th data-sort="num" data-col="pub">Published</th>
+    </tr>
+  </thead>
+  <tbody>
+  {% for r in panel.rows %}
+    {% set cls = 'good' if r.percent >= 70 else ('mid' if r.percent >= 40 else 'low') %}
+    <tr class="job" data-pct="{{ r.percent }}" data-pub="{{ r.published }}"
+        data-search="{{ (r.title ~ ' ' ~ r.company ~ ' ' ~ (r.matched_skills | join(' ')) ~ ' ' ~ r.source ~ ' ' ~ (r.also_seen_on | join(' '))) | lower }}">
+      <td class="pct {{ cls }}">{{ r.percent }}%</td>
+      <td><div class="title">{{ r.title }}</div></td>
+      <td>{{ r.company }}</td>
+      <td>{{ r.location }}{% if r.timezone %}<div class="sub">{{ r.timezone }}</div>{% endif %}</td>
+      <td>{{ r.salary or '—' }}</td>
+      <td class="sub">{{ r.source }}{% if r.hard %} <span class="tag hard" title="Scraped source — anonymous, best-effort, may be incomplete">hard</span>{% endif %}{% if r.also_seen_on %}<div class="sub" title="Same job also found on these sources">also: {{ r.also_seen_on | join(', ') }}</div>{% endif %}</td>
+      <td class="sub">{{ r.published or '—' }}</td>
+    </tr>
+    <tr class="detail">
+      <td colspan="7">
+        <div class="detail-grid">
+          <div>
+            <h4>Score breakdown</h4>
+            <div class="bars">
+              {% for k, v in r.breakdown.items() %}
+                <div>{{ k.replace('_', ' ') }}</div>
+                <div class="bar"><span style="width: {{ v }}%"></span></div>
+                <div>{{ v }}%</div>
+              {% endfor %}
+            </div>
+            <h4 style="margin-top:14px">Skills</h4>
+            {% for s in r.matched_skills %}<span class="tag good">{{ s }}</span>{% endfor %}
+            {% for s in r.missing_skills %}<span class="tag bad">{{ s }}</span>{% endfor %}
+            {% if r.matched_nice_to_have %}
+              <div class="sub" style="margin-top:8px">Nice-to-have:
+                {% for s in r.matched_nice_to_have %}<span class="tag good">{{ s }}</span>{% endfor %}</div>
+            {% endif %}
+          </div>
+          <div>
+            {% if r.enrichment %}
+              <h4>AI summary{% if r.enrichment.low_confidence %}
+                <span class="tag bad">low confidence</span>{% endif %}</h4>
+              <p class="excerpt">{{ r.enrichment.summary }}</p>
+              {% if r.enrichment.matches %}
+                <div class="sub" style="margin-top:8px">Matches:
+                  {% for m in r.enrichment.matches %}<span class="tag good">{{ m }}</span>{% endfor %}</div>
+              {% endif %}
+              {% if r.enrichment.gaps %}
+                <div class="sub" style="margin-top:8px">Gaps:
+                  {% for g in r.enrichment.gaps %}<span class="tag bad">{{ g }}</span>{% endfor %}</div>
+              {% endif %}
+              <h4 style="margin-top:14px">Excerpt</h4>
+              <p class="excerpt">{{ r.excerpt }}</p>
+            {% else %}
+              <h4>Summary</h4>
+              <p class="excerpt">{{ r.excerpt }}</p>
+            {% endif %}
+            <p><a href="{{ r.url }}" target="_blank" rel="noopener">Open posting ↗</a></p>
+          </div>
+        </div>
+      </td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<div class="empty">No postings matched this profile. Try widening the criteria or running
+  <code>scalper collect</code> to gather more data.</div>
+{% endif %}

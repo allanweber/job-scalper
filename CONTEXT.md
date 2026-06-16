@@ -76,8 +76,17 @@ patterns, required and nice-to-have skills, keywords, exclusions, location (prim
 remote) and timezone, salary floor, Freshness Window, and scoring weights.
 
 ### Profile
-A named, reusable set of Search Criteria in `config.yaml`. The CLI selects one per
-report run (`--profile`). Multiple Profiles coexist for distinct job searches.
+A named, reusable set of Search Criteria in `config.yaml`. A report run targets either
+one Profile (`--profile`) or every Profile at once (`--all-profiles`); the two are
+mutually exclusive. Multiple Profiles coexist for distinct job searches.
+
+### Combined Report
+A single self-contained HTML Report covering several Profiles at once (`--all-profiles`),
+one tab per Profile. Each Profile is scored independently against the same stored postings
+through its own lens — its own hard filters (including its own Freshness Window) and
+weights — so the same Job Posting may appear under more than one Profile, each with that
+Profile's Match Score. Every configured Profile keeps a tab even when it matches nothing,
+distinguishing "searched, found none" from "not searched".
 
 ### Freshness Window
 A user-set upper bound on how recently a Job Posting was published (e.g. "today",
@@ -128,7 +137,9 @@ stored postings against a Profile → render HTML. See ADR 0002 / ADR 0005.
 - LLM: swappable `LLMProvider` interface, Anthropic Haiku as default.
 - Dedup: none for now (tag source); store a normalized company+title+location key so
   dedup can later be a reporting-only change.
-- Report: single self-contained HTML file with client-side sort/filter.
+- Report: single self-contained HTML file with client-side sort/filter. `--all-profiles`
+  produces one combined file with a tab per Profile (Combined Report); profiles are scored
+  independently and empty profiles keep a "0 matched" tab.
 - Posting Status (interested/applied/dismissed) is user-asserted, keyed per posting (`uid`),
   and set via the CLI `status` verb — the static report never writes back (ADR 0006). A
   derived per-profile New/Unseen badge tracks what's appeared since the user last reported.

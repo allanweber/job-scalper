@@ -20,7 +20,7 @@ global `search:` block (`SearchQuery`) and the adapter contract is `fetch(query)
 - ✅ Stage 1 deterministic scoring + hard filters (ADR 0003)
 - ✅ Self-contained HTML report (client-side sort/filter)
 - ✅ `backend` + `java` profiles; java tech tokens in the global search
-- ✅ Tests (108 passing); verified live (470 postings across the active sources, cross-company)
+- ✅ Tests (112 passing); verified live (470 postings across the active sources, cross-company)
 
 - ✅ **Phase 1: semantic similarity** — local `sentence-transformers` scorer behind the
   `[semantic]` extra, SQLite embedding cache, `--no-semantic` flag; fails soft to the
@@ -47,6 +47,11 @@ global `search:` block (`SearchQuery`) and the adapter contract is `fetch(query)
   (`run_collect` / `run_report` / `run_sources`, each returning a typed result), with a purity
   contract (no argparse/print/exit/browser; `CommandError` subclasses + injected callbacks).
   `cli.py` is now a dispatch shell. No behavior change; front-end-ready for a future web/app layer.
+
+- ✅ **Phase 8: all-profiles combined report** — `report --all-profiles` scores every profile
+  in one run and renders one tabbed HTML file (a tab per profile, each with its own
+  sort/filter; empty profiles keep a "0 matched" tab). Shared store/semantic-model/enricher;
+  `run_report_all` reuses `run_report`'s scoring internals.
 
 **Designed, not yet built:** the `add-source` self-building command (ADR 0004) — its
 `build_model` per-task slot and the swappable `LLMProvider` registry it reuses already exist.
@@ -210,6 +215,33 @@ later back a web/desktop/mobile front end. No behavior change; tests stay green 
       and messages, and a live `report` run, are unchanged); each command function is importable
       and runnable with no argparse/print/exit in its call path; existing 100 tests pass and 8 new
       `tests/test_commands.py` cases call the command functions directly without the CLI (108 total).
+
+---
+
+## Phase 8 — All-profiles combined report ✅
+
+Goal: report against *every* profile in one run, rendering one combined, tabbed HTML file
+(one tab per profile) instead of invoking `report` once per profile. Pure reporting feature;
+no new collection. See the Combined Report term in `CONTEXT.md`.
+
+- [x] `report --all-profiles` flag, **mutually exclusive** with `-p/--profile` (argparse
+      `add_mutually_exclusive_group(required=True)` — exactly one is required).
+- [x] One combined self-contained HTML at `--out`: a tab bar (one tab per profile, with its
+      match count), each tab a full results table with its own client-side sort/filter. First
+      tab active; every configured profile keeps a tab even at 0 matches (empty-state panel).
+- [x] Templates refactored into shared partials (`_styles.html`, `_panel.html` panel-scoped
+      JS via `_script.html`); `report.html` is a single-panel wrapper, `report_combined.html`
+      adds the tab bar. Single-profile output unchanged.
+- [x] Command layer: `run_report_all(config, profile_names, …) -> MultiReportResult` sharing
+      `_prepare`/`_score_one` with `run_report` — store opened once, semantic model loaded
+      once, one enricher shared so its usage/cost tally aggregates across profiles. New
+      `NoProfilesError`; `render_combined_report` + `ReportPanel` in `report.py`.
+- [x] `--since` applied once (run-level) to the shared posting list; each profile still
+      self-filters via its own `passes_filters` (incl. its own freshness window).
+- **Acceptance:** ✅ `report --all-profiles` emits one tabbed file with correct per-profile
+      counts; `-p`/`--all-profiles` mutually exclusive (and one required); single-profile path
+      unchanged; 112 tests pass (4 new covering `run_report_all`, `NoProfilesError`, and the
+      combined-template render incl. a 0-match tab).
 
 ---
 

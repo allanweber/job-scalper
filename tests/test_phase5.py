@@ -8,7 +8,7 @@ import pytest
 from scalper.cli import _parse_since
 from scalper.config import Profile, Weights
 from scalper.models import JobPosting
-from scalper.report import render_report
+from scalper.report import ReportPanel, render_combined_report, render_report
 from scalper.scoring import ScoreBreakdown, ScoredPosting
 from scalper.store import JobStore
 
@@ -85,3 +85,16 @@ def test_report_timezone_fallback_from_location():
     s = _scored(_posting(location="Remote (UTC+2)", timezone=None))
     html = render_report("backend", _profile(), [s])
     assert "UTC+2" in html
+
+
+def test_combined_report_has_tab_per_profile():
+    s = _scored(_posting())
+    html = render_combined_report([
+        ReportPanel("backend", _profile(), [s], {}),
+        ReportPanel("empty", _profile(), [], {}),
+    ])
+    # one tab + one panel per profile, including the zero-match one
+    assert 'data-target="backend"' in html
+    assert 'data-target="empty"' in html
+    assert html.count('class="panel"') == 2
+    assert "No postings matched this profile" in html

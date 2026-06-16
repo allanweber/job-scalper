@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -59,6 +60,35 @@ def _row(scored: ScoredPosting, enrichment: Enrichment | None = None) -> dict:
     }
 
 
+@dataclass
+class ReportPanel:
+    """One profile's slice of a Combined Report (one tab in the rendered HTML)."""
+
+    profile_name: str
+    profile: Profile
+    scored: list[ScoredPosting]
+    enrichments: dict[str, Enrichment] = field(default_factory=dict)
+
+
+def _rows_for(scored: list[ScoredPosting], enrichments: dict[str, Enrichment]) -> list[dict]:
+    return [_row(s, enrichments.get(s.posting.uid)) for s in scored]
+
+
+def _panel_context(panel: ReportPanel, *, show_head: bool) -> dict:
+    rows = _rows_for(panel.scored, panel.enrichments)
+    return {
+        "profile_name": panel.profile_name,
+        "profile": panel.profile,
+        "rows": rows,
+        "total": len(panel.scored),
+        "show_head": show_head,
+    }
+
+
+def _now_str() -> str:
+    return datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+
+
 def render_report(
     profile_name: str,
     profile: Profile,
@@ -66,16 +96,30 @@ def render_report(
     enrichments: dict[str, Enrichment] | None = None,
 ) -> str:
     enrichments = enrichments or {}
-    rows = [_row(s, enrichments.get(s.posting.uid)) for s in scored]
+    panel = _panel_context(
+        ReportPanel(profile_name, profile, scored, enrichments), show_head=False
+    )
     template = _env.get_template("report.html")
     return template.render(
         profile_name=profile_name,
         profile=profile,
-        rows=rows,
-        total=len(scored),
+        panel=panel,
+        total=panel["total"],
         enriched=bool(enrichments),
-        has_hard=any(r["hard"] for r in rows),
-        generated_at=datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
+        has_hard=any(r["hard"] for r in panel["rows"]),
+        generated_at=_now_str(),
+    )
+
+
+def render_combined_report(panels: list[ReportPanel]) -> str:
+    """Render several profiles into one tabbed, self-contained Combined Report."""
+    contexts = [_panel_context(p, show_head=True) for p in panels]
+    template = _env.get_template("report_combined.html")
+    return template.render(
+        panels=contexts,
+        enriched=any(p.enrichments for p in panels),
+        has_hard=any(r["hard"] for c in contexts for r in c["rows"]),
+        generated_at=_now_str(),
     )
 
 

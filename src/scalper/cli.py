@@ -15,7 +15,7 @@ from datetime import datetime, timedelta, timezone
 from scalper import __version__
 from scalper.commands import CommandError
 from scalper.commands.collect import run_collect
-from scalper.commands.report import run_report
+from scalper.commands.report import run_report, run_report_all
 from scalper.commands.sources import run_sources
 from scalper.config import load_config
 from scalper.report import write_report
@@ -74,15 +74,33 @@ def cmd_report(args: argparse.Namespace) -> int:
     # Stream each LLM request/response to stderr so it's visible but doesn't
     # pollute the report summary on stdout; --quiet-llm silences it.
     enrich_log = None if args.quiet_llm else (lambda msg: print(msg, file=sys.stderr))
+    common = dict(
+        db=args.db, limit=args.limit, since=cutoff, dedup=args.dedup,
+        semantic=not args.no_semantic, model=args.model,
+        enrich=args.enrich, top=args.top, enrich_model=args.enrich_model,
+        on_info=_out, on_warning=_err, on_enrich_log=enrich_log,
+    )
+
+    if args.all_profiles:
+        try:
+            multi = run_report_all(config, list(config.profiles), **common)
+        except CommandError as e:
+            _err(str(e))
+            return 1
+        out = write_report(args.out, multi.html)
+        enriched_note = f", {multi.enriched_count} enriched" if multi.enriched_count else ""
+        print(f"Scored {multi.total_considered} stored posting(s) across "
+              f"{len(multi.profiles)} profile(s){enriched_note}. Report: {out}")
+        width = max((len(p.profile_name) for p in multi.profiles), default=0)
+        for p in multi.profiles:
+            note = f", {p.enriched_count} enriched" if p.enriched_count else ""
+            print(f"  {p.profile_name:<{width}}  {p.matched:>4} matched{note}")
+        if args.open:
+            webbrowser.open(out.resolve().as_uri())
+        return 0
 
     try:
-        result = run_report(
-            config, args.profile,
-            db=args.db, limit=args.limit, since=cutoff, dedup=args.dedup,
-            semantic=not args.no_semantic, model=args.model,
-            enrich=args.enrich, top=args.top, enrich_model=args.enrich_model,
-            on_info=_out, on_warning=_err, on_enrich_log=enrich_log,
-        )
+        result = run_report(config, args.profile, **common)
     except CommandError as e:
         _err(str(e))
         return 1
@@ -134,7 +152,10 @@ def build_parser() -> argparse.ArgumentParser:
     p_collect.set_defaults(func=cmd_collect)
 
     p_report = sub.add_parser("report", help="score stored postings against a profile, emit HTML")
-    p_report.add_argument("-p", "--profile", required=True, help="profile name from config")
+    p_target = p_report.add_mutually_exclusive_group(required=True)
+    p_target.add_argument("-p", "--profile", help="profile name from config")
+    p_target.add_argument("--all-profiles", action="store_true",
+                          help="score every profile into one combined report (a tab per profile)")
     p_report.add_argument("-o", "--out", default="report.html", help="output HTML path")
     p_report.add_argument("--limit", type=int, default=None, help="cap number of results")
     p_report.add_argument("--since", default=None, metavar="DAYS|DATE",

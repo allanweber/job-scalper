@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Job Scalper — all profiles</title>
+{% include "_styles.html" %}
+</head>
+<body>
+<header>
+  <h1>Job Scalper — all profiles</h1>
+  <div class="meta">{{ panels | length }} profile(s) · generated {{ generated_at }}</div>
+</header>
+
+<nav class="tabs">
+  {% for panel in panels %}
+  <button data-target="{{ panel.profile_name }}"{% if loop.first %} class="active"{% endif %}>
+    {{ panel.profile_name }} <span class="count">({{ panel.total }})</span>
+  </button>
+  {% endfor %}
+</nav>
+
+{% for panel in panels %}
+<section class="panel" data-name="{{ panel.profile_name }}"{% if not loop.first %} hidden{% endif %}>
+  {% include "_panel.html" %}
+</section>
+{% endfor %}
+
+<footer>Match % is deterministic (skill coverage + title + keyword + semantic), computed locally.
+  Each tab scores the same stored postings against one profile's criteria.
+  Green skills = found in the posting; red = required but not found.{% if enriched %}
+  AI summaries (top results only) are advisory and do not affect the Match %.{% endif %}{% if has_hard %}
+  Sources tagged <span class="tag hard">hard</span> are scraped anonymously and best-effort —
+  coverage may be partial and listings can lag the site.{% endif %}</footer>
+
+{% include "_script.html" %}
+</body>
+</html>
