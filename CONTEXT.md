@@ -92,6 +92,24 @@ visible breakdown so every score is auditable. See ADR 0003.
 The two-stage scoring pipeline: a cheap, no-LLM Stage 1 scores all postings; a Stage 2
 LLM enriches only the resulting shortlist. See ADR 0003.
 
+### Posting Status
+The user's **asserted** disposition toward a single Job Posting: one of `interested`,
+`applied`, or `dismissed`, or unset (the default). Single-valued — a posting has at most
+one status, and a later assertion replaces an earlier one (e.g. applying replaces
+interested; dismissing is terminal). Attaches to the Posting (one source's row), not to
+the Job across sources; when a report collapses duplicates the strongest status in the
+group is shown. Distinct from a Match Score (which the system computes) — Posting Status
+is set by the user and never affects scoring. Survives re-collection. Set via the CLI
+(`scalper status`), not by the report writing back — see ADR 0006.
+
+### New / Unseen
+A **derived**, per-Profile property of a Job Posting: it first entered the store after the
+last time the user ran a report for that Profile. "New *to the reader*", not "new to the
+store" — it tracks when *you* last looked, per job search, not when the crawler ran. A
+non-destructive badge, not a filter (contrast the Freshness Window, which hard-filters on
+how old the *job* is). Looking at a report normally marks its postings seen for that
+Profile; a peek looks without marking.
+
 ### Collect / Report
 The two decoupled operations. **Collect** is slow and occasional: search all Sources with
 the global Search Query → normalize → store. **Report** is instant and frequent: score the
@@ -111,6 +129,9 @@ stored postings against a Profile → render HTML. See ADR 0002 / ADR 0005.
 - Dedup: none for now (tag source); store a normalized company+title+location key so
   dedup can later be a reporting-only change.
 - Report: single self-contained HTML file with client-side sort/filter.
+- Posting Status (interested/applied/dismissed) is user-asserted, keyed per posting (`uid`),
+  and set via the CLI `status` verb — the static report never writes back (ADR 0006). A
+  derived per-profile New/Unseen badge tracks what's appeared since the user last reported.
 - Scheduling: manual `collect` command, cron-friendly; no daemon.
 - `add-source` builds new Sources from a URL via tiered detection (config / declarative /
   codegen), behind a validate→sample→approve gate; codegen output is reviewed before it

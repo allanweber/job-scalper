@@ -20,7 +20,7 @@ global `search:` block (`SearchQuery`) and the adapter contract is `fetch(query)
 - ✅ Stage 1 deterministic scoring + hard filters (ADR 0003)
 - ✅ Self-contained HTML report (client-side sort/filter)
 - ✅ `backend` + `java` profiles; java tech tokens in the global search
-- ✅ Tests (100 passing); verified live (470 postings across the active sources, cross-company)
+- ✅ Tests (108 passing); verified live (470 postings across the active sources, cross-company)
 
 - ✅ **Phase 1: semantic similarity** — local `sentence-transformers` scorer behind the
   `[semantic]` extra, SQLite embedding cache, `--no-semantic` flag; fails soft to the
@@ -42,6 +42,11 @@ global `search:` block (`SearchQuery`) and the adapter contract is `fetch(query)
   "also seen on"), `report --since <DAYS|DATE>`, free-text salary parsing (Remotive) +
   location→timezone inference (render-time fallback), and a `scalper sources` command listing
   configured sources with tiers + stored counts. All report-time, no re-collection.
+
+- ✅ **Phase 6: thin-CLI refactor** — business logic moved into a `scalper/commands/` package
+  (`run_collect` / `run_report` / `run_sources`, each returning a typed result), with a purity
+  contract (no argparse/print/exit/browser; `CommandError` subclasses + injected callbacks).
+  `cli.py` is now a dispatch shell. No behavior change; front-end-ready for a future web/app layer.
 
 **Designed, not yet built:** the `add-source` self-building command (ADR 0004) — its
 `build_model` per-task slot and the swappable `LLMProvider` registry it reuses already exist.
@@ -175,6 +180,36 @@ All report-time, operating on the existing store (no re-collection); pure helper
       stored sources.
 - [x] Packaging/run docs: cron example (collect + report) and `-s/--source` in README; added a
       `report --since <DAYS|DATE>` filter (day count or ISO date; unknown-date postings kept).
+
+---
+
+## Phase 6 — Thin-CLI refactor (front-end-ready core) ✅
+
+Pure refactor, no new user features. Makes `cli.py` a dispatch shell so the same logic can
+later back a web/desktop/mobile front end. No behavior change; tests stay green throughout.
+
+- [x] Added a `scalper/commands/` package, one module per subcommand:
+      `commands/collect.py`, `commands/report.py`, `commands/sources.py`. Each exposes a
+      single entry function (`run_collect` → `CollectResult`, `run_report` → `ReportResult`,
+      `run_sources` → `SourcesResult`) taking plain typed params and returning a typed result
+      object (`@dataclass`).
+- [x] Moved the bodies of `cmd_collect` / `cmd_report` / `cmd_sources` into those functions.
+      **Purity contract honored:** the command layer has no `argparse`, no `print`/direct stderr,
+      no `sys.exit`, and no browser-opening; it raises `CommandError` subclasses
+      (`NoSourcesError` / `ProfileNotFoundError` / `StoreNotFoundError`) instead of exiting, and
+      `run_report` returns the rendered HTML string (the CLI writes the file / opens the browser).
+- [x] Streaming output goes through **injected callbacks** (`on_info` / `on_warning`, default
+      no-op; enrich's per-request logs via `on_enrich_log`) so the CLI prints it while a future
+      app can stream it differently.
+- [x] `cli.py` shrank to: build parser → map `Namespace` to params → call the command function →
+      render the result to stdout / write the file / launch `--open` → return the exit code. The
+      CLI owns *all* printing, exit codes, and the browser launch.
+- [x] `_parse_since` stays CLI-side (still importable from `scalper.cli`; produces the typed
+      `since` cutoff passed to `run_report`); `_aware` (domain logic) moved into `commands/report.py`.
+- **Acceptance:** ✅ every command behaves identically from the CLI (verified: error-path ordering
+      and messages, and a live `report` run, are unchanged); each command function is importable
+      and runnable with no argparse/print/exit in its call path; existing 100 tests pass and 8 new
+      `tests/test_commands.py` cases call the command functions directly without the CLI (108 total).
 
 ---
 
