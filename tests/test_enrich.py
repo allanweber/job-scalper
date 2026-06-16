@@ -44,10 +44,7 @@ class StubProvider:
 
     def __init__(self, reply=None):
         self.calls = 0
-        self._reply = reply or json.dumps(
-            {"summary": "A backend role.", "matches": ["python"],
-             "gaps": ["kafka"], "low_confidence": False}
-        )
+        self._reply = reply or json.dumps({"remote": True})
 
     def complete(self, prompt, *, model, system=None, max_tokens=1024, temperature=0.2):
         self.calls += 1
@@ -67,33 +64,32 @@ def _enricher(store=None, reply=None):
 # --- parsing ---------------------------------------------------------------
 
 def test_parse_clean_json():
-    enr = _parse('{"summary": "x", "matches": ["a"], "gaps": ["b"], "low_confidence": true}')
-    assert enr.summary == "x" and enr.matches == ["a"] and enr.gaps == ["b"]
-    assert enr.low_confidence is True
+    assert _parse('{"remote": true}').remote is True
 
 
 def test_parse_json_with_surrounding_prose():
-    enr = _parse('Sure! ```json\n{"summary": "ok", "matches": [], "gaps": []}\n``` done')
-    assert enr.summary == "ok"
-    assert enr.low_confidence is False
+    assert _parse('Sure! ```json\n{"remote": false}\n``` done').remote is False
 
 
-def test_parse_unparseable_falls_back_to_low_confidence():
-    enr = _parse("totally not json")
-    assert enr.summary == "totally not json"
-    assert enr.low_confidence is True
+def test_parse_unparseable_falls_back_to_none():
+    assert _parse("totally not json").remote is None
+
+
+def test_parse_non_bool_remote_is_none():
+    # The model must answer with a real boolean; anything else → undeterminable.
+    assert _parse('{"remote": "yes"}').remote is None
+    assert _parse('{"matches": ["a"]}').remote is None
 
 
 # --- prompt ----------------------------------------------------------------
 
-def test_prompt_includes_criteria_and_posting_and_is_trimmed():
+def test_prompt_includes_posting_and_is_trimmed():
     profile = _profile()
     long_desc = "word " * 1000
     scored = score_all(profile, [_posting(description=long_desc)])[0]
     prompt = build_prompt(profile, scored)
-    assert "python" in prompt and "Backend Engineer" in prompt
-    assert f"{scored.percent}%" in prompt
-    assert len(prompt) < 2600  # description trimmed to the cap, not the full 5000 chars
+    assert "Backend Engineer" in prompt  # title carried for context
+    assert len(prompt) < 2200  # description trimmed to the cap, not the full 5000 chars
 
 
 # --- enrichment + cache ----------------------------------------------------
@@ -128,7 +124,7 @@ def test_enrich_round_trips_and_avoids_recompute(tmp_path):
         second = _enricher(store)
         out2 = second.enrich(profile, scored, top_n=5)
         assert second.provider.calls == 0
-        assert out2[posting.uid].summary == out[posting.uid].summary
+        assert out2[posting.uid].remote == out[posting.uid].remote
 
 
 def test_profile_change_invalidates_cache(tmp_path):
@@ -159,7 +155,7 @@ def test_build_returns_none_without_provider(monkeypatch):
 
 
 def test_enrichment_model_json_round_trip():
-    enr = Enrichment(summary="s", matches=["a"], gaps=["b"], low_confidence=True)
+    enr = Enrichment(remote=False)
     assert Enrichment.model_validate_json(enr.model_dump_json()) == enr
 
 
@@ -221,4 +217,4 @@ def test_logger_receives_request_and_response():
     blob = "\n".join(logs)
     assert "REQUEST (model=stub-model)" in blob
     assert "RESPONSE (in=100 out=20 tok)" in blob
-    assert "A backend role." in blob  # the stub's response body was logged
+    assert '"remote": true' in blob  # the stub's response body was logged

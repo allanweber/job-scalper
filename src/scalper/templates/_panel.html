@@ -55,8 +55,10 @@
               {% endfor %}
             </div>
             <h4 style="margin-top:14px">Skills</h4>
-            {% for s in r.matched_skills %}<span class="tag good">{{ s }}</span>{% endfor %}
-            {% for s in r.missing_skills %}<span class="tag bad">{{ s }}</span>{% endfor %}
+            <div class="sub">Matched:
+              {% for s in r.matched_skills %}<span class="tag good">{{ s }}</span>{% else %}none{% endfor %}</div>
+            <div class="sub" style="margin-top:8px">Missing:
+              {% for s in r.missing_skills %}<span class="tag bad">{{ s }}</span>{% else %}none{% endfor %}</div>
             {% if r.matched_nice_to_have %}
               <div class="sub" style="margin-top:8px">Nice-to-have:
                 {% for s in r.matched_nice_to_have %}<span class="tag good">{{ s }}</span>{% endfor %}</div>
@@ -64,17 +66,10 @@
           </div>
           <div>
             {% if r.enrichment %}
-              <h4>AI summary{% if r.enrichment.low_confidence %}
-                <span class="tag bad">low confidence</span>{% endif %}</h4>
-              <p class="excerpt">{{ r.enrichment.summary }}</p>
-              {% if r.enrichment.matches %}
-                <div class="sub" style="margin-top:8px">Matches:
-                  {% for m in r.enrichment.matches %}<span class="tag good">{{ m }}</span>{% endfor %}</div>
-              {% endif %}
-              {% if r.enrichment.gaps %}
-                <div class="sub" style="margin-top:8px">Gaps:
-                  {% for g in r.enrichment.gaps %}<span class="tag bad">{{ g }}</span>{% endfor %}</div>
-              {% endif %}
+              <h4>AI remote check
+                {% if r.enrichment.remote is none %}<span class="tag" title="Could not determine from the posting">remote: ?</span>
+                {% elif r.enrichment.remote %}<span class="tag good" title="Posting allows fully remote work">remote ✓</span>
+                {% else %}<span class="tag bad" title="Posting does not allow fully remote work">not remote</span>{% endif %}</h4>
               <h4 style="margin-top:14px">Excerpt</h4>
               <p class="excerpt">{{ r.excerpt }}</p>
             {% else %}

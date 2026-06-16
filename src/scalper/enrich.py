@@ -1,9 +1,10 @@
-"""Stage 2 LLM enrichment: summary + skill-gap on the shortlist only (ADR 0003).
+"""Stage 2 LLM enrichment: a remote-work check on the shortlist only (ADR 0003).
 
-Stage 1 scores *every* posting deterministically. Stage 2 spends an LLM call only
-on the top-N already-scored postings to add a readable summary and a have/missing
-skill narrative — it never sets the headline Match %. Cost is therefore bounded by
-`top_n`, not by collection volume.
+Stage 1 scores *every* posting deterministically — including the skill match/gap
+reconciliation, which is a plain text comparison and needs no LLM. Stage 2 spends an
+LLM call only on the top-N already-scored postings to answer one thing the text match
+can't reliably read: does the role allow fully remote work? It never sets the headline
+Match %. Cost is therefore bounded by `top_n`, not by collection volume.
 
 Results are cached in the store keyed by posting `uid` + a hash of the profile
 criteria + the model, so re-reports are free until the profile, model, or posting
@@ -19,12 +20,11 @@ import json
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Callable
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 from scalper.config import LLMConfig, Profile
 from scalper.llm import build_provider
 from scalper.scoring import ScoredPosting
-from scalper.semantic import criteria_text
 
 if TYPE_CHECKING:
     from scalper.llm.base import Completion, LLMProvider
@@ -54,24 +54,22 @@ def _lookup_price(model: str) -> tuple[float, float] | None:
 _DESC_LIMIT = 2000
 
 _SYSTEM = (
-    "You are a concise technical recruiter assistant. Given a candidate's job-search "
-    "criteria and a single job posting, reply with STRICT JSON only — no prose, no code "
-    "fences — using exactly these keys: "
-    '{"summary": string (1-2 sentences on what the role is and its standout points), '
-    '"matches": array of short strings (criteria this role clearly satisfies), '
-    '"gaps": array of short strings (criteria the posting does not mention or conflicts with), '
-    '"low_confidence": boolean (true if the posting is too vague to judge)}. '
-    "Keep arrays to at most 5 items. Do not invent requirements not present in the posting."
+    "You are a concise hiring assistant. Read the single job posting and decide whether "
+    "the role allows fully remote work. Reply with STRICT JSON only — no prose, no code "
+    'fences — using exactly this key: {"remote": boolean (true only if the posting allows '
+    'fully remote work, false otherwise)}.'
 )
 
 
 class Enrichment(BaseModel):
-    """LLM-generated narrative for one posting (distinct from the deterministic score)."""
+    """LLM remote-work read for one posting.
 
-    summary: str = ""
-    matches: list[str] = Field(default_factory=list)
-    gaps: list[str] = Field(default_factory=list)
-    low_confidence: bool = False
+    Skill match/gap reconciliation is deterministic (Stage 1) and lives on the score,
+    not here. This carries only the model's yes/no read on whether the role is fully
+    remote (``None`` when the posting doesn't make it determinable).
+    """
+
+    remote: bool | None = None
 
 
 def profile_hash(profile: Profile) -> str:
@@ -98,11 +96,9 @@ def build_prompt(profile: Profile, scored: ScoredPosting) -> str:
     if len(desc) > _DESC_LIMIT:
         desc = desc[:_DESC_LIMIT].rsplit(" ", 1)[0] + " …"
     return (
-        f"Candidate criteria: {criteria_text(profile) or '(none specified)'}\n"
-        f"Required skills: {', '.join(profile.required_skills) or '(none)'}\n\n"
         f"Job title: {p.title}\n"
         f"Company: {p.company}\n"
-        f"Deterministic match score: {scored.percent}%\n"
+        f"Location: {p.location or '(not specified)'}\n"
         f"Posting:\n{desc}"
     )
 
@@ -113,17 +109,12 @@ def _parse(text: str) -> Enrichment:
     start, end = text.find("{"), text.rfind("}")
     if start != -1 and end != -1 and end > start:
         try:
-            data = json.loads(text[start : end + 1])
-            return Enrichment(
-                summary=str(data.get("summary", "")).strip(),
-                matches=[str(x) for x in data.get("matches", []) if str(x).strip()],
-                gaps=[str(x) for x in data.get("gaps", []) if str(x).strip()],
-                low_confidence=bool(data.get("low_confidence", False)),
-            )
+            remote = json.loads(text[start : end + 1]).get("remote")
+            return Enrichment(remote=remote if isinstance(remote, bool) else None)
         except (json.JSONDecodeError, ValueError, TypeError):
             pass
-    # Unparseable: keep the raw text as a summary and flag low confidence.
-    return Enrichment(summary=text[:500], low_confidence=True)
+    # Unparseable: remote undeterminable.
+    return Enrichment()
 
 
 @dataclass
