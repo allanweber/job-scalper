@@ -101,23 +101,34 @@ visible breakdown so every score is auditable. See ADR 0003.
 The two-stage scoring pipeline: a cheap, no-LLM Stage 1 scores all postings; a Stage 2
 LLM enriches only the resulting shortlist. See ADR 0003.
 
-### Posting Status
-The user's **asserted** disposition toward a single Job Posting: one of `interested`,
-`applied`, or `dismissed`, or unset (the default). Single-valued — a posting has at most
-one status, and a later assertion replaces an earlier one (e.g. applying replaces
-interested; dismissing is terminal). Attaches to the Posting (one source's row), not to
-the Job across sources; when a report collapses duplicates the strongest status in the
-group is shown. Distinct from a Match Score (which the system computes) — Posting Status
-is set by the user and never affects scoring. Survives re-collection. Set via the CLI
-(`scalper status`), not by the report writing back — see ADR 0006.
+### Fresh Catch
+A **store-relative, per-collect-run** property of a Job Posting: it was first seen
+(entered the store) *during this run's collect*. It tracks what *this scrape* turned up
+that the store didn't already hold — regardless of whether the user has looked, and
+regardless of how old the underlying job is (contrast the Freshness Window, which
+hard-filters on the job's publish age). The unit a Digest reports on.
 
-### New / Unseen
-A **derived**, per-Profile property of a Job Posting: it first entered the store after the
-last time the user ran a report for that Profile. "New *to the reader*", not "new to the
-store" — it tracks when *you* last looked, per job search, not when the crawler ran. A
-non-destructive badge, not a filter (contrast the Freshness Window, which hard-filters on
-how old the *job* is). Looking at a report normally marks its postings seen for that
-Profile; a peek looks without marking.
+### Digest
+A single combined operation that scrapes first, then reports only the Fresh Catch:
+capture a run start, run the same Collect path, then render the postings first seen
+during that run. Answers "what new postings did this run surface, and how do they score
+against my Profiles" in one step. Distinct from Report, which never collects.
+
+### Resume
+The user's own CV, supplied once as a file referenced from config (plain-text/markdown
+canonical; PDF optional). A single shared input the tool reads to draft Profiles and
+Application Drafts. Not a Job Posting and not stored in the postings database.
+
+### Application Draft
+LLM-generated application material tailored to one Job Posting for one Profile: a cover
+letter plus suggested resume bullet edits, grounded in the posting text, the user's
+Resume, and the Profile's matched/missing skills from Stage 1. Output for the user to
+edit — never sent anywhere by the tool.
+
+### Market Insights
+A read-only aggregate description of the *stored market* (not a fit to any Profile): how
+sought-after the user's skills are across postings, salary distribution, postings per
+Source, and recent collection volume. Describes supply, not a Match Score.
 
 ### Collect / Report
 The two decoupled operations. **Collect** is slow and occasional: search all Sources with
@@ -143,6 +154,14 @@ stored postings against a Profile → render HTML. See ADR 0002 / ADR 0004.
 - Posting Status (interested/applied/dismissed) is user-asserted, keyed per posting (`uid`),
   and set via the CLI `status` verb — the static report never writes back (ADR 0006). A
   derived per-profile New/Unseen badge tracks what's appeared since the user last reported.
+- Digest scrapes first, then reports only the Fresh Catch (postings first seen during
+  that run, via the preserved first-seen `collected_at`). Its "new" is store-relative and
+  per-run — deliberately distinct from the reader-relative, per-Profile New/Unseen badge.
+- Resume is a single configured file shared by two LLM features: drafting a Profile from
+  it, and drafting Application Drafts (cover letter + resume bullets) per posting. Both are
+  `[llm]`-gated and fail-soft; profile drafting prints YAML to review (opt-in `--write`).
+- Market Insights is a read-only, no-LLM aggregate over the store (skill demand, salary,
+  source/volume) — it describes supply, never scores a fit.
 - Scheduling: manual `collect` command, cron-friendly; no daemon.
 - `add-source` builds new Sources from a URL via tiered detection (config / declarative /
   codegen), behind a validate→sample→approve gate; codegen output is reviewed before it
