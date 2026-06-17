@@ -60,7 +60,7 @@
           av = parseFloat(a.dataset[col === 'pct' ? 'pct' : 'pub']) || 0;
           bv = parseFloat(b.dataset[col === 'pct' ? 'pct' : 'pub']) || 0;
         } else {
-          const idx = { title: 2, company: 3, loc: 4, salary: 5, src: 6 }[col];
+          const idx = { title: 2, company: 3, loc: 4, salary: 6, src: 7 }[col];
           av = a.cells[idx].innerText.toLowerCase();
           bv = b.cells[idx].innerText.toLowerCase();
         }
@@ -79,6 +79,27 @@
       const detail = job.nextElementSibling;
       if (detail && detail.classList.contains('detail')) detail.classList.toggle('open');
     });
+
+    // Shift+click range selection for row checkboxes.
+    let lastPickIdx = -1;
+    tbl.tBodies[0].addEventListener('click', (e) => {
+      const cb = e.target.closest('input.pick');
+      if (!cb) return;
+      const visible = pairs().filter(([job]) => job.style.display !== 'none');
+      const curIdx = visible.findIndex(([job]) => job.querySelector('input.pick') === cb);
+      if (curIdx === -1) return;
+      if (e.shiftKey && lastPickIdx !== -1 && lastPickIdx !== curIdx) {
+        const lo = Math.min(lastPickIdx, curIdx);
+        const hi = Math.max(lastPickIdx, curIdx);
+        for (let i = lo; i <= hi; i++) {
+          const pick = visible[i][0].querySelector('input.pick');
+          if (pick) pick.checked = cb.checked;
+        }
+        updateDraftBar();
+      }
+      lastPickIdx = curIdx;
+    });
+
     const pickAll = root.querySelector('.pickall');
     if (pickAll) {
       pickAll.addEventListener('change', () => {

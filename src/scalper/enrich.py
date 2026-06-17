@@ -1,16 +1,13 @@
-"""Stage 2 LLM enrichment: a remote-work check on the shortlist only (ADR 0003).
+"""Stage 2 LLM enrichment: structured insight on the shortlist only (ADR 0003).
 
-Stage 1 scores *every* posting deterministically — including the skill match/gap
-reconciliation, which is a plain text comparison and needs no LLM. Stage 2 spends an
-LLM call only on the top-N already-scored postings to answer one thing the text match
-can't reliably read: does the role allow fully remote work? It never sets the headline
-Match %. Cost is therefore bounded by `top_n`, not by collection volume.
+Stage 1 scores *every* posting deterministically. Stage 2 spends an LLM call only on
+the top-N already-scored postings to extract four things the text match can't reliably
+read: remote status, seniority level, salary range, and timezone constraints.
 
-Results are cached in the store keyed by posting `uid` + a hash of the profile
-criteria + the model, so re-reports are free until the profile, model, or posting
-shortlist changes. The whole layer is optional and fail-soft: with no provider
-(the `[llm]` extra absent or no API key) `build_enricher` returns ``None`` and the
-report renders Stage 1 only.
+Results are cached in the store keyed by posting `uid` + a hash of the profile criteria
++ the model + schema version, so re-reports are free until something changes. The whole
+layer is optional and fail-soft: with no provider `build_enricher` returns ``None`` and
+the report renders Stage 1 only.
 """
 
 from __future__ import annotations
@@ -20,7 +17,7 @@ import json
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Callable
 
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 from scalper.config import LLMConfig, Profile
 from scalper.llm import build_provider
@@ -53,23 +50,44 @@ def _lookup_price(model: str) -> tuple[float, float] | None:
 #: Trim posting descriptions before prompting, to bound token cost.
 _DESC_LIMIT = 2000
 
-_SYSTEM = (
-    "You are a concise hiring assistant. Read the single job posting and decide whether "
-    "the role allows fully remote work. Reply with STRICT JSON only — no prose, no code "
-    'fences — using exactly this key: {"remote": boolean (true only if the posting allows '
-    'fully remote work, false otherwise)}.'
-)
+#: Increment when the JSON schema changes so old cache entries are naturally invalidated.
+_SCHEMA_VERSION = 2
+
+_SYSTEM = """\
+You are a concise hiring assistant. Read the single job posting and extract the \
+following fields. Reply with STRICT JSON only — no prose, no code fences:
+{
+  "remote": true | false | null,
+  "seniority": "junior" | "mid" | "senior" | "staff" | "principal" | null,
+  "salary_range": {"min": integer | null, "max": integer | null, "currency": string | null} | null,
+  "timezone_requirement": string | null
+}
+Rules:
+- remote: true only if the role explicitly allows fully remote work; null if unclear
+- seniority: infer from title + description; null if not determinable
+- salary_range: extract numbers from text (e.g. "$120k–150k" → min:120000, max:150000, currency:"USD"); null if not mentioned
+- timezone_requirement: quote any timezone constraint or "async-friendly" language; null if none mentioned\
+"""
+
+
+class SalaryRange(BaseModel):
+    min: int | None = None
+    max: int | None = None
+    currency: str | None = None
 
 
 class Enrichment(BaseModel):
-    """LLM remote-work read for one posting.
-
-    Skill match/gap reconciliation is deterministic (Stage 1) and lives on the score,
-    not here. This carries only the model's yes/no read on whether the role is fully
-    remote (``None`` when the posting doesn't make it determinable).
-    """
+    """LLM-extracted insight for one posting (Stage 2)."""
 
     remote: bool | None = None
+    seniority: str | None = None
+    salary_range: SalaryRange | None = None
+    timezone_requirement: str | None = None
+
+    @field_validator("remote", mode="before")
+    @classmethod
+    def _strict_bool(cls, v: object) -> bool | None:
+        return v if isinstance(v, bool) or v is None else None
 
 
 def profile_hash(profile: Profile) -> str:
@@ -109,11 +127,9 @@ def _parse(text: str) -> Enrichment:
     start, end = text.find("{"), text.rfind("}")
     if start != -1 and end != -1 and end > start:
         try:
-            remote = json.loads(text[start : end + 1]).get("remote")
-            return Enrichment(remote=remote if isinstance(remote, bool) else None)
-        except (json.JSONDecodeError, ValueError, TypeError):
+            return Enrichment.model_validate(json.loads(text[start : end + 1]))
+        except Exception:
             pass
-    # Unparseable: remote undeterminable.
     return Enrichment()
 
 
@@ -184,6 +200,7 @@ class Enricher:
         self.model = model
         self._store = store
         self._log = logger or (lambda _msg: None)
+        self._cache_model = f"{model}/v{_SCHEMA_VERSION}"
         self.usage = Usage(model=model)
 
     def enrich(
@@ -199,10 +216,10 @@ class Enricher:
         out: dict[str, Enrichment] = {}
 
         if self._store is not None:
-            for uid, data in self._store.get_enrichments(uids, ph, self.model).items():
+            for uid, data in self._store.get_enrichments(uids, ph, self._cache_model).items():
                 try:
                     out[uid] = Enrichment.model_validate_json(data)
-                except ValueError:
+                except Exception:
                     pass  # corrupt cache entry → recompute below
 
         fresh: list[tuple[str, str]] = []
@@ -219,7 +236,7 @@ class Enricher:
             fresh.append((uid, enr.model_dump_json()))
 
         if self._store is not None and fresh:
-            self._store.put_enrichments(ph, self.model, fresh)
+            self._store.put_enrichments(ph, self._cache_model, fresh)
         return out
 
     def _call(

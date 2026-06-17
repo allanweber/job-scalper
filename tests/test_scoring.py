@@ -98,7 +98,7 @@ def test_exclude_non_latin_can_be_disabled():
 
 def test_freshness_window_drops_old_postings():
     old = datetime.now(timezone.utc) - timedelta(days=60)
-    kept, reason = passes_filters(_profile(freshness_days=30), _posting(published_at=old))
+    kept, reason = passes_filters(_profile(), _posting(published_at=old), freshness_days=30)
     assert not kept and reason == "outside freshness window"
 
 

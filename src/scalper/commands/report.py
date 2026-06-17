@@ -139,6 +139,7 @@ def _score_one(
     scorer,
     enricher,
     *,
+    freshness_days: int | None,
     dedup: bool,
     top_n: int,
     limit: int | None,
@@ -149,7 +150,7 @@ def _score_one(
     ``(scored, enrichments, enrich_ran)``; enrichment is applied to the full
     sorted list before the ``limit`` truncation, matching single-profile order.
     """
-    scored = score_all(profile, postings, semantic_scorer=scorer)
+    scored = score_all(profile, postings, semantic_scorer=scorer, freshness_days=freshness_days)
     if dedup:
         before = len(scored)
         scored = dedup_scored(scored)
@@ -219,13 +220,15 @@ def run_report(
         )
         scored, enrichments, enrich_ran = _score_one(
             profile, postings, scorer, enricher,
+            freshness_days=config.freshness_days,
             dedup=dedup, top_n=top_n, limit=limit,
             on_info=on_info, on_warning=on_warning,
         )
         if enrich_ran:
             on_info(format_usage(enricher.usage, config.llm))
 
-    html = render_report(profile_name, profile, scored, enrichments)
+    html = render_report(profile_name, profile, scored, enrichments,
+                         freshness_days=config.freshness_days)
     return ReportResult(
         profile_name=profile_name,
         html=html,
@@ -291,6 +294,7 @@ def run_report_all(
         for name, profile in profiles:
             scored, enrichments, enrich_ran = _score_one(
                 profile, postings, scorer, enricher,
+                freshness_days=config.freshness_days,
                 dedup=dedup, top_n=top_n, limit=limit,
                 on_info=on_info, on_warning=on_warning,
             )
@@ -303,7 +307,7 @@ def run_report_all(
         if any_enrich:
             on_info(format_usage(enricher.usage, config.llm))
 
-    html = render_combined_report(panels)
+    html = render_combined_report(panels, freshness_days=config.freshness_days)
     return MultiReportResult(
         html=html,
         profiles=reports,

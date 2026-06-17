@@ -50,10 +50,11 @@ def _parse_since(value: str) -> datetime:
 
 def cmd_collect(args: argparse.Namespace) -> int:
     config = load_config(args.config)
+    source_log = (lambda msg: print(msg, file=sys.stderr)) if args.verbose_sources else None
     try:
         result = run_collect(
             config, db=args.db, only_sources=args.source,
-            on_info=_out, on_warning=_err,
+            on_info=_out, on_warning=_err, on_source_log=source_log,
         )
     except CommandError as e:
         _err(str(e))
@@ -123,11 +124,12 @@ def cmd_report(args: argparse.Namespace) -> int:
 def cmd_digest(args: argparse.Namespace) -> int:
     config = load_config(args.config)
     profile_names = list(config.profiles) if args.all_profiles else [args.profile]
+    source_log = (lambda msg: print(msg, file=sys.stderr)) if args.verbose_sources else None
     try:
         result = run_digest(
             config, profile_names, db=args.db, only_sources=args.source,
             semantic=not args.no_semantic, model=args.model,
-            on_info=_out, on_warning=_err,
+            on_info=_out, on_warning=_err, on_source_log=source_log,
         )
     except CommandError as e:
         _err(str(e))
@@ -213,6 +215,9 @@ def build_parser() -> argparse.ArgumentParser:
     p_collect.add_argument("-s", "--source", nargs="+", metavar="TYPE",
                            help="collect only these source type(s), e.g. -s indeed linkedin "
                                 "(default: every source in config)")
+    p_collect.add_argument("--verbose-sources", action="store_true",
+                           help="log every HTTP request/response made by source adapters to stderr "
+                                "(overrides verbose_sources in config)")
     p_collect.set_defaults(func=cmd_collect)
 
     p_report = sub.add_parser("report", help="score stored postings against a profile, emit HTML")
@@ -257,6 +262,8 @@ def build_parser() -> argparse.ArgumentParser:
                           help="skip the local semantic-similarity component")
     p_digest.add_argument("--model", default=DEFAULT_MODEL,
                           help=f"sentence-transformers model for semantic scoring (default: {DEFAULT_MODEL})")
+    p_digest.add_argument("--verbose-sources", action="store_true",
+                          help="log every HTTP request/response made by source adapters to stderr")
     p_digest.add_argument("--open", action="store_true", help="open the digest in a browser")
     p_digest.set_defaults(func=cmd_digest)
 
@@ -272,7 +279,7 @@ def build_parser() -> argparse.ArgumentParser:
                               "(default: config draft_output_dir, else the current directory)")
     p_draft.add_argument("--model", default=None,
                          help="override the LLM model used for drafting "
-                              "(default: llm.build_model from config)")
+                              "(default: llm.draft_model from config)")
     p_draft.add_argument("--quiet-llm", action="store_true",
                          help="suppress the per-request/response LLM log (keep the "
                               "usage summary); both go to stderr, never stdout")
@@ -297,7 +304,7 @@ def build_parser() -> argparse.ArgumentParser:
                                help="with --write, overwrite an existing profile of the same name")
     p_from_resume.add_argument("--model", default=None,
                                help="override the LLM model used for drafting "
-                                    "(default: llm.build_model from config)")
+                                    "(default: llm.draft_model from config)")
     p_from_resume.add_argument("--quiet-llm", action="store_true",
                                help="suppress the per-request/response LLM log (keep the "
                                     "usage summary); both go to stderr, never stdout")

@@ -66,7 +66,7 @@ class AdzunaAdapter(SourceAdapter):
         remote_only = self.remote_only if self.remote_only is not None else query.remote
         terms = query.terms or [""]
         seen: dict[str, JobPosting] = {}
-        with httpx.Client(timeout=self.timeout, follow_redirects=True) as client:
+        with self._client(timeout=self.timeout) as client:
             for term in terms:
                 for page in range(1, self.max_pages + 1):
                     rows = self._search(client, term, page, query.limit_per_source)

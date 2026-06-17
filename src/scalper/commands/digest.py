@@ -65,6 +65,7 @@ def run_digest(
     model: str = DEFAULT_MODEL,
     on_info: Callable[[str], None] = _noop,
     on_warning: Callable[[str], None] = _noop,
+    on_source_log: Callable[[str], None] | None = None,
 ) -> DigestResult:
     """Collect, then score+render only postings first seen during this run.
 
@@ -83,7 +84,8 @@ def run_digest(
 
     db = db or config.database
     run_start = datetime.now(timezone.utc)
-    run_collect(config, db=db, only_sources=only_sources, on_info=on_info, on_warning=on_warning)
+    run_collect(config, db=db, only_sources=only_sources, on_info=on_info, on_warning=on_warning,
+                on_source_log=on_source_log)
 
     with JobStore(db) as store:
         postings = [
@@ -104,15 +106,17 @@ def run_digest(
         results: list[ProfileDigest] = []
         panels: list[ReportPanel] = []
         for name, profile in profiles:
-            scored = score_all(profile, postings, semantic_scorer=scorer)
+            scored = score_all(profile, postings, semantic_scorer=scorer,
+                               freshness_days=config.freshness_days)
             results.append(ProfileDigest(profile_name=name, scored=scored, new=len(scored)))
             panels.append(ReportPanel(name, profile, scored, {}))
 
     if len(profiles) == 1:
         name, profile = profiles[0]
-        html = render_report(name, profile, results[0].scored, {})
+        html = render_report(name, profile, results[0].scored, {},
+                             freshness_days=config.freshness_days)
     else:
-        html = render_combined_report(panels)
+        html = render_combined_report(panels, freshness_days=config.freshness_days)
 
     return DigestResult(
         html=html, run_start=run_start, total_new=len(postings), profiles=results,

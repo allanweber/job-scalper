@@ -95,6 +95,8 @@ def render_report(
     profile: Profile,
     scored: list[ScoredPosting],
     enrichments: dict[str, Enrichment] | None = None,
+    *,
+    freshness_days: int | None = None,
 ) -> str:
     enrichments = enrichments or {}
     panel = _panel_context(
@@ -109,10 +111,11 @@ def render_report(
         enriched=bool(enrichments),
         has_hard=any(r["hard"] for r in panel["rows"]),
         generated_at=_now_str(),
+        freshness_days=freshness_days,
     )
 
 
-def render_combined_report(panels: list[ReportPanel]) -> str:
+def render_combined_report(panels: list[ReportPanel], *, freshness_days: int | None = None) -> str:
     """Render several profiles into one tabbed, self-contained Combined Report."""
     contexts = [_panel_context(p, show_head=True) for p in panels]
     template = _env.get_template("report_combined.html")
@@ -121,6 +124,7 @@ def render_combined_report(panels: list[ReportPanel]) -> str:
         enriched=any(p.enrichments for p in panels),
         has_hard=any(r["hard"] for c in contexts for r in c["rows"]),
         generated_at=_now_str(),
+        freshness_days=freshness_days,
     )
 
 

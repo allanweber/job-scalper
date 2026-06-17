@@ -40,7 +40,7 @@ class JobicyAdapter(SourceAdapter):
     def fetch(self, query: SearchQuery) -> list[JobPosting]:
         terms = query.terms or [""]  # empty tag => Jobicy returns its recent feed
         seen: dict[str, JobPosting] = {}
-        with httpx.Client(timeout=self.timeout, follow_redirects=True) as client:
+        with self._client(timeout=self.timeout) as client:
             for term in terms:
                 for job in self._search(client, term, query.limit_per_source):
                     p = self._to_posting(job)

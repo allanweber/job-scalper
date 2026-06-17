@@ -1,9 +1,8 @@
 """Draft a Profile from the user's Resume via the LLM (Phase 9).
 
-Reuses the `LLMProvider` registry (ADR 0003/0004) with the `build_model` slot reserved
-for codegen-style tasks. One call extracts `titles`/`required_skills`/
-`nice_to_have_skills`/`keywords` from free-text resume content; the result is rendered
-as a ready-to-paste `profiles:`-shaped YAML block, never written without `--write`.
+One call extracts `titles`/`required_skills`/`nice_to_have_skills`/`keywords` from
+free-text resume content; the result is rendered as a ready-to-paste `profiles:`-shaped
+YAML block, never written without `--write`.
 """
 
 from __future__ import annotations
@@ -116,7 +115,6 @@ def draft_profile(
 DEFAULT_PROFILE_SETTINGS: dict[str, object] = {
     "remote_only": True,
     "salary_floor": 0,
-    "freshness_days": 3,
     "exclude_non_latin": True,
 }
 

@@ -36,7 +36,7 @@ class ArbeitnowAdapter(SourceAdapter):
 
     def fetch(self, query: SearchQuery) -> list[JobPosting]:
         postings: list[JobPosting] = []
-        with httpx.Client(timeout=self.timeout, follow_redirects=True) as client:
+        with self._client(timeout=self.timeout) as client:
             for page in range(1, self.max_pages + 1):
                 rows = self._page(client, page)
                 if not rows:

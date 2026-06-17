@@ -121,7 +121,7 @@ def run_draft(
     if missing:
         raise PostingNotFoundError(f"posting uid(s) not found in the store: {', '.join(missing)}")
 
-    used_model = model or config.llm.build_model
+    used_model = model or config.llm.draft_model
     usage = Usage(model=used_model)
     target_dir = Path(out_dir) if out_dir else Path(config.draft_output_dir or ".")
     target_dir.mkdir(parents=True, exist_ok=True)

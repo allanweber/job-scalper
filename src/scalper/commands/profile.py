@@ -187,7 +187,7 @@ def run_from_resume(
             "ANTHROPIC_API_KEY"
         )
 
-    used_model = model or config.llm.build_model
+    used_model = model or config.llm.draft_model
     draft, comp = draft_profile(provider, used_model, resume_text, logger=on_llm_log)
     usage = Usage(model=used_model)
     usage.add(comp)

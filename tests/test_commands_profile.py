@@ -142,7 +142,7 @@ def test_write_force_overwrites_existing_name(stub_provider, tmp_path):
     # The old profile had no hard filters set, so the defaults are appended.
     assert data["profiles"]["backend"]["remote_only"] is True
     assert data["profiles"]["backend"]["salary_floor"] == 0
-    assert data["profiles"]["backend"]["freshness_days"] == 3
+    assert "freshness_days" not in data["profiles"]["backend"]  # global setting now
     assert data["profiles"]["backend"]["exclude_non_latin"] is True
 
 
@@ -168,7 +168,7 @@ def test_write_force_preserves_existing_hard_filters(stub_provider, tmp_path):
     assert backend["titles"] == ["backend engineer"]  # re-drafted
     assert backend["remote_only"] is False  # kept, was already set
     assert backend["salary_floor"] == 80000  # kept, was already set
-    assert backend["freshness_days"] == 3  # filled in, wasn't set before
+    assert "freshness_days" not in backend  # global setting, not emitted per-profile
     assert backend["exclude_non_latin"] is True  # filled in, wasn't set before
 
 

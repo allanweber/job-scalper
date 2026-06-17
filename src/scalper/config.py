@@ -29,7 +29,6 @@ class Profile(BaseModel):
 
     remote_only: bool = True
     salary_floor: float = 0.0
-    freshness_days: int | None = 30
     #: Drop postings written predominantly in CJK (Chinese/Japanese/Korean)
     #: script — i.e. non-English listings. On by default; set false to keep them.
     exclude_non_latin: bool = True
@@ -38,19 +37,14 @@ class Profile(BaseModel):
 
 
 class LLMConfig(BaseModel):
-    """Stage 2 LLM enrichment settings (ADR 0003) with per-task models (ADR 0004).
-
-    Enrichment runs on the shortlist only, so cost is bounded by `top_n`, not by
-    collection volume. `build_model` is reserved for the `add-source` codegen task
-    (ADR 0004) and unused by enrichment.
-    """
+    """LLM settings: provider, per-task models, and enrichment config."""
 
     #: Provider key in the LLM registry (currently only "anthropic").
     provider: str = "anthropic"
     #: Cheap model for per-job enrichment (summary + skill-gap).
     enrich_model: str = "claude-haiku-4-5"
-    #: Stronger model reserved for `add-source` mapping/codegen (ADR 0004).
-    build_model: str = "claude-sonnet-4-6"
+    #: Model used by `scalper draft` and `scalper profile from-resume`.
+    draft_model: str = "claude-sonnet-4-6"
     #: How many top-scored postings to enrich per report.
     top_n: int = 10
     #: Enrich without needing the `--enrich` flag when true.
@@ -83,6 +77,12 @@ class Config(BaseModel):
     #: files into. `--out` overrides it; if neither is set, files save to the
     #: current directory.
     draft_output_dir: str | None = None
+    #: Oldest posting worth collecting or scoring. Postings published before this
+    #: many days ago are dropped at collect time and at report time. None = no limit.
+    freshness_days: int | None = 3
+    #: When true, every HTTP request/response made by a source adapter is logged
+    #: to stderr during `collect` and `digest`. False by default.
+    verbose_sources: bool = False
 
     def profile(self, name: str) -> Profile:
         try:
@@ -115,4 +115,6 @@ def load_config(path: str | Path) -> Config:
         profiles=profiles,
         llm=LLMConfig.model_validate(data.get("llm", {})),
         draft_output_dir=data.get("draft_output_dir"),
+        freshness_days=data.get("freshness_days", 3),
+        verbose_sources=data.get("verbose_sources", False),
     )

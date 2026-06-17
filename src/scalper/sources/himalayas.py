@@ -1,12 +1,12 @@
-"""Himalayas adapter — company-agnostic remote-job feed .
+"""Himalayas adapter — search source using the /jobs/api/search endpoint.
 
-Himalayas exposes a public, keyless, paginated JSON API of remote jobs across
-all employers:
-    https://himalayas.app/jobs/api?limit=<n>&offset=<n>
+Himalayas exposes a public, keyless search API:
+    https://himalayas.app/jobs/api/search?q=<term>&page=<n>
 
-It has no server-side keyword search, so this is a *broad-feed* source: it pages
-through recent postings and filters locally against the user's query terms. The
-feed is remote-only by nature and exposes structured salary min/max + currency.
+This is a *search* source: each configured query term is searched independently
+and results are unioned (OR across terms, deduped by guid). Passes
+`worldwide=true` when the search query's remote flag is set, restricting to
+globally-available positions.
 """
 
 from __future__ import annotations
@@ -14,11 +14,10 @@ from __future__ import annotations
 import httpx
 
 from scalper.models import JobPosting, SearchQuery
-from scalper.sources._util import matches_any_term, parse_epoch_s, strip_html
+from scalper.sources._util import parse_epoch_s, strip_html
 from scalper.sources.base import TIER_STRUCTURED, SourceAdapter, register
 
-_API = "https://himalayas.app/jobs/api"
-_PAGE = 100  # API page size
+_API = "https://himalayas.app/jobs/api/search"
 
 
 @register
@@ -26,7 +25,7 @@ class HimalayasAdapter(SourceAdapter):
     type = "himalayas"
     tier = TIER_STRUCTURED
 
-    def __init__(self, max_pages: int = 5, timeout: float = 30.0):
+    def __init__(self, max_pages: int = 3, timeout: float = 30.0):
         self.max_pages = max_pages
         self.timeout = timeout
 
@@ -35,23 +34,28 @@ class HimalayasAdapter(SourceAdapter):
         return "himalayas"
 
     def fetch(self, query: SearchQuery) -> list[JobPosting]:
-        postings: list[JobPosting] = []
-        with httpx.Client(timeout=self.timeout, follow_redirects=True) as client:
-            for page in range(self.max_pages):
-                rows = self._page(client, offset=page * _PAGE)
-                if not rows:
-                    break
-                for row in rows:
-                    p = self._to_posting(row)
-                    cats = " ".join(row.get("categories") or [])
-                    if matches_any_term(f"{p.title} {p.description} {cats}", query.terms):
-                        postings.append(p)
-                    if len(postings) >= query.limit_per_source:
-                        return postings
-        return postings
+        terms = query.terms or [""]
+        seen: dict[str, JobPosting] = {}
+        with self._client(timeout=self.timeout) as client:
+            for term in terms:
+                for page in range(1, self.max_pages + 1):
+                    rows = self._search(client, term, page, query.remote)
+                    if not rows:
+                        break
+                    for row in rows:
+                        p = self._to_posting(row)
+                        seen[p.source_id] = p
+                    if len(seen) >= query.limit_per_source:
+                        break
+        return list(seen.values())[: query.limit_per_source]
 
-    def _page(self, client: httpx.Client, offset: int) -> list[dict]:
-        resp = client.get(_API, params={"limit": _PAGE, "offset": offset})
+    def _search(self, client: httpx.Client, term: str, page: int, remote: bool) -> list[dict]:
+        params: dict[str, object] = {"page": page}
+        if term:
+            params["q"] = term
+        if remote:
+            params["worldwide"] = "true"
+        resp = client.get(_API, params=params)
         resp.raise_for_status()
         return resp.json().get("jobs", [])
 
@@ -68,7 +72,7 @@ class HimalayasAdapter(SourceAdapter):
             title=(job.get("title") or "").strip(),
             description=strip_html(job.get("description", "")),
             location=location,
-            remote=True,  # Himalayas is remote-only by definition
+            remote=True,
             salary_min=float(salary_min) if salary_min else None,
             salary_max=float(salary_max) if salary_max else None,
             salary_currency=(job.get("currency") or None) if (salary_min or salary_max) else None,

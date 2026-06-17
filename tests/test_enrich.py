@@ -15,6 +15,7 @@ from scalper.enrich import (
     Enricher,
     Enrichment,
     Usage,
+    _SCHEMA_VERSION,
     build_enricher,
     build_prompt,
     format_usage,
@@ -116,8 +117,8 @@ def test_enrich_round_trips_and_avoids_recompute(tmp_path):
         assert posting.uid in out
         assert first.provider.calls == 1
 
-        # Persisted under (uid, profile_hash, model).
-        cached = store.get_enrichments([posting.uid], profile_hash(profile), "stub-model")
+        # Persisted under (uid, profile_hash, versioned model key).
+        cached = store.get_enrichments([posting.uid], profile_hash(profile), f"stub-model/v{_SCHEMA_VERSION}")
         assert posting.uid in cached
 
         # A fresh enricher serves from cache without calling the provider.

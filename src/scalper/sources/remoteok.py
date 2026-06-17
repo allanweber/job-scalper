@@ -12,7 +12,6 @@ RemoteOK asks for attribution and a descriptive User-Agent.
 
 from __future__ import annotations
 
-import httpx
 
 from scalper.models import JobPosting, SearchQuery
 from scalper.sources._util import matches_any_term, parse_epoch_s, strip_html
@@ -35,7 +34,7 @@ class RemoteOKAdapter(SourceAdapter):
         return "remoteok"
 
     def fetch(self, query: SearchQuery) -> list[JobPosting]:
-        with httpx.Client(timeout=self.timeout, follow_redirects=True) as client:
+        with self._client(timeout=self.timeout) as client:
             resp = client.get(_API, headers={"User-Agent": _UA, "Accept": "application/json"})
             resp.raise_for_status()
             rows = resp.json()

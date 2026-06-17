@@ -1,13 +1,13 @@
-"""The Muse adapter — company-agnostic job-board feed .
+"""The Muse adapter — company-agnostic job-board feed.
 
 The Muse exposes a public, keyless, paginated JSON API of jobs across all
 employers:
     https://www.themuse.com/api/public/jobs?category=Software%20Engineering&page=<n>
 
-It has no free-text keyword search, only coarse category filters, so this is a
-*broad-feed* source: it pulls category pages and filters locally against the
-user's query terms. The feed mixes remote and on-site roles, so when the query
-asks for remote we keep only postings whose locations look remote.
+When the search query's remote flag is set we pass `location=Flexible / Remote`
+to filter server-side rather than locally, which dramatically improves precision.
+The feed still has no free-text keyword search, so results are filtered locally
+against the query terms after fetching.
 """
 
 from __future__ import annotations
@@ -20,6 +20,7 @@ from scalper.sources.base import TIER_STRUCTURED, SourceAdapter, register
 
 _API = "https://www.themuse.com/api/public/jobs"
 _DEFAULT_CATEGORIES = ("Software Engineering", "Data Science", "IT")
+_REMOTE_LOCATION = "Flexible / Remote"
 
 
 @register
@@ -38,24 +39,24 @@ class TheMuseAdapter(SourceAdapter):
 
     def fetch(self, query: SearchQuery) -> list[JobPosting]:
         seen: dict[str, JobPosting] = {}
-        with httpx.Client(timeout=self.timeout, follow_redirects=True) as client:
+        with self._client(timeout=self.timeout) as client:
             for page in range(1, self.max_pages + 1):
-                rows = self._page(client, page)
+                rows = self._page(client, page, remote=query.remote)
                 if not rows:
                     break
                 for row in rows:
                     p = self._to_posting(row)
-                    if query.remote and not p.remote:
-                        continue
                     if matches_any_term(f"{p.title} {p.description}", query.terms):
                         seen[p.source_id] = p
                 if len(seen) >= query.limit_per_source:
                     break
         return list(seen.values())[: query.limit_per_source]
 
-    def _page(self, client: httpx.Client, page: int) -> list[dict]:
+    def _page(self, client: httpx.Client, page: int, *, remote: bool = False) -> list[dict]:
         params: list[tuple[str, object]] = [("page", page)]
         params += [("category", c) for c in self.categories]
+        if remote:
+            params.append(("location", _REMOTE_LOCATION))
         resp = client.get(_API, params=params)
         resp.raise_for_status()
         return resp.json().get("results", [])

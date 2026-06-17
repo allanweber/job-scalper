@@ -41,7 +41,7 @@ class HackerNewsAdapter(SourceAdapter):
         return "hackernews"
 
     def fetch(self, query: SearchQuery) -> list[JobPosting]:
-        with httpx.Client(timeout=self.timeout, follow_redirects=True) as client:
+        with self._client(timeout=self.timeout) as client:
             story_id = self._latest_thread(client)
             if story_id is None:
                 return []

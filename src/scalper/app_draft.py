@@ -1,9 +1,8 @@
-"""Draft an Application Draft (cover letter + resume bullets) for one posting (Phase 10).
+"""Draft a cover letter + resume bullets for one posting (Phase 10).
 
-Reuses the `LLMProvider` registry (ADR 0003/0004) with the `build_model` slot, the same
-codegen-style slot `profile_draft.py` uses. One call per posting, grounded in the posting
-text, the user's Resume, and the Profile's matched/missing skills from Stage 1 scoring
-(`scalper.scoring`). Output is markdown for the user to review/edit — never sent anywhere
+One call per posting, grounded in the posting text, the user's Resume, and the Profile's
+matched/missing skills from Stage 1 scoring (`scalper.scoring`). Output is markdown for
+the user to review/edit — never sent anywhere
 by the tool (see the Application Draft term in CONTEXT.md).
 """
 

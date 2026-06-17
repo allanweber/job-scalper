@@ -68,7 +68,7 @@ class RedditAdapter(SourceAdapter):
 
     def fetch(self, query: SearchQuery) -> list[JobPosting]:
         postings: list[JobPosting] = []
-        with httpx.Client(timeout=self.timeout, follow_redirects=True) as client:
+        with self._client(timeout=self.timeout) as client:
             for i, sub in enumerate(self.subreddits):
                 if i:  # pause between requests; anonymous bursts get 429'd
                     time.sleep(self.delay)

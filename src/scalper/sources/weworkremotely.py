@@ -12,7 +12,6 @@ colon to recover company and title separately.
 
 from __future__ import annotations
 
-import httpx
 
 from scalper.models import JobPosting, SearchQuery
 from scalper.sources._util import matches_any_term, parse_rss_dt, rss_items, strip_html
@@ -37,7 +36,7 @@ class WeWorkRemotelyAdapter(SourceAdapter):
         return "weworkremotely"
 
     def fetch(self, query: SearchQuery) -> list[JobPosting]:
-        with httpx.Client(timeout=self.timeout, follow_redirects=True) as client:
+        with self._client(timeout=self.timeout) as client:
             resp = client.get(self.feed, headers={"User-Agent": _UA})
             resp.raise_for_status()
             items = rss_items(resp.text)

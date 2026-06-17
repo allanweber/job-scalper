@@ -83,7 +83,13 @@ class ScoredPosting(BaseModel):
 # --------------------------------------------------------------------------- filters
 
 
-def passes_filters(profile: Profile, posting: JobPosting, now: datetime | None = None) -> tuple[bool, str]:
+def passes_filters(
+    profile: Profile,
+    posting: JobPosting,
+    *,
+    freshness_days: int | None = None,
+    now: datetime | None = None,
+) -> tuple[bool, str]:
     """Hard gates (not score components). Returns (kept, reason_if_dropped)."""
     text = posting.search_text
 
@@ -101,9 +107,9 @@ def passes_filters(profile: Profile, posting: JobPosting, now: datetime | None =
         if posting.salary_max < profile.salary_floor:
             return False, "below salary floor"
 
-    if profile.freshness_days is not None and posting.published_at is not None:
+    if freshness_days is not None and posting.published_at is not None:
         now = now or datetime.now(timezone.utc)
-        cutoff = now - timedelta(days=profile.freshness_days)
+        cutoff = now - timedelta(days=freshness_days)
         if _aware(posting.published_at) < cutoff:
             return False, "outside freshness window"
 
@@ -185,11 +191,13 @@ def score_all(
     profile: Profile,
     postings: list[JobPosting],
     semantic_scorer: SemanticScorer | None = None,
+    freshness_days: int | None = None,
     now: datetime | None = None,
 ) -> list[ScoredPosting]:
     """Filter then score; returned sorted by Match % descending."""
     now = now or datetime.now(timezone.utc)
-    kept = [p for p in postings if passes_filters(profile, p, now)[0]]
+    kept = [p for p in postings
+            if passes_filters(profile, p, freshness_days=freshness_days, now=now)[0]]
     scored = [score_posting(profile, p, semantic_scorer) for p in kept]
     scored.sort(key=lambda s: s.percent, reverse=True)
     return scored

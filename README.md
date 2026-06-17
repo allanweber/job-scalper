@@ -280,6 +280,22 @@ Salary is parsed into a structured range even from sources that report it as fre
 (e.g. Remotive's `"$90k – $120k"`), and a timezone hint is inferred from the location
 string (`UTC+2`, `CET`, `Americas`, …) when the source doesn't supply one.
 
+### Source fetch logging (optional)
+
+Set `verbose_sources: true` in `config.yaml` to log every HTTP request and response made by
+source adapters during `collect` or `digest`. Each line goes to **stderr** so it doesn't
+interfere with the stdout progress summary:
+
+```
+remotive  →  GET https://remotive.com/api/remote-jobs?search=java&limit=25
+remotive  ←  200  45.2 KB
+himalayas  →  GET https://himalayas.app/jobs/api?limit=100&offset=0
+himalayas  ←  200  120.8 KB
+```
+
+You can also turn it on for a single run with `--verbose-sources` (applies to both `collect`
+and `digest`), which takes precedence over the config value.
+
 ### Inspecting sources
 
 ```bash

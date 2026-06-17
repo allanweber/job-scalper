@@ -4,6 +4,8 @@ Each test drives a command function directly — no argparse, no CLI — and ass
 its typed result and its injected callbacks, proving the logic is front-end-ready.
 """
 
+from datetime import datetime, timedelta, timezone
+
 import pytest
 
 from scalper.commands import CommandError
@@ -75,6 +77,50 @@ def test_run_collect_populates_store(tmp_path, stub_source):
 def test_run_collect_no_sources_raises(tmp_path):
     with pytest.raises(NoSourcesError):
         run_collect(_config(tmp_path, []))
+
+
+def test_run_collect_stale_postings_not_stored(tmp_path, stub_source):
+    # Global freshness_days=1 → cutoff is yesterday. The stub returns one
+    # fresh posting (no date → kept) and one with a publish date 10 days ago
+    # (stale → dropped before storage).
+    class _StaleAdapter(SourceAdapter):
+        type = "stub"
+        @property
+        def name(self): return "stub"
+        def fetch(self, query):
+            old = datetime.now(timezone.utc) - timedelta(days=10)
+            return [
+                JobPosting(source="stub", source_id="fresh", url="https://x/f",
+                           company="Co", title="Fresh Job", description=".", remote=True),
+                JobPosting(source="stub", source_id="stale", url="https://x/s",
+                           company="Co", title="Stale Job", description=".",
+                           remote=True, published_at=old),
+            ]
+    REGISTRY["stub"] = _StaleAdapter
+    cfg = Config(
+        database=str(tmp_path / "s.db"),
+        search=SearchQuery(terms=["python"]),
+        sources=[SourceConfig(type="stub")],
+        profiles={"backend": Profile(titles=["backend"], required_skills=["python"])},
+        freshness_days=1,
+    )
+    result = run_collect(cfg)
+    assert result.total_new == 1          # only the fresh posting stored
+    assert result.outcomes[0].fetched == 2
+    assert result.outcomes[0].fresh == 1
+
+
+def test_run_collect_no_date_posting_always_kept(tmp_path, stub_source):
+    # Postings with published_at=None are kept regardless of freshness_days.
+    cfg = Config(
+        database=str(tmp_path / "s.db"),
+        search=SearchQuery(terms=["python"]),
+        sources=[SourceConfig(type="stub")],
+        profiles={"backend": Profile()},
+        freshness_days=1,
+    )
+    result = run_collect(cfg)
+    assert result.total_new == 2   # both stub postings have no date → both kept
 
 
 def test_run_collect_unknown_filter_warns_then_raises(tmp_path, stub_source):

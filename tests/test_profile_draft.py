@@ -107,7 +107,6 @@ def test_to_yaml_block_is_parseable_and_nested_under_name():
             "keywords": [],
             "remote_only": True,
             "salary_floor": 0,
-            "freshness_days": 3,
             "exclude_non_latin": True,
         }
     }
@@ -118,5 +117,5 @@ def test_drafted_profile_always_gets_default_hard_filters():
     fields = profile_fields(draft)
     assert fields["remote_only"] is True
     assert fields["salary_floor"] == 0
-    assert fields["freshness_days"] == 3
+    assert "freshness_days" not in fields  # global setting, not per-profile
     assert fields["exclude_non_latin"] is True

@@ -4,7 +4,7 @@
 <div class="panel-head">
   <span class="meta">{{ panel.total }} matched ·
     {% if panel.profile.remote_only %}remote only · {% endif %}
-    {% if panel.profile.freshness_days %}last {{ panel.profile.freshness_days }} days{% endif %}</span>
+    {% if freshness_days %}last {{ freshness_days }} days{% endif %}</span>
 </div>
 {% endif %}
 
@@ -25,6 +25,7 @@
       <th data-sort="str" data-col="title">Title</th>
       <th data-sort="str" data-col="company">Company</th>
       <th data-sort="str" data-col="loc">Location</th>
+      <th>Remote</th>
       <th data-sort="str" data-col="salary">Salary</th>
       <th data-sort="str" data-col="src">Source</th>
       <th data-sort="num" data-col="pub">Published</th>
@@ -37,15 +38,16 @@
         data-search="{{ (r.title ~ ' ' ~ r.company ~ ' ' ~ (r.matched_skills | join(' ')) ~ ' ' ~ r.source ~ ' ' ~ (r.also_seen_on | join(' '))) | lower }}">
       <td class="selcol"><input type="checkbox" class="pick" data-uid="{{ r.uid }}"></td>
       <td class="pct {{ cls }}">{{ r.percent }}%</td>
-      <td><div class="title">{{ r.title }}</div></td>
+      <td><div class="title">{{ r.title }}</div>{% if r.enrichment and r.enrichment.seniority %}<span class="tag sub" style="margin-top:4px">{{ r.enrichment.seniority }}</span>{% endif %}</td>
       <td>{{ r.company }}</td>
       <td>{{ r.location }}{% if r.timezone %}<div class="sub">{{ r.timezone }}</div>{% endif %}</td>
-      <td>{{ r.salary or '—' }}</td>
-      <td class="sub">{{ r.source }}{% if r.hard %} <span class="tag hard" title="Scraped source — anonymous, best-effort, may be incomplete">hard</span>{% endif %}{% if r.also_seen_on %}<div class="sub" title="Same job also found on these sources">also: {{ r.also_seen_on | join(', ') }}</div>{% endif %}</td>
+      <td>{% if r.enrichment %}{% if r.enrichment.remote is none %}<span class="tag" title="AI could not determine remote status">?</span>{% elif r.enrichment.remote %}<span class="tag good" title="AI verified: fully remote">✓</span>{% else %}<span class="tag bad" title="AI verified: not remote">✗</span>{% endif %}{% elif r.remote %}<span class="tag" title="Source reports remote">remote</span>{% else %}—{% endif %}</td>
+      <td>{% if r.salary %}{{ r.salary }}{% elif r.enrichment and r.enrichment.salary_range %}{% set sr = r.enrichment.salary_range %}{% if sr.min and sr.max %}{{ (sr.min / 1000) | int }}–{{ (sr.max / 1000) | int }}k{% if sr.currency %} {{ sr.currency }}{% endif %}<span class="sub"> (AI)</span>{% elif sr.min %}{{ (sr.min / 1000) | int }}k+<span class="sub"> (AI)</span>{% elif sr.max %}≤{{ (sr.max / 1000) | int }}k<span class="sub"> (AI)</span>{% else %}—{% endif %}{% else %}—{% endif %}</td>
+      <td class="sub">{{ r.source }}{% if r.enrichment %} <span class="tag ai" title="Enriched by AI">AI</span>{% endif %}{% if r.hard %} <span class="tag hard" title="Scraped source — anonymous, best-effort, may be incomplete">hard</span>{% endif %}{% if r.also_seen_on %}<div class="sub" title="Same job also found on these sources">also: {{ r.also_seen_on | join(', ') }}</div>{% endif %}</td>
       <td class="sub">{{ r.published or '—' }}</td>
     </tr>
     <tr class="detail">
-      <td colspan="8">
+      <td colspan="9">
         <div class="detail-grid">
           <div>
             <h4>Score breakdown</h4>
@@ -68,11 +70,26 @@
           </div>
           <div>
             {% if r.enrichment %}
-              <h4>AI remote check
-                {% if r.enrichment.remote is none %}<span class="tag" title="Could not determine from the posting">remote: ?</span>
-                {% elif r.enrichment.remote %}<span class="tag good" title="Posting allows fully remote work">remote ✓</span>
-                {% else %}<span class="tag bad" title="Posting does not allow fully remote work">not remote</span>{% endif %}</h4>
-              <h4 style="margin-top:14px">Excerpt</h4>
+              <h4>AI analysis</h4>
+              <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px">
+                {% if r.enrichment.remote is none %}<span class="tag" title="Could not determine">remote: ?</span>
+                {% elif r.enrichment.remote %}<span class="tag good" title="Fully remote">remote ✓</span>
+                {% else %}<span class="tag bad" title="Not remote">not remote</span>{% endif %}
+                {% if r.enrichment.seniority %}<span class="tag">{{ r.enrichment.seniority }}</span>{% endif %}
+              </div>
+              {% if r.enrichment.salary_range %}
+                {% set sr = r.enrichment.salary_range %}
+                <div class="sub" style="margin-bottom:6px">salary:
+                  {% if sr.min and sr.max %}{{ (sr.min / 1000) | int }}–{{ (sr.max / 1000) | int }}k{% if sr.currency %} {{ sr.currency }}{% endif %}
+                  {% elif sr.min %}{{ (sr.min / 1000) | int }}k+
+                  {% elif sr.max %}up to {{ (sr.max / 1000) | int }}k{% if sr.currency %} {{ sr.currency }}{% endif %}
+                  {% endif %}
+                </div>
+              {% endif %}
+              {% if r.enrichment.timezone_requirement %}
+                <div class="sub" style="margin-bottom:10px">timezone: {{ r.enrichment.timezone_requirement }}</div>
+              {% endif %}
+              <h4 style="margin-top:10px">Excerpt</h4>
               <p class="excerpt">{{ r.excerpt }}</p>
             {% else %}
               <h4>Summary</h4>
