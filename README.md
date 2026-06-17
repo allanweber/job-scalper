@@ -35,6 +35,10 @@ scalper digest -p backend                           # collect + report only the 
 scalper digest --all-profiles --open                # same, one combined tab per profile
 scalper digest -p backend -s indeed linkedin        # restrict which sources to scrape
 
+scalper insights                                    # skill demand, salary, source counts, weekly volume
+scalper insights --since 30                         # filter to postings collected in the last 30 days
+scalper insights --skills rust,wasm                 # add skills not in any profile
+
 ```
 
 A personal CLI that searches remote tech jobs across many **company-agnostic** sources
@@ -215,6 +219,32 @@ specific sources (same flags as `collect`). Default output: `report.html` (same 
 `report`, so `--open` after a digest just refreshes the same tab); `-o/--out` to override;
 `--open` launches it in a browser.
 
+### Market Insights
+
+`insights` reads the store and prints an aggregate market summary — no LLM, no profile
+argument required. It answers: *which of my skills does the market actually demand right now,
+what does the salary landscape look like, and how many postings am I collecting each week?*
+
+```bash
+scalper insights                      # full store summary
+scalper insights --since 30           # last 30 days only
+scalper insights --skills rust,wasm   # add skills not in any profile
+```
+
+Output sections:
+
+- **Skill demand** — each skill from all profiles' vocabularies (required + nice-to-have),
+  ranked by how many stored postings mention it, with a visual bar and percentage.
+  Use `--skills` to include extra skills or to supply a vocabulary when no profiles are
+  configured.
+- **Salary distribution** — min / median / max over postings that have salary data (native
+  from the adapter or, when absent, from an AI enrichment already in the cache).
+- **Postings by source** — stored count per adapter, descending.
+- **Weekly volume** — collection count per ISO week (last 8 weeks), oldest to newest.
+
+`--since` filters all four sections by `collected_at`, so `--since 14` answers "what does
+the last two weeks look like?" consistently across every metric.
+
 ### Hard sources — LinkedIn & Indeed (optional, off by default)
 
 LinkedIn and Indeed have no public API and actively resist automation, so they
@@ -364,7 +394,8 @@ Implemented:
 - ✅ Resume-driven profile drafting (`profile from-resume`) and Application Drafts
   (`draft`, cover letter + resume bullets per posting) — both `pip install -e .[llm]`
 - ✅ `digest` — collect + Fresh Catch report in one step (ADR 0005)
-- ✅ Tests for scoring, semantic, enrichment, adapter parsing, and digest
+- ✅ `insights` — aggregate market view: skill demand, salary stats, source counts, weekly volume (no LLM)
+- ✅ Tests for scoring, semantic, enrichment, adapter parsing, digest, and insights
 
 Layered on next (designed, not yet built):
 - ⏳ Generic mapping-driven RSS/JSON adapter (declarative tier for `add-source`)

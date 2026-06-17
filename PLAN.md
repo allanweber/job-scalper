@@ -52,6 +52,9 @@ status boxes as work lands.
   resume-bullets markdown file per posting.
 - ✅ **Phase 11: digest** — `digest [-p NAME | --all-profiles]` collects, then renders only
   the Fresh Catch (postings first seen this run) via the existing report renderer (ADR 0005).
+- ✅ **Phase 12: market insights** — `insights [--since] [--skills]` prints skill demand
+  (word-boundary match over all profile vocabs), salary stats (native + enriched fallback),
+  per-source counts, and weekly collection volume. No LLM, no profile argument required.
 
 **Designed, not yet built:** the `add-source` self-building command (ADR 0004) — its
 `build_model` per-task slot and the swappable `LLMProvider` registry it reuses already exist.
@@ -361,20 +364,26 @@ Goal: one verb that collects, then reports only what this run surfaced. See ADR 
 - **Acceptance:** ✅ `digest` scrapes then reports only the Fresh Catch; re-running with
       nothing new reports 0 and exits cleanly. 160 tests pass.
 
-## Phase 12 — Market Insights
+## Phase 12 — Market Insights ✅
 
 Goal: a read-only aggregate description of the stored market. **No LLM, no profile.** See the
 **Market Insights** term in `CONTEXT.md`.
 
-- [ ] `scalper insights [--since]`: aggregate the store — demand for the user's skills (union
-      of all profiles' skills as the vocabulary, via the same term-matching scoring uses),
-      salary distribution (min/median/max from `salary_min/max`), postings per source, and
-      weekly collection volume from `collected_at`.
-- [ ] Text summary to stdout; HTML output deferred behind a later `--out`.
-- [ ] Tests: skill-demand ranking over fixture postings; salary stats ignore unparsed rows;
-      per-source + weekly counts.
-- **Acceptance:** `insights` prints skill demand, salary distribution, and volume over the
-      store with no LLM and no profile required.
+- [x] `scalper insights [--since DAYS|DATE] [--skills SKILL1,SKILL2,...]`: aggregate the
+      store — demand for the user's skills (union of all profiles' skills as the vocabulary,
+      via the same `_contains_term` word-boundary matching scoring uses), salary distribution
+      (min/median/max; uses native `salary_min/max` first, falls back to AI-enriched
+      `salary_range` from the `enrichments` cache), postings per source, and weekly collection
+      volume from `collected_at` (last 8 ISO weeks). `--skills` supplements the profile
+      vocabulary and acts as a standalone fallback when no profiles are configured.
+      `--since` filters all four sections by `collected_at`.
+- [x] Text summary to stdout; HTML output deferred behind a later `--out`.
+- [x] Tests: skill-demand ranking, zero-count omission, no-skills path; salary stats ignore
+      unparsed rows, enrich fallback, no-salary path; per-source counts; weekly volume (8-week
+      cap, group-by-week); `--since` filter; format output coverage (12 tests total).
+- **Acceptance:** ✅ `insights` prints skill demand, salary distribution, source counts, and
+      weekly volume with no LLM and no profile argument. `--since` is consistent across all
+      sections. 174 tests pass.
 
 ---
 

@@ -17,6 +17,7 @@ from scalper.commands import CommandError
 from scalper.commands.collect import run_collect
 from scalper.commands.digest import run_digest
 from scalper.commands.draft import run_draft
+from scalper.commands.insights import run_insights
 from scalper.commands.profile import run_from_resume
 from scalper.commands.report import run_report, run_report_all
 from scalper.commands.sources import run_sources
@@ -183,6 +184,28 @@ def cmd_draft(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_insights(args: argparse.Namespace) -> int:
+    config = load_config(args.config)
+    extra_skills = [s.strip() for s in args.skills.split(",")] if args.skills else None
+
+    cutoff = None
+    if args.since:
+        try:
+            cutoff = _parse_since(args.since)
+        except ValueError as e:
+            _err(str(e))
+            return 1
+
+    try:
+        result = run_insights(config, since=cutoff, extra_skills=extra_skills, db=args.db)
+    except CommandError as e:
+        _err(str(e))
+        return 1
+
+    print(result.text)
+    return 0
+
+
 def cmd_sources(args: argparse.Namespace) -> int:
     config = load_config(args.config)
     result = run_sources(config, db=args.db)
@@ -284,6 +307,20 @@ def build_parser() -> argparse.ArgumentParser:
                          help="suppress the per-request/response LLM log (keep the "
                               "usage summary); both go to stderr, never stdout")
     p_draft.set_defaults(func=cmd_draft)
+
+    p_insights = sub.add_parser(
+        "insights", help="aggregate market view: skill demand, salary, source counts, weekly volume"
+    )
+    p_insights.add_argument(
+        "--since", default=None, metavar="DAYS|DATE",
+        help="only consider postings collected within the last N days or on/after an ISO date",
+    )
+    p_insights.add_argument(
+        "--skills", default=None, metavar="SKILL1,SKILL2,...",
+        help="comma-separated skills to include in demand counts "
+             "(supplements profile skills; required when no profiles are configured)",
+    )
+    p_insights.set_defaults(func=cmd_insights)
 
     p_sources = sub.add_parser("sources", help="list registered adapters and configured sources + counts")
     p_sources.set_defaults(func=cmd_sources)

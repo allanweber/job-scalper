@@ -229,6 +229,31 @@ class JobStore:
         )
         self._conn.commit()
 
+    def get_salary_enrichments(self) -> dict[str, tuple[float | None, float | None, str | None]]:
+        """Return {uid: (min, max, currency)} for enrichments that have salary data.
+
+        When a posting has multiple enrichments (across profiles/models), the first
+        one found with non-null salary data wins; others are skipped.
+        """
+        result: dict[str, tuple[float | None, float | None, str | None]] = {}
+        rows = self._conn.execute("SELECT uid, data FROM enrichments")
+        for row in rows:
+            uid = row["uid"]
+            if uid in result:
+                continue
+            try:
+                data = json.loads(row["data"])
+                sr = data.get("salary_range")
+                if sr and (sr.get("min") is not None or sr.get("max") is not None):
+                    result[uid] = (
+                        float(sr["min"]) if sr.get("min") is not None else None,
+                        float(sr["max"]) if sr.get("max") is not None else None,
+                        sr.get("currency"),
+                    )
+            except Exception:
+                pass
+        return result
+
     @staticmethod
     def _row_to_posting(row: sqlite3.Row) -> JobPosting:
         return JobPosting(
