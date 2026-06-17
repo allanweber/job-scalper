@@ -15,6 +15,7 @@ from datetime import datetime, timedelta, timezone
 from scalper import __version__
 from scalper.commands import CommandError
 from scalper.commands.collect import run_collect
+from scalper.commands.digest import run_digest
 from scalper.commands.draft import run_draft
 from scalper.commands.profile import run_from_resume
 from scalper.commands.report import run_report, run_report_all
@@ -119,6 +120,32 @@ def cmd_report(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_digest(args: argparse.Namespace) -> int:
+    config = load_config(args.config)
+    profile_names = list(config.profiles) if args.all_profiles else [args.profile]
+    try:
+        result = run_digest(
+            config, profile_names, db=args.db, only_sources=args.source,
+            semantic=not args.no_semantic, model=args.model,
+            on_info=_out, on_warning=_err,
+        )
+    except CommandError as e:
+        _err(str(e))
+        return 1
+
+    out = write_report(args.out, result.html)
+    when = result.run_start.strftime("%Y-%m-%d %H:%M UTC")
+    width = max((len(p.profile_name) for p in result.profiles), default=0)
+    summary = " · ".join(f"{p.profile_name} {p.new} new" for p in result.profiles)
+    print(f"{result.total_new} new since {when}{' · ' + summary if summary else ''}. Digest: {out}")
+    for p in result.profiles:
+        print(f"  {p.profile_name:<{width}}  {p.new:>4} new")
+
+    if args.open:
+        webbrowser.open(out.resolve().as_uri())
+    return 0
+
+
 def cmd_profile_from_resume(args: argparse.Namespace) -> int:
     config = load_config(args.config)
     llm_log = None if args.quiet_llm else (lambda msg: print(msg, file=sys.stderr))
@@ -215,6 +242,23 @@ def build_parser() -> argparse.ArgumentParser:
                           help="suppress per-request/response LLM logs (keep the usage summary)")
     p_report.add_argument("--open", action="store_true", help="open the report in a browser")
     p_report.set_defaults(func=cmd_report)
+
+    p_digest = sub.add_parser(
+        "digest", help="collect, then report only newly-seen postings (the Fresh Catch)"
+    )
+    p_digest_target = p_digest.add_mutually_exclusive_group(required=True)
+    p_digest_target.add_argument("-p", "--profile", help="profile name from config")
+    p_digest_target.add_argument("--all-profiles", action="store_true",
+                                 help="score every profile into one combined digest (a tab per profile)")
+    p_digest.add_argument("-o", "--out", default="report.html", help="output HTML path")
+    p_digest.add_argument("-s", "--source", nargs="+", metavar="TYPE",
+                          help="collect only these source type(s) (default: every source in config)")
+    p_digest.add_argument("--no-semantic", action="store_true",
+                          help="skip the local semantic-similarity component")
+    p_digest.add_argument("--model", default=DEFAULT_MODEL,
+                          help=f"sentence-transformers model for semantic scoring (default: {DEFAULT_MODEL})")
+    p_digest.add_argument("--open", action="store_true", help="open the digest in a browser")
+    p_digest.set_defaults(func=cmd_digest)
 
     p_draft = sub.add_parser(
         "draft", help="draft a cover letter + resume bullets for one or more postings"

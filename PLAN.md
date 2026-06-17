@@ -46,6 +46,12 @@ status boxes as work lands.
   in one run and renders one tabbed HTML file (a tab per profile, each with its own
   sort/filter; empty profiles keep a "0 matched" tab). Shared store/semantic-model/enricher;
   `run_report_all` reuses `run_report`'s scoring internals.
+- ✅ **Phase 9: resume-driven profiles** — `profile from-resume` drafts a Profile from a
+  Resume via the LLM registry.
+- ✅ **Phase 10: application drafts** — `draft <uid>...` produces a cover-letter +
+  resume-bullets markdown file per posting.
+- ✅ **Phase 11: digest** — `digest [-p NAME | --all-profiles]` collects, then renders only
+  the Fresh Catch (postings first seen this run) via the existing report renderer (ADR 0005).
 
 **Designed, not yet built:** the `add-source` self-building command (ADR 0004) — its
 `build_model` per-task slot and the swappable `LLMProvider` registry it reuses already exist.
@@ -337,20 +343,23 @@ Goal: tailor application material to one or more postings. Extends Stage 2;
       under the resolved output folder; an unknown uid reports cleanly before calling
       the LLM; fail-soft without `[llm]`. 153 tests pass.
 
-## Phase 11 — Digest (scrape-first, Fresh Catch)
+## Phase 11 — Digest (scrape-first, Fresh Catch) ✅
 
 Goal: one verb that collects, then reports only what this run surfaced. See ADR 0005 and the
 **Fresh Catch** term in `CONTEXT.md`. No schema change (relies on preserved `collected_at`).
 
-- [ ] `scalper digest [--all-profiles | -p NAME]`: capture `run_start`, run the collect path,
+- [x] `scalper digest [--all-profiles | -p NAME]`: capture `run_start`, run the collect path,
       then render only postings with first-seen `collected_at >= run_start` through the
-      existing report renderer (one tab per profile, "N new" counts) to HTML at `--out`.
-- [ ] Concise stdout summary (`7 new since <date> · backend 92% … `). "0 new" exits cleanly.
-      No email/push in v1.
-- [ ] Tests: a posting present before the run is excluded; a genuinely new one is included;
-      0-new path; per-profile counts.
-- **Acceptance:** `digest` scrapes then reports only the Fresh Catch; re-running with nothing
-      new reports 0 and exits cleanly.
+      existing report renderer (one tab per profile, "N new" counts) to HTML at `--out`
+      (`commands/digest.py::run_digest`; `-s/--source`, `--no-semantic`/`--model`, `--open`
+      mirror `collect`/`report`'s flags).
+- [x] Concise stdout summary (`N new since <date> · backend N new …`); "0 new" still writes
+      the (empty) digest and exits 0. No email/push in v1.
+- [x] Tests: a posting present before the run is excluded; a genuinely new one is included;
+      0-new path; per-profile counts; unknown-profile / no-profiles raise
+      (`tests/test_commands_digest.py`).
+- **Acceptance:** ✅ `digest` scrapes then reports only the Fresh Catch; re-running with
+      nothing new reports 0 and exits cleanly. 160 tests pass.
 
 ## Phase 12 — Market Insights
 

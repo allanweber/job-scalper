@@ -31,6 +31,10 @@ scalper profile from-resume --name backend --resume resume.pdf --write --force #
 scalper draft remotive::123 -p backend --resume resume.pdf             # one posting
 scalper draft remotive::123 remotive::456 -p backend --resume resume.pdf --out drafts/  # several
 
+scalper digest -p backend                           # collect + report only the Fresh Catch
+scalper digest --all-profiles --open                # same, one combined tab per profile
+scalper digest -p backend -s indeed linkedin        # restrict which sources to scrape
+
 ```
 
 A personal CLI that searches remote tech jobs across many **company-agnostic** sources
@@ -182,6 +186,35 @@ stderr (`--quiet-llm` to silence), a token/cost summary always prints. Without t
 `[llm]` extra or an API key, the command prints a one-line `error:` hint instead of
 crashing.
 
+### Digest — collect + Fresh Catch in one step
+
+`digest` is a single verb that collects first, then renders only the **Fresh Catch**: postings
+whose first-seen `collected_at` timestamp falls at or after this run's start time (see ADR 0005
+and the *Fresh Catch* term in `CONTEXT.md`). A posting already in the store that merely
+re-appears this run is **not** a Fresh Catch.
+
+```bash
+scalper digest -p backend                           # collect + report only the Fresh Catch
+scalper digest --all-profiles --open                # one combined, tabbed Fresh Catch report
+scalper digest -p backend -s indeed linkedin        # restrict which sources to collect from
+```
+
+The output is the same self-contained HTML as `report`, scored and filtered through the same
+profile criteria — only the universe differs (Fresh Catch vs. all stored). A concise stdout
+summary prints the count and a per-profile breakdown:
+
+```
+7 new since 2026-06-17 14:30 UTC · backend 7 new · java 3 new. Digest: report.html
+  backend    7 new
+  java       3 new
+```
+
+Re-running with nothing new (`0 new`) still writes the digest and exits cleanly. Use
+`--no-semantic` / `--model` to control semantic scoring, and `-s/--source` to collect only
+specific sources (same flags as `collect`). Default output: `report.html` (same file as
+`report`, so `--open` after a digest just refreshes the same tab); `-o/--out` to override;
+`--open` launches it in a browser.
+
 ### Hard sources — LinkedIn & Indeed (optional, off by default)
 
 LinkedIn and Indeed have no public API and actively resist automation, so they
@@ -314,7 +347,8 @@ Implemented:
 - ✅ Self-contained HTML report (client-side sort/filter, tier badges)
 - ✅ Resume-driven profile drafting (`profile from-resume`) and Application Drafts
   (`draft`, cover letter + resume bullets per posting) — both `pip install -e .[llm]`
-- ✅ Tests for scoring, semantic, enrichment, and adapter parsing (structured + hard)
+- ✅ `digest` — collect + Fresh Catch report in one step (ADR 0005)
+- ✅ Tests for scoring, semantic, enrichment, adapter parsing, and digest
 
 Layered on next (designed, not yet built):
 - ⏳ Generic mapping-driven RSS/JSON adapter (declarative tier for `add-source`)
