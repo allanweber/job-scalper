@@ -11,6 +11,8 @@ from __future__ import annotations
 import re
 from typing import TYPE_CHECKING, Callable
 
+from scalper.prompts import APP_DRAFT_SYSTEM as _SYSTEM
+
 if TYPE_CHECKING:
     from scalper.llm.base import Completion, LLMProvider
     from scalper.scoring import ScoredPosting
@@ -21,17 +23,6 @@ Logger = Callable[[str], None]
 #: Trim the resume/posting before prompting, to bound token cost.
 _RESUME_LIMIT = 6000
 _DESC_LIMIT = 3000
-
-_SYSTEM = (
-    "You are a career assistant. Read the job posting, the candidate's resume, and the "
-    "skill match/gap summary, then write application material for the candidate to review "
-    "and edit. Reply in Markdown with exactly two top-level sections, in this order: "
-    '"## Cover Letter" (a tailored cover letter, 3-5 short paragraphs, no placeholders) '
-    'and "## Resume Bullets" (a bulleted list of resume-bullet suggestions tailored to '
-    "this posting). Ground every claim in the resume's actual experience — never invent "
-    "skills or experience the resume doesn't support. No other top-level sections, no "
-    "preamble outside the two sections."
-)
 
 _SLUG_RE = re.compile(r"[^a-z0-9]+")
 

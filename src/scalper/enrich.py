@@ -21,6 +21,7 @@ from pydantic import BaseModel, field_validator
 
 from scalper.config import LLMConfig, Profile
 from scalper.llm import build_provider
+from scalper.prompts import ENRICH_SYSTEM as _SYSTEM
 from scalper.scoring import ScoredPosting
 
 if TYPE_CHECKING:
@@ -52,22 +53,6 @@ _DESC_LIMIT = 2000
 
 #: Increment when the JSON schema changes so old cache entries are naturally invalidated.
 _SCHEMA_VERSION = 2
-
-_SYSTEM = """\
-You are a concise hiring assistant. Read the single job posting and extract the \
-following fields. Reply with STRICT JSON only — no prose, no code fences:
-{
-  "remote": true | false | null,
-  "seniority": "junior" | "mid" | "senior" | "staff" | "principal" | null,
-  "salary_range": {"min": integer | null, "max": integer | null, "currency": string | null} | null,
-  "timezone_requirement": string | null
-}
-Rules:
-- remote: true only if the role explicitly allows fully remote work; null if unclear
-- seniority: infer from title + description; null if not determinable
-- salary_range: extract numbers from text (e.g. "$120k–150k" → min:120000, max:150000, currency:"USD"); null if not mentioned
-- timezone_requirement: quote any timezone constraint or "async-friendly" language; null if none mentioned\
-"""
 
 
 class SalaryRange(BaseModel):

@@ -197,7 +197,7 @@ def run_report(
     ``on_enrich_log`` (``None`` to silence them). Raises :class:`ProfileNotFoundError`
     or :class:`StoreNotFoundError` instead of exiting.
     """
-    db = db or config.database
+    db = config.database_path(db)
     try:
         profile: Profile = config.profile(profile_name)
     except KeyError as e:
@@ -266,7 +266,7 @@ def run_report_all(
     Raises :class:`NoProfilesError`, :class:`ProfileNotFoundError`, or
     :class:`StoreNotFoundError` instead of exiting.
     """
-    db = db or config.database
+    db = config.database_path(db)
     if not profile_names:
         raise NoProfilesError("no profiles defined in config; add one under `profiles:`.")
     try:

@@ -1,7 +1,12 @@
 # Job Scalper configuration. Copy to config.yaml and edit.
 # See CONTEXT.md for the vocabulary used here.
 
-# Where collected postings are stored.
+# Base folder for all application output. `~` is expanded and the folder is
+# created automatically on first use. Relative `database` and `draft_output_dir`
+# values below are resolved underneath it; absolute paths are used as-is.
+output_dir: ~/scalper
+
+# Where collected postings are stored (relative -> under output_dir).
 database: scalper.db
 
 # The global search that drives every source at collect time
@@ -104,8 +109,8 @@ llm:
 # Default folder `scalper draft <uid>... -p <profile> --resume <file>` saves its
 # Application Drafts into — one file per posting, named
 # "[profile]_[position_name]_[uid].md", holding both the cover letter and resume
-# bullets. `--out DIR` on the command overrides this. If neither is set, drafts
-# save to the current directory.
+# bullets. `--out DIR` on the command overrides this. Relative -> under
+# output_dir; if unset, drafts save to "drafts/" under output_dir.
 # draft_output_dir: drafts
 
 # Named search Profiles. `scalper report --profile <name>` selects one and

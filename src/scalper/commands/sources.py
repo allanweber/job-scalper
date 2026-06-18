@@ -32,7 +32,7 @@ class SourcesResult:
 
 def run_sources(config: Config, *, db: str | None = None) -> SourcesResult:
     """Cross-reference the adapter registry, the config, and the stored counts."""
-    db = db or config.database
+    db = config.database_path(db)
 
     counts: dict[str, int] = {}
     if Path(db).exists():

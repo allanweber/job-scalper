@@ -82,7 +82,7 @@ def run_digest(
     except KeyError as e:
         raise ProfileNotFoundError(str(e)) from None
 
-    db = db or config.database
+    db = config.database_path(db)
     run_start = datetime.now(timezone.utc)
     run_collect(config, db=db, only_sources=only_sources, on_info=on_info, on_warning=on_warning,
                 on_source_log=on_source_log)

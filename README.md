@@ -182,7 +182,7 @@ scalper draft remotive::123 remotive::456 -p backend --resume resume.pdf --out d
 ```
 
 Every posting is drafted into its **own file**, never just printed: `--out DIR` (or
-`draft_output_dir` in config.yaml, or the current directory if neither is set) gets one
+`draft_output_dir` in config.yaml, or `drafts/` under `output_dir` if neither is set) gets one
 `[profile]_[position_name]_[uid].md` per posting, holding both sections. An unknown uid
 reports cleanly — listing every uid not found in the store — before any LLM call is
 made. Same logging contract as enrichment/profile-drafting: request/response stream to
@@ -337,7 +337,9 @@ has in the store, plus adapters that are registered but not yet in your config.
 
 ## Configuration
 
-`config.yaml` holds the database path, a global `search:` block, a list of sources, and
+`config.yaml` holds `output_dir` (the base folder for all output — database and drafts —
+defaulting to `~/scalper` and auto-created on first use; relative `database`/`draft_output_dir`
+values resolve underneath it), a global `search:` block, a list of sources, and
 named profiles. See `config.example.yaml` for a documented template. Thirteen company-agnostic
 adapters ship today — eleven structured (all keyless except Adzuna) plus two optional hard
 (scraped) sources, off by default:

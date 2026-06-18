@@ -149,17 +149,18 @@ def test_falls_back_to_config_draft_output_dir_when_no_out_arg(stub_provider, tm
     assert result.drafts[0].written_to.parent == config_default
 
 
-def test_falls_back_to_cwd_when_no_out_arg_or_config(stub_provider, tmp_path, monkeypatch):
+def test_falls_back_to_drafts_under_output_dir_when_no_out_arg_or_config(
+    stub_provider, tmp_path
+):
     db_path = tmp_path / "store.db"
     uids = _seed_store(db_path)
     resume = tmp_path / "resume.md"
     resume.write_text("Backend engineer, Python.")
-    config = _config(database=str(db_path))
-    monkeypatch.chdir(tmp_path)
+    config = _config(database=str(db_path), output_dir=str(tmp_path / "out"))
 
     result = run_draft(config, "backend", [uids[0]], str(resume))
 
-    assert result.drafts[0].written_to.parent.resolve() == tmp_path.resolve()
+    assert result.drafts[0].written_to.parent.resolve() == (tmp_path / "out" / "drafts").resolve()
 
 
 def test_filename_uses_profile_position_and_uid(stub_provider, tmp_path):

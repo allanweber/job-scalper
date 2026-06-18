@@ -299,7 +299,7 @@ def build_parser() -> argparse.ArgumentParser:
                          help="path to the resume file (PDF, markdown, or plain text)")
     p_draft.add_argument("--out", default=None, metavar="DIR",
                          help="folder to save drafts into, one file per posting "
-                              "(default: config draft_output_dir, else the current directory)")
+                              "(default: config draft_output_dir, else drafts/ under output_dir)")
     p_draft.add_argument("--model", default=None,
                          help="override the LLM model used for drafting "
                               "(default: llm.draft_model from config)")

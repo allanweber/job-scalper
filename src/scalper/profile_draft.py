@@ -13,6 +13,8 @@ from typing import TYPE_CHECKING, Callable
 import yaml
 from pydantic import BaseModel, Field, field_validator
 
+from scalper.prompts import PROFILE_DRAFT_SYSTEM as _SYSTEM
+
 if TYPE_CHECKING:
     from scalper.llm.base import Completion, LLMProvider
 
@@ -21,19 +23,6 @@ Logger = Callable[[str], None]
 
 #: Trim the resume before prompting, to bound token cost.
 _RESUME_LIMIT = 6000
-
-_SYSTEM = (
-    "You are a career assistant. Read the resume and extract search criteria for a job "
-    "search tool. Reply with STRICT JSON only — no prose, no code fences — using exactly "
-    'these keys: {"titles": [job title strings the candidate should search for], '
-    '"required_skills": [core skills demonstrated in the resume], '
-    '"nice_to_have_skills": [secondary or peripheral skills], '
-    '"keywords": [free-text phrases worth matching on, e.g. domain or methodology]}. '
-    "Keep each list short (3-8 items) and use lowercase, concise phrases. Each skill must "
-    'be ONE atomic skill or technology per item — never join several with "/", ",", or '
-    '"and" into a single item (e.g. write "postgres" and "redis" as two separate items, '
-    'not "postgres / redis" as one)."'
-)
 
 #: Defensive split for composite skills the model still joins despite the prompt
 #: (e.g. "python / pandas data pipelines" → "python", "pandas data pipelines").

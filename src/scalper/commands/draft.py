@@ -5,7 +5,7 @@ Follows the purity contract (no argparse/print/exit): failures raise `CommandErr
 subclasses instead of printing a hint directly, so the CLI can render them uniformly.
 Each posting's draft is always written to its own file (never just printed), named
 `[profile]_[position_name]_[uid].md` under the resolved output folder — `out_dir` arg,
-else `config.draft_output_dir`, else the current directory.
+else `config.draft_output_dir`, else `drafts/` under `config.output_dir`.
 """
 
 from __future__ import annotations
@@ -87,7 +87,7 @@ def run_draft(
     Every uid must already be in the store (run `collect` first); an unknown uid raises
     `PostingNotFoundError` listing all of them before any LLM call is made. Each draft is
     saved to its own file under the resolved output folder (`out_dir`, else
-    `config.draft_output_dir`, else the current directory) as
+    `config.draft_output_dir`, else `drafts/` under `config.output_dir`) as
     `[profile]_[position_name]_[uid].md`, combining the cover letter and resume bullets
     in one file. Raises a `CommandError` subclass instead of exiting when the resume
     file, profile, store, or LLM provider is unavailable.
@@ -96,7 +96,7 @@ def run_draft(
     to silence it) and a token/cost summary is always emitted through `on_info`, the
     same observability contract as `report --enrich` and `profile from-resume`.
     """
-    db = db or config.database
+    db = config.database_path(db)
     try:
         profile = config.profile(profile_name)
     except KeyError as e:
@@ -123,8 +123,7 @@ def run_draft(
 
     used_model = model or config.llm.draft_model
     usage = Usage(model=used_model)
-    target_dir = Path(out_dir) if out_dir else Path(config.draft_output_dir or ".")
-    target_dir.mkdir(parents=True, exist_ok=True)
+    target_dir = config.draft_dir(out_dir)
 
     drafts: list[DraftedApplication] = []
     for uid in uids:

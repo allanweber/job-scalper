@@ -1,7 +1,5 @@
 # PLAN
 
-## Promtpts location
-
 ## Draft complete resume and cover letter
 
 ## Add more sources

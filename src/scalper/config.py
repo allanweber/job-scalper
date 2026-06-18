@@ -67,6 +67,10 @@ class SourceConfig(BaseModel):
 
 
 class Config(BaseModel):
+    #: Base folder for all application output (database, drafts, …). `~` is
+    #: expanded and the folder is created on first use. Relative `database` and
+    #: `draft_output_dir` values resolve underneath it.
+    output_dir: str = "~/scalper"
     database: str = "scalper.db"
     # The global search spec that drives every source at collect time .
     search: SearchQuery = Field(default_factory=SearchQuery)
@@ -83,6 +87,36 @@ class Config(BaseModel):
     #: When true, every HTTP request/response made by a source adapter is logged
     #: to stderr during `collect` and `digest`. False by default.
     verbose_sources: bool = False
+
+    def resolved_output_dir(self) -> Path:
+        """Expand `~` in `output_dir`, create the folder, and return it."""
+        path = Path(self.output_dir).expanduser()
+        path.mkdir(parents=True, exist_ok=True)
+        return path
+
+    def resolve_output_path(self, value: str) -> Path:
+        """Resolve `value` against the output dir.
+
+        `~` is expanded; absolute paths are returned as-is; relative paths are
+        placed under `resolved_output_dir()`.
+        """
+        path = Path(value).expanduser()
+        if path.is_absolute():
+            return path
+        return self.resolved_output_dir() / path
+
+    def database_path(self, override: str | None = None) -> Path:
+        """Resolved database path, creating its parent folder."""
+        path = self.resolve_output_path(override or self.database)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        return path
+
+    def draft_dir(self, override: str | Path | None = None) -> Path:
+        """Resolved drafts folder, created on use."""
+        value = str(override) if override else (self.draft_output_dir or "drafts")
+        path = self.resolve_output_path(value)
+        path.mkdir(parents=True, exist_ok=True)
+        return path
 
     def profile(self, name: str) -> Profile:
         try:
@@ -109,6 +143,7 @@ def load_config(path: str | Path) -> Config:
     sources = [_parse_source(s) for s in data.get("sources", [])]
     profiles = {name: Profile.model_validate(p) for name, p in data.get("profiles", {}).items()}
     return Config(
+        output_dir=data.get("output_dir", "~/scalper"),
         database=data.get("database", "scalper.db"),
         search=SearchQuery.model_validate(data.get("search", {})),
         sources=sources,

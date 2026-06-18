@@ -47,7 +47,7 @@ def run_insights(
     db:
         Database path override (default: ``config.database``).
     """
-    db_path = Path(db or config.database)
+    db_path = config.database_path(db)
     if not db_path.exists():
         raise StoreNotFoundError(
             f"no database at {db_path} — run 'scalper collect' first"

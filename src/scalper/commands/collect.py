@@ -74,7 +74,7 @@ def run_collect(
     is true), every HTTP request/response made by adapters is logged through it.
     Raises :class:`NoSourcesError` when there is nothing to collect.
     """
-    db = db or config.database
+    db = config.database_path(db)
     query = config.search
     if query.terms:
         on_info(f"Searching for: {', '.join(query.terms)}")
