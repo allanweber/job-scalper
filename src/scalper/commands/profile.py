@@ -180,11 +180,11 @@ def run_from_resume(
     """
     resume_text = _load_resume_text(resume)
 
-    provider = build_provider(config.llm.provider)
+    provider = build_provider(config.llm.provider, api_key=config.llm.api_key)
     if provider is None:
         raise LLMUnavailableError(
             "LLM unavailable — install it with: pip install -e '.[llm]' and set "
-            "ANTHROPIC_API_KEY"
+            "llm.api_key in config (or ANTHROPIC_API_KEY)"
         )
 
     used_model = model or config.llm.draft_model

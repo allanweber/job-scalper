@@ -28,8 +28,11 @@ scalper profile from-resume --name backend --resume resume.pdf         # draft, 
 scalper profile from-resume --name backend --resume resume.pdf --write # …and append to config.yaml
 scalper profile from-resume --name backend --resume resume.pdf --write --force # overwrite
 
-scalper draft remotive::123 -p backend --resume resume.pdf             # one posting
+scalper draft remotive::123 -p backend --resume resume.pdf             # tailored resume + cover letter
 scalper draft remotive::123 remotive::456 -p backend --resume resume.pdf --out drafts/  # several
+
+scalper render drafts/backend_backend-engineer_remotive-123/  # (re)build PDFs from edited markdown
+scalper render drafts/.../resume.md                           # just one file
 
 scalper digest -p backend                           # collect + report only the Fresh Catch
 scalper digest --all-profiles --open                # same, one combined tab per profile
@@ -107,10 +110,13 @@ install the extra and provide a key:
 
 ```bash
 pip install -e '.[llm]'              # pulls the anthropic SDK
-export ANTHROPIC_API_KEY=sk-ant-…
+# set the key once in config.yaml under llm.api_key (or export ANTHROPIC_API_KEY)
 scalper report --profile backend --enrich          # enrich the top N (config llm.top_n)
 scalper report --profile backend --enrich --top 5  # or cap it per run
 ```
+
+The API key comes from `llm.api_key` in `config.yaml` (git-ignored), so you set it once;
+if it's unset, the provider falls back to the `ANTHROPIC_API_KEY` env var.
 
 Cost is bounded by `--top`/`llm.top_n`, not by how many postings you collected. Results are
 cached in the store keyed by posting + profile criteria + model, so re-running a report is
@@ -152,7 +158,7 @@ of hand-authoring them. It reuses the same `[llm]` extra/key as enrichment (mode
 
 ```bash
 pip install -e '.[llm]'              # if not already installed
-export ANTHROPIC_API_KEY=sk-ant-…
+# set llm.api_key in config.yaml (or export ANTHROPIC_API_KEY)
 
 scalper profile from-resume --name backend --resume resume.pdf          # prints YAML
 scalper profile from-resume --name backend --resume resume.pdf --write  # …and appends it
@@ -167,28 +173,48 @@ of crashing.
 
 ### Application drafts (optional)
 
-`draft <uid> [<uid> ...] -p <profile> --resume <file>` asks the LLM to write a cover
-letter plus tailored resume bullets for one or more stored postings (find uids in a
-`report`'s rows or HTML), grounded in the posting text, your resume, and that profile's
-Stage 1 matched/missing skills. Reuses the same `[llm]` extra/key as enrichment (model
-from `llm.build_model`).
+`draft <uid> [<uid> ...] -p <profile> --resume <file>` asks the LLM to write a
+**complete tailored resume + cover letter** for one or more stored postings (find uids in
+a `report`'s rows or HTML), grounded in the posting text, your resume, and that profile's
+Stage 1 matched/missing skills. It rephrases your *real* resume into the posting's
+language and never invents employers, dates, or credentials; required skills are handled
+by a three-tier rule — present skills stated plainly, genuinely *adjacent* skills bridged
+(and ledgered), unrelated skills left out (ADR 0006). Reuses the same `[llm]` extra/key as
+enrichment.
 
 ```bash
 pip install -e '.[llm]'              # if not already installed
-export ANTHROPIC_API_KEY=sk-ant-…
+# set llm.api_key in config.yaml (or export ANTHROPIC_API_KEY)
 
 scalper draft remotive::123 -p backend --resume resume.pdf
 scalper draft remotive::123 remotive::456 -p backend --resume resume.pdf --out drafts/
 ```
 
-Every posting is drafted into its **own file**, never just printed: `--out DIR` (or
-`draft_output_dir` in config.yaml, or `drafts/` under `output_dir` if neither is set) gets one
-`[profile]_[position_name]_[uid].md` per posting, holding both sections. An unknown uid
-reports cleanly — listing every uid not found in the store — before any LLM call is
-made. Same logging contract as enrichment/profile-drafting: request/response stream to
-stderr (`--quiet-llm` to silence), a token/cost summary always prints. Without the
-`[llm]` extra or an API key, the command prints a one-line `error:` hint instead of
-crashing.
+Each posting gets its **own folder**, `[profile]_[position_name]_[uid]/`, under `--out DIR`
+(or `draft_output_dir` in config.yaml, or `drafts/` under `output_dir` if neither is set),
+holding `resume.md`, `cover_letter.md`, and — only when at least one adjacent skill was
+bridged — a `stretch_claims.md` ledger ("be ready to defend these"). A posting whose draft
+comes back malformed is skipped (no partial folder); an unknown uid reports cleanly before
+any LLM call. Same logging contract as enrichment/profile-drafting: request/response stream
+to stderr (`--quiet-llm` to silence), a token/cost summary always prints.
+
+### PDF renditions & `render` (optional)
+
+With the `[pdf]` extra installed, `draft` also writes `resume.pdf` and `cover_letter.pdf`
+alongside the markdown, rendered through headless Chromium to match a classic single-column
+resume layout (ADR 0007). PDF output is best-effort: without the extra the markdown is still
+written and a one-line hint is printed. The markdown is the source of truth.
+
+`render <path> [<path> ...]` (re)builds the PDFs from the markdown with **no LLM call** —
+edit `resume.md` by hand, then re-render. Point it at a draft folder (renders both PDFs) or
+a single `resume.md` / `cover_letter.md`; `stretch_claims.md` is never rendered.
+
+```bash
+pip install -e '.[pdf]' && playwright install chromium
+
+scalper render drafts/backend_backend-engineer_remotive-123/   # both PDFs in the folder
+scalper render drafts/backend_backend-engineer_remotive-123/resume.md   # just one
+```
 
 ### Digest — collect + Fresh Catch in one step
 
@@ -394,7 +420,10 @@ Implemented:
 - ✅ Stage 2 LLM enrichment: summary + skill-gap on the shortlist, cached, swappable provider — `pip install -e .[llm]`
 - ✅ Self-contained HTML report (client-side sort/filter, tier badges)
 - ✅ Resume-driven profile drafting (`profile from-resume`) and Application Drafts
-  (`draft`, cover letter + resume bullets per posting) — both `pip install -e .[llm]`
+  (`draft`, complete tailored resume + cover letter per posting, three-tier skill fit,
+  ADR 0006) — both `pip install -e .[llm]`
+- ✅ PDF renditions of drafted resume/cover letter + `render` to rebuild them from edited
+  markdown (headless Chromium, ADR 0007) — `pip install -e .[pdf]`
 - ✅ `digest` — collect + Fresh Catch report in one step (ADR 0005)
 - ✅ `insights` — aggregate market view: skill demand, salary stats, source counts, weekly volume (no LLM)
 - ✅ Tests for scoring, semantic, enrichment, adapter parsing, digest, and insights

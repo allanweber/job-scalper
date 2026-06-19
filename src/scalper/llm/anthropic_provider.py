@@ -1,9 +1,9 @@
 """Anthropic-backed LLM provider (default for Stage 2 enrichment).
 
-Optional: requires the `[llm]` extra (the `anthropic` SDK) and an API key in
-`ANTHROPIC_API_KEY`. The SDK and client are loaded lazily so importing this
-module never fails when the extra isn't installed; `build_provider` catches the
-missing dep/key and returns ``None`` instead.
+Optional: requires the `[llm]` extra (the `anthropic` SDK) and an API key — from
+`llm.api_key` in config, or the `ANTHROPIC_API_KEY` env var as a fallback. The SDK
+and client are loaded lazily so importing this module never fails when the extra
+isn't installed; `build_provider` catches the missing dep/key and returns ``None``.
 """
 
 from __future__ import annotations
@@ -21,14 +21,15 @@ def anthropic_available() -> bool:
 class AnthropicProvider:
     name = "anthropic"
 
-    def __init__(self) -> None:
+    def __init__(self, api_key: str | None = None) -> None:
         if not anthropic_available():
             raise RuntimeError("anthropic SDK not installed; `pip install -e '.[llm]'`")
-        if not os.environ.get("ANTHROPIC_API_KEY"):
-            raise RuntimeError("ANTHROPIC_API_KEY is not set")
+        key = api_key or os.environ.get("ANTHROPIC_API_KEY")
+        if not key:
+            raise RuntimeError("no API key — set llm.api_key in config or ANTHROPIC_API_KEY")
         from anthropic import Anthropic
 
-        self._client = Anthropic()
+        self._client = Anthropic(api_key=key)
 
     def complete(
         self,
@@ -61,5 +62,5 @@ class AnthropicProvider:
 
 
 @register_provider("anthropic")
-def _build() -> AnthropicProvider:
-    return AnthropicProvider()
+def _build(api_key: str | None = None) -> AnthropicProvider:
+    return AnthropicProvider(api_key)

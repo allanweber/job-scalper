@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<style>
+  @page { size: Letter; }
+  * { box-sizing: border-box; }
+  body {
+    font-family: Calibri, Carlito, "Segoe UI", Arial, sans-serif;
+    font-size: 11pt;
+    line-height: 1.4;
+    color: #111;
+    margin: 0;
+  }
+  header { text-align: center; margin-bottom: 18pt; }
+  h1.name { font-size: 22pt; font-weight: 700; margin: 0; }
+  .contact { font-size: 10pt; margin: 2pt 0 0; }
+  .body p { margin: 0 0 10pt; text-align: justify; }
+</style>
+</head>
+<body>
+  <header>
+    {% if name %}<h1 class="name">{{ name }}</h1>{% endif %}
+    {% for line in contact_lines %}<div class="contact">{{ line }}</div>{% endfor %}
+  </header>
+  <div class="body">{{ body_html }}</div>
+</body>
+</html>

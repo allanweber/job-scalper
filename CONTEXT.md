@@ -121,10 +121,38 @@ config and not a Job Posting — never persisted in the postings database. Read 
 both LLM features that need it: drafting a Profile, and drafting Application Drafts.
 
 ### Application Draft
-LLM-generated application material tailored to one Job Posting for one Profile: a cover
-letter plus suggested resume bullet edits, grounded in the posting text, the user's
-Resume, and the Profile's matched/missing skills from Stage 1. Output for the user to
-edit — never sent anywhere by the tool.
+LLM-generated application material tailored to one Job Posting for one Profile: a
+complete, tailored Resume plus a cover letter (and, only when needed, a Stretch Claims
+ledger), each in editable markdown, plus printable PDF renditions of the resume and
+cover letter. Grounded in the posting text, the user's Resume, and the Profile's
+matched/missing skills from Stage 1. The model reorders and rephrases the user's real
+Resume into the posting's language — it never invents employers, dates, titles, or
+credentials. Skills are handled by the three-tier rule (see Skill Fit Tier). Output for
+the user to review and edit — never sent anywhere by the tool. The markdown is the source
+of truth; PDFs are always derived from it (see Render).
+
+### Render
+The operation that turns an Application Draft's editable markdown into its PDF renditions
+of the resume and cover letter, with no LLM call. Runs automatically (best-effort) when an
+Application Draft is produced, and on demand when the user has hand-edited the markdown.
+The Stretch Claims ledger is never rendered — it stays markdown only.
+
+### Skill Fit Tier
+How a skill required by a Job Posting is treated when drafting the tailored Resume:
+- **Tier 1 — Present**: the skill is genuinely in the user's Resume. Stated plainly, in
+  the posting's wording.
+- **Tier 2 — Adjacent**: the skill is missing but in the same family as a real one, with
+  a concrete named foundation in the Resume that a hiring manager would accept (e.g.
+  Docker → Kubernetes). May be *bridged* into the Resume — and every bridge is recorded
+  as a Stretch Claim.
+- **Tier 3 — Unrelated**: no honest bridge from anything in the Resume (e.g. Java → Go).
+  Never claimed.
+
+### Stretch Claim
+A Tier-2 skill that was bridged into the tailored Resume from adjacent real experience —
+a claim the user cannot yet defend cold. Every bridge produces one Stretch Claim, ledgered
+for the user with the real experience it was bridged from. The ledger exists only when at
+least one bridge was made; when it exists it lists all of them.
 
 ### Market Insights
 A read-only aggregate description of the *stored market* (not a fit to any Profile): how
@@ -156,9 +184,12 @@ stored postings against a Profile → render HTML. See ADR 0002 / ADR 0004.
   that run, via the preserved first-seen `collected_at`). Its "new" is store-relative and
   per-run — what this scrape surfaced that the store didn't already hold. See ADR 0005.
 - Resume is passed per-command via `--resume <file>` (no config-level default), shared by
-  two LLM features: drafting a Profile from it, and drafting Application Drafts (cover
-  letter + resume bullets) per posting. Both are `[llm]`-gated and fail-soft; profile
-  drafting prints YAML to review (opt-in `--write`).
+  two LLM features: drafting a Profile from it, and drafting Application Drafts (a
+  complete tailored resume + cover letter, plus a Stretch Claims ledger when any skill
+  was bridged) per posting. Both are `[llm]`-gated and fail-soft; profile drafting prints
+  YAML to review (opt-in `--write`). Application Drafts use the three-tier Skill Fit rule:
+  real skills stated plainly, adjacent skills bridged (and ledgered), unrelated skills
+  never claimed.
 - Market Insights is a read-only, no-LLM aggregate over the store (skill demand, salary,
   source/volume) — it describes supply, never scores a fit.
 - Scheduling: manual `collect` command, cron-friendly; no daemon.

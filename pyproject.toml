@@ -20,6 +20,9 @@ dependencies = [
 semantic = ["sentence-transformers>=2.7"]
 llm = ["anthropic>=0.39"]
 scrape = ["playwright>=1.44"]
+# PDF renditions of drafted resumes/cover letters: HTML->PDF via headless Chromium
+# (reusing Playwright) plus a markdown renderer. See ADR 0007.
+pdf = ["playwright>=1.44", "markdown>=3.5"]
 dev = ["pytest>=8.0"]
 
 [project.scripts]

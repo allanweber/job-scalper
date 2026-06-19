@@ -41,6 +41,10 @@ class LLMConfig(BaseModel):
 
     #: Provider key in the LLM registry (currently only "anthropic").
     provider: str = "anthropic"
+    #: API key for the provider. When set, it's used directly so you don't need the
+    #: `ANTHROPIC_API_KEY` env var; when unset, the provider falls back to that env var.
+    #: `config.yaml` is git-ignored, so this stays out of version control.
+    api_key: str | None = None
     #: Cheap model for per-job enrichment (summary + skill-gap).
     enrich_model: str = "claude-haiku-4-5"
     #: Model used by `scalper draft` and `scalper profile from-resume`.

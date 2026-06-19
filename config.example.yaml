@@ -98,6 +98,9 @@ sources:
 # stdout; add --quiet-llm to keep only the summary.
 llm:
   provider: anthropic
+  # API key for the provider. Set it here so you don't need the ANTHROPIC_API_KEY env
+  # var; if unset, the provider falls back to that env var. config.yaml is git-ignored.
+  # api_key: sk-ant-...
   enrich_model: claude-haiku-4-5      # cheap model for per-job summaries
   top_n: 10                           # how many top postings to enrich
   enabled: false

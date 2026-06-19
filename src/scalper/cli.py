@@ -19,6 +19,7 @@ from scalper.commands.digest import run_digest
 from scalper.commands.draft import run_draft
 from scalper.commands.insights import run_insights
 from scalper.commands.profile import run_from_resume
+from scalper.commands.render import run_render
 from scalper.commands.report import run_report, run_report_all
 from scalper.commands.sources import run_sources
 from scalper.config import load_config
@@ -174,14 +175,30 @@ def cmd_draft(args: argparse.Namespace) -> int:
         result = run_draft(
             config, args.profile, args.uid, args.resume,
             db=args.db, out_dir=args.out, model=args.model,
-            on_info=_err, on_llm_log=llm_log,
+            on_info=_err, on_warning=_err, on_llm_log=llm_log,
         )
     except CommandError as e:
         _err(str(e))
         return 1
     for d in result.drafts:
-        print(f"{d.uid}  {d.title} — {d.company}  →  {d.written_to}")
-    return 0
+        kinds = [p.name for p in d.md_files] + [p.name for p in d.pdf_files]
+        print(f"{d.uid}  {d.title} — {d.company}  →  {d.folder}")
+        print(f"    {', '.join(kinds)}")
+    for uid, reason in result.failures:
+        print(f"{uid}  (skipped: {reason})")
+    return 0 if result.drafts else 1
+
+
+def cmd_render(args: argparse.Namespace) -> int:
+    config = load_config(args.config)
+    try:
+        result = run_render(config, args.path, on_warning=_err)
+    except CommandError as e:
+        _err(str(e))
+        return 1
+    for p in result.rendered:
+        print(f"rendered  {p}")
+    return 0 if result.rendered else 1
 
 
 def cmd_insights(args: argparse.Namespace) -> int:
@@ -291,14 +308,14 @@ def build_parser() -> argparse.ArgumentParser:
     p_digest.set_defaults(func=cmd_digest)
 
     p_draft = sub.add_parser(
-        "draft", help="draft a cover letter + resume bullets for one or more postings"
+        "draft", help="draft a tailored resume + cover letter for one or more postings"
     )
     p_draft.add_argument("uid", nargs="+", help="posting uid(s) to draft for (see report output)")
     p_draft.add_argument("-p", "--profile", required=True, help="profile name from config")
     p_draft.add_argument("--resume", required=True, metavar="FILE",
                          help="path to the resume file (PDF, markdown, or plain text)")
     p_draft.add_argument("--out", default=None, metavar="DIR",
-                         help="folder to save drafts into, one file per posting "
+                         help="parent folder for the per-posting draft folders "
                               "(default: config draft_output_dir, else drafts/ under output_dir)")
     p_draft.add_argument("--model", default=None,
                          help="override the LLM model used for drafting "
@@ -307,6 +324,13 @@ def build_parser() -> argparse.ArgumentParser:
                          help="suppress the per-request/response LLM log (keep the "
                               "usage summary); both go to stderr, never stdout")
     p_draft.set_defaults(func=cmd_draft)
+
+    p_render = sub.add_parser(
+        "render", help="(re)render draft PDFs from resume.md/cover_letter.md (no LLM)"
+    )
+    p_render.add_argument("path", nargs="+",
+                          help="draft folder(s) and/or resume.md/cover_letter.md file(s) to render")
+    p_render.set_defaults(func=cmd_render)
 
     p_insights = sub.add_parser(
         "insights", help="aggregate market view: skill demand, salary, source counts, weekly volume"

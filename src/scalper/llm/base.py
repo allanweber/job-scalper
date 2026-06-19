@@ -58,16 +58,23 @@ def register_provider(name: str) -> Callable[[Callable[[], "LLMProvider"]], Call
     return deco
 
 
-def build_provider(name: str = "anthropic") -> "LLMProvider | None":
+def build_provider(name: str = "anthropic", *, api_key: str | None = None) -> "LLMProvider | None":
     """Instantiate a provider by name, or ``None`` if its optional dep is missing.
 
-    Import errors (the SDK isn't installed) and missing credentials fail soft to
-    ``None`` so enrichment is skipped rather than aborting the report.
+    `api_key`, when given (e.g. from `llm.api_key` in config), is passed to the provider
+    factory so credentials need not live in the environment. Factories that don't accept a
+    key (e.g. test stubs) are still called with no arguments. Import errors (the SDK isn't
+    installed) and missing credentials fail soft to ``None`` so enrichment is skipped
+    rather than aborting the report.
     """
     factory = REGISTRY.get(name)
     if factory is None:
         return None
     try:
-        return factory()
+        try:
+            return factory(api_key=api_key)
+        except TypeError:
+            # Factory takes no api_key (e.g. a no-arg test stub) — call it plainly.
+            return factory()
     except Exception:  # noqa: BLE001 — missing SDK / key → no provider, no crash
         return None

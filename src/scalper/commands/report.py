@@ -129,7 +129,7 @@ def _make_enricher(
     )
     if enricher is None:
         on_info("note: enrichment off — install it with: pip install -e '.[llm]' "
-                "and set ANTHROPIC_API_KEY")
+                "and set llm.api_key in config (or ANTHROPIC_API_KEY)")
     return enricher
 
 

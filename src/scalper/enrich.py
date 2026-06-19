@@ -253,7 +253,7 @@ def build_enricher(
     """Return an `Enricher`, or ``None`` if disabled or no provider is available."""
     if not enabled:
         return None
-    provider = build_provider(config.provider)
+    provider = build_provider(config.provider, api_key=config.api_key)
     if provider is None:
         return None
     return Enricher(provider, model or config.enrich_model, store=store, logger=logger)

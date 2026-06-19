@@ -1,11 +1,13 @@
-"""`draft` command core: Application Drafts (cover letter + resume bullets) for one or
-more postings (Phase 10).
+"""`draft` command core: Application Drafts (tailored resume + cover letter) for one or
+more postings (Phase 10/13).
 
 Follows the purity contract (no argparse/print/exit): failures raise `CommandError`
 subclasses instead of printing a hint directly, so the CLI can render them uniformly.
-Each posting's draft is always written to its own file (never just printed), named
-`[profile]_[position_name]_[uid].md` under the resolved output folder — `out_dir` arg,
-else `config.draft_output_dir`, else `drafts/` under `config.output_dir`.
+Each posting gets its own folder `[profile]_[position_name]_[uid]/` under the resolved
+output folder (`out_dir`, else `config.draft_output_dir`, else `drafts/` under
+`config.output_dir`), holding `resume.md`, `cover_letter.md`, an optional
+`stretch_claims.md`, and — when the `[pdf]` extra is installed — `resume.pdf` /
+`cover_letter.pdf`. PDF rendering is best-effort: missing it never blocks the markdown.
 """
 
 from __future__ import annotations
@@ -14,14 +16,23 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable
 
-from scalper.app_draft import draft_application, draft_filename
+from scalper.app_draft import draft_application, draft_folder_name, split_draft
 from scalper.commands import CommandError
 from scalper.config import Config
 from scalper.enrich import Usage, format_usage
 from scalper.llm import build_provider
+from scalper.pdf import (
+    COVER_LETTER_MD,
+    RESUME_MD,
+    install_hint,
+    pdf_available,
+    render_draft_folder,
+)
 from scalper.resume import load_resume
 from scalper.scoring import score_posting
 from scalper.store import JobStore
+
+_STRETCH_CLAIMS_MD = "stretch_claims.md"
 
 
 class ResumeNotFoundError(CommandError):
@@ -53,14 +64,20 @@ class DraftedApplication:
     uid: str
     title: str
     company: str
-    markdown: str
-    written_to: Path
+    folder: Path
+    #: Markdown files written (resume, cover letter, and stretch claims when present).
+    md_files: list[Path]
+    #: PDF files rendered (empty when the `[pdf]` extra is unavailable or rendering failed).
+    pdf_files: list[Path]
+    has_stretch_claims: bool
 
 
 @dataclass
 class DraftResult:
     profile_name: str
     drafts: list[DraftedApplication] = field(default_factory=list)
+    #: Postings whose draft couldn't be produced (uid, reason); fail-soft, never partial.
+    failures: list[tuple[str, str]] = field(default_factory=list)
 
 
 def _load_resume_text(resume: str | Path) -> str:
@@ -80,17 +97,17 @@ def run_draft(
     out_dir: str | Path | None = None,
     model: str | None = None,
     on_info: Callable[[str], None] = _noop,
+    on_warning: Callable[[str], None] = _noop,
     on_llm_log: Callable[[str], None] | None = None,
 ) -> DraftResult:
     """Draft an Application Draft for each posting `uid`, scored against `profile_name`.
 
     Every uid must already be in the store (run `collect` first); an unknown uid raises
-    `PostingNotFoundError` listing all of them before any LLM call is made. Each draft is
-    saved to its own file under the resolved output folder (`out_dir`, else
-    `config.draft_output_dir`, else `drafts/` under `config.output_dir`) as
-    `[profile]_[position_name]_[uid].md`, combining the cover letter and resume bullets
-    in one file. Raises a `CommandError` subclass instead of exiting when the resume
-    file, profile, store, or LLM provider is unavailable.
+    `PostingNotFoundError` listing all of them before any LLM call is made. Each posting's
+    folder is written only when both the resume and cover letter parsed — a malformed LLM
+    reply is a per-posting failure (recorded in `DraftResult.failures`, never a partial
+    folder). PDFs are rendered when the `[pdf]` extra is present; otherwise the markdown
+    is still written and a one-time install hint is emitted via `on_warning`.
 
     Every LLM call is logged: the request/response stream through `on_llm_log` (`None`
     to silence it) and a token/cost summary is always emitted through `on_info`, the
@@ -107,11 +124,11 @@ def run_draft(
 
     resume_text = _load_resume_text(resume)
 
-    provider = build_provider(config.llm.provider)
+    provider = build_provider(config.llm.provider, api_key=config.llm.api_key)
     if provider is None:
         raise LLMUnavailableError(
             "LLM unavailable — install it with: pip install -e '.[llm]' and set "
-            "ANTHROPIC_API_KEY"
+            "llm.api_key in config (or ANTHROPIC_API_KEY)"
         )
 
     with JobStore(db) as store:
@@ -125,26 +142,56 @@ def run_draft(
     usage = Usage(model=used_model)
     target_dir = config.draft_dir(out_dir)
 
+    can_pdf = pdf_available()
+    if not can_pdf:
+        on_warning(f"PDFs skipped — {install_hint()}")
+
     drafts: list[DraftedApplication] = []
+    failures: list[tuple[str, str]] = []
     for uid in uids:
         posting = found[uid]
         scored = score_posting(profile, posting)
-        markdown, comp = draft_application(
+        raw, comp = draft_application(
             provider, used_model, profile_name, resume_text, scored, logger=on_llm_log
         )
         usage.add(comp)
 
-        header = f"# {posting.title} — {posting.company}\n[View posting]({posting.url})\n\n"
-        markdown = header + markdown
+        try:
+            parts = split_draft(raw)
+        except ValueError as e:
+            failures.append((uid, str(e)))
+            on_warning(f"{uid}: draft skipped — {e}")
+            continue
 
-        path = target_dir / draft_filename(profile_name, posting.title, uid)
-        path.write_text(markdown)
+        folder = target_dir / draft_folder_name(profile_name, posting.title, uid)
+        folder.mkdir(parents=True, exist_ok=True)
+
+        md_files = [
+            _write(folder / RESUME_MD, parts.resume),
+            _write(folder / COVER_LETTER_MD, parts.cover_letter),
+        ]
+        if parts.stretch_claims:
+            md_files.append(_write(folder / _STRETCH_CLAIMS_MD, parts.stretch_claims))
+
+        pdf_files: list[Path] = []
+        if can_pdf:
+            try:
+                pdf_files = render_draft_folder(folder)
+            except Exception as e:  # noqa: BLE001 — rendering must never lose the markdown
+                on_warning(f"{uid}: PDF rendering failed ({e}); markdown kept")
+
         drafts.append(
             DraftedApplication(
                 uid=uid, title=posting.title, company=posting.company,
-                markdown=markdown, written_to=path,
+                folder=folder, md_files=md_files, pdf_files=pdf_files,
+                has_stretch_claims=parts.stretch_claims is not None,
             )
         )
 
     on_info(format_usage(usage, config.llm, label="LLM application-draft usage"))
-    return DraftResult(profile_name=profile_name, drafts=drafts)
+    return DraftResult(profile_name=profile_name, drafts=drafts, failures=failures)
+
+
+def _write(path: Path, text: str) -> Path:
+    path.write_text(text if text.endswith("\n") else text + "\n")
+    return path

@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<style>
+  @page { size: Letter; }
+  * { box-sizing: border-box; }
+  body {
+    font-family: Calibri, Carlito, "Segoe UI", Arial, sans-serif;
+    font-size: 10.5pt;
+    line-height: 1.28;
+    color: #111;
+    margin: 0;
+  }
+  header { text-align: center; margin-bottom: 10pt; }
+  h1.name { font-size: 22pt; font-weight: 700; margin: 0; }
+  .headline { font-size: 12pt; margin: 2pt 0 0; }
+  .contact { font-size: 10pt; margin: 2pt 0 0; }
+  h2.section {
+    font-size: 12pt; font-weight: 700; text-transform: uppercase;
+    letter-spacing: .3px; margin: 13pt 0 4pt; padding-bottom: 1pt;
+    border-bottom: 0.75pt solid #999;
+  }
+  ul { margin: 2pt 0 6pt; padding-left: 16pt; }
+  li { margin: 1.5pt 0; text-align: justify; }
+  p { margin: 3pt 0; text-align: justify; }
+  .entry { margin: 6pt 0 4pt; }
+  .entry-head {
+    display: flex; justify-content: space-between; align-items: baseline;
+    gap: 12pt; font-weight: 700;
+  }
+  .entry-date { font-weight: 700; white-space: nowrap; }
+  .entry .body { margin-top: 1pt; }
+  .entry .body p:first-child { margin-top: 0; }
+</style>
+</head>
+<body>
+  <header>
+    {% if name %}<h1 class="name">{{ name }}</h1>{% endif %}
+    {% if headline %}<div class="headline">{{ headline }}</div>{% endif %}
+    {% for line in contact_lines %}<div class="contact">{{ line }}</div>{% endfor %}
+  </header>
+
+  {% for section in sections %}
+  <section>
+    <h2 class="section">{{ section.title }}</h2>
+    {% if section.kind == "experience" %}
+      {% for e in section.entries %}
+      <div class="entry">
+        <div class="entry-head">
+          <span class="entry-role">{{ e.left }}</span>
+          {% if e.date %}<span class="entry-date">{{ e.date }}</span>{% endif %}
+        </div>
+        {% if e.body_html %}<div class="body">{{ e.body_html }}</div>{% endif %}
+      </div>
+      {% endfor %}
+    {% else %}
+      {{ section.html }}
+    {% endif %}
+  </section>
+  {% endfor %}
+</body>
+</html>
