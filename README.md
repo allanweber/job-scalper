@@ -30,6 +30,8 @@ scalper profile from-resume --name backend --resume resume.pdf --write --force #
 
 scalper draft remotive::123 -p backend --resume resume.pdf             # tailored resume + cover letter
 scalper draft remotive::123 remotive::456 -p backend --resume resume.pdf --out drafts/  # several
+scalper draft --url https://jobs.example.com/123 -p backend --resume resume.pdf          # from a URL (ephemeral)
+scalper draft --url https://... --url https://... -p backend --resume resume.pdf         # multiple URLs
 
 scalper render drafts/backend_backend-engineer_remotive-123/  # (re)build PDFs from edited markdown
 scalper render drafts/.../resume.md                           # just one file
@@ -182,12 +184,19 @@ by a three-tier rule — present skills stated plainly, genuinely *adjacent* ski
 (and ledgered), unrelated skills left out (ADR 0006). Reuses the same `[llm]` extra/key as
 enrichment.
 
+You can also draft directly from a job posting URL with `--url <url>` (repeat for multiple).
+The posting is fetched ephemerally — never stored in the database — and the same draft
+pipeline runs from there. Use this when you spot a posting outside your usual sources and
+don't want to run a full collect cycle first.
+
 ```bash
 pip install -e '.[llm]'              # if not already installed
 # set llm.api_key in config.yaml (or export ANTHROPIC_API_KEY)
 
 scalper draft remotive::123 -p backend --resume resume.pdf
 scalper draft remotive::123 remotive::456 -p backend --resume resume.pdf --out drafts/
+scalper draft --url https://jobs.example.com/123 -p backend --resume resume.pdf
+scalper draft --url https://... --url https://... -p backend --resume resume.pdf
 ```
 
 Each posting gets its **own folder**, `[profile]_[position_name]_[uid]/`, under `--out DIR`

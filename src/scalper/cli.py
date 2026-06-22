@@ -169,11 +169,20 @@ def cmd_profile_from_resume(args: argparse.Namespace) -> int:
 
 
 def cmd_draft(args: argparse.Namespace) -> int:
+    uids = args.uid or []
+    urls = args.url or []
+    if not uids and not urls:
+        _err("draft: provide at least one uid or --url")
+        return 1
+    if uids and urls:
+        _err("draft: --url and positional uids are mutually exclusive")
+        return 1
     config = load_config(args.config)
     llm_log = None if args.quiet_llm else (lambda msg: print(msg, file=sys.stderr))
     try:
         result = run_draft(
-            config, args.profile, args.uid, args.resume,
+            config, args.profile, uids, args.resume,
+            urls=urls or None,
             db=args.db, out_dir=args.out, model=args.model,
             on_info=_err, on_warning=_err, on_llm_log=llm_log,
         )
@@ -310,7 +319,10 @@ def build_parser() -> argparse.ArgumentParser:
     p_draft = sub.add_parser(
         "draft", help="draft a tailored resume + cover letter for one or more postings"
     )
-    p_draft.add_argument("uid", nargs="+", help="posting uid(s) to draft for (see report output)")
+    p_draft.add_argument("uid", nargs="*", help="posting uid(s) to draft for (see report output)")
+    p_draft.add_argument("--url", metavar="URL", action="append", default=[],
+                         help="job posting URL to draft for (fetched ephemerally, not stored); "
+                              "mutually exclusive with uid; repeat for multiple URLs")
     p_draft.add_argument("-p", "--profile", required=True, help="profile name from config")
     p_draft.add_argument("--resume", required=True, metavar="FILE",
                          help="path to the resume file (PDF, markdown, or plain text)")
