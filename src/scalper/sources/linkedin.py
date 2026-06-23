@@ -55,6 +55,8 @@ def parse_search_cards(fragment: str) -> list[dict[str, str]]:
         m = _JOB_ID.search(chunk) or _JOB_ID_URL.search(chunk)
         if not m:
             continue
+        if "No longer accepting applications" in chunk:
+            continue
         link = _FULL_LINK.search(chunk) or _ANY_VIEW_LINK.search(chunk)
         url = (link.group(1).split("?")[0] if link else "").strip()
         date = _DATETIME.search(chunk)

@@ -101,6 +101,33 @@ def test_adapter_fails_soft_when_blocked():
     assert adapter.fetch(SearchQuery(terms=["backend"])) == []
 
 
+_CLOSED_FRAGMENT = """
+<li>
+  <div class="base-card base-search-card" data-entity-urn="urn:li:jobPosting:1111111111">
+    <h3 class="base-search-card__title">Open Job</h3>
+    <h4 class="base-search-card__subtitle">Acme</h4>
+    <span class="job-search-card__location">Remote</span>
+    <time datetime="2026-06-20"></time>
+  </div>
+</li>
+<li>
+  <div class="base-card base-search-card" data-entity-urn="urn:li:jobPosting:2222222222">
+    <h3 class="base-search-card__title">Closed Job</h3>
+    <h4 class="base-search-card__subtitle">Globex</h4>
+    <span class="job-search-card__location">Remote</span>
+    <span class="job-search-card__applyability-text">No longer accepting applications</span>
+    <time datetime="2026-06-01"></time>
+  </div>
+</li>
+"""
+
+
+def test_parse_skips_closed_postings():
+    cards = parse_search_cards(_CLOSED_FRAGMENT)
+    assert len(cards) == 1
+    assert cards[0]["job_id"] == "1111111111"
+
+
 def test_tier_lookup_marks_hard_sources():
     assert _tier("linkedin") == TIER_HARD
     assert _tier("indeed") == TIER_HARD
