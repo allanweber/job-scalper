@@ -140,6 +140,7 @@ def run_draft(
         )
 
     postings: dict[str, JobPosting] = {}
+    url_postings: list[JobPosting] = []
 
     if uids:
         if not Path(db).exists():
@@ -158,6 +159,7 @@ def run_draft(
         except (httpx.HTTPError, httpx.InvalidURL, Exception) as e:
             raise UrlFetchError(f"could not fetch {url}: {e}") from None
         postings[p.uid] = p
+        url_postings.append(p)
 
     used_model = model or config.llm.draft_model
     usage = Usage(model=used_model)
@@ -186,6 +188,7 @@ def run_draft(
         folder = target_dir / draft_folder_name(profile_name, posting.title, uid)
         folder.mkdir(parents=True, exist_ok=True)
 
+        _write(folder / "apply.md", f"# Apply\n\n{posting.url}\n")
         md_files = [
             _write(folder / RESUME_MD, parts.resume),
             _write(folder / COVER_LETTER_MD, parts.cover_letter),
@@ -207,6 +210,14 @@ def run_draft(
                 has_stretch_claims=parts.stretch_claims is not None,
             )
         )
+
+    # Persist URL postings and mark all successful drafts in the store.
+    if drafts:
+        drafted_uids = [d.uid for d in drafts]
+        with JobStore(db) as store:
+            if url_postings:
+                store.upsert_many([p for p in url_postings if p.uid in set(drafted_uids)])
+            store.mark_drafted(drafted_uids)
 
     on_info(format_usage(usage, config.llm, label="LLM application-draft usage"))
     return DraftResult(profile_name=profile_name, drafts=drafts, failures=failures)

@@ -32,7 +32,12 @@ def _excerpt(text: str, limit: int = 320) -> str:
     return text if len(text) <= limit else text[:limit].rsplit(" ", 1)[0] + "…"
 
 
-def _row(scored: ScoredPosting, enrichment: Enrichment | None = None) -> dict:
+def _row(
+    scored: ScoredPosting,
+    enrichment: Enrichment | None = None,
+    *,
+    drafted: bool = False,
+) -> dict:
     p = scored.posting
     return {
         "enrichment": enrichment.model_dump() if enrichment else None,
@@ -58,6 +63,7 @@ def _row(scored: ScoredPosting, enrichment: Enrichment | None = None) -> dict:
         "matched_keywords": scored.matched_keywords,
         "breakdown": {k: round(v * 100) for k, v in scored.breakdown.components().items()},
         "excerpt": _excerpt(p.description),
+        "drafted": drafted,
     }
 
 
@@ -71,12 +77,17 @@ class ReportPanel:
     enrichments: dict[str, Enrichment] = field(default_factory=dict)
 
 
-def _rows_for(scored: list[ScoredPosting], enrichments: dict[str, Enrichment]) -> list[dict]:
-    return [_row(s, enrichments.get(s.posting.uid)) for s in scored]
+def _rows_for(
+    scored: list[ScoredPosting],
+    enrichments: dict[str, Enrichment],
+    drafted_uids: set[str] | None = None,
+) -> list[dict]:
+    drafted_uids = drafted_uids or set()
+    return [_row(s, enrichments.get(s.posting.uid), drafted=s.posting.uid in drafted_uids) for s in scored]
 
 
-def _panel_context(panel: ReportPanel, *, show_head: bool) -> dict:
-    rows = _rows_for(panel.scored, panel.enrichments)
+def _panel_context(panel: ReportPanel, *, show_head: bool, drafted_uids: set[str] | None = None) -> dict:
+    rows = _rows_for(panel.scored, panel.enrichments, drafted_uids)
     return {
         "profile_name": panel.profile_name,
         "profile": panel.profile,
@@ -97,10 +108,12 @@ def render_report(
     enrichments: dict[str, Enrichment] | None = None,
     *,
     freshness_days: int | None = None,
+    drafted_uids: set[str] | None = None,
 ) -> str:
     enrichments = enrichments or {}
     panel = _panel_context(
-        ReportPanel(profile_name, profile, scored, enrichments), show_head=False
+        ReportPanel(profile_name, profile, scored, enrichments), show_head=False,
+        drafted_uids=drafted_uids,
     )
     template = _env.get_template("report.html")
     return template.render(
@@ -115,9 +128,14 @@ def render_report(
     )
 
 
-def render_combined_report(panels: list[ReportPanel], *, freshness_days: int | None = None) -> str:
+def render_combined_report(
+    panels: list[ReportPanel],
+    *,
+    freshness_days: int | None = None,
+    drafted_uids: set[str] | None = None,
+) -> str:
     """Render several profiles into one tabbed, self-contained Combined Report."""
-    contexts = [_panel_context(p, show_head=True) for p in panels]
+    contexts = [_panel_context(p, show_head=True, drafted_uids=drafted_uids) for p in panels]
     template = _env.get_template("report_combined.html")
     return template.render(
         panels=contexts,

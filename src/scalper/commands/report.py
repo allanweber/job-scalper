@@ -179,7 +179,8 @@ def run_report(
     db: str | None = None,
     limit: int | None = None,
     since: datetime | None = None,
-    dedup: bool = False,
+    dedup: bool = True,
+    all_jobs: bool = False,
     semantic: bool = True,
     model: str = DEFAULT_MODEL,
     enrich: bool = False,
@@ -218,17 +219,19 @@ def run_report(
             config, store, enrich=enrich, enrich_model=enrich_model,
             on_info=on_info, on_enrich_log=on_enrich_log,
         )
+        freshness = None if all_jobs else config.freshness_days
         scored, enrichments, enrich_ran = _score_one(
             profile, postings, scorer, enricher,
-            freshness_days=config.freshness_days,
+            freshness_days=freshness,
             dedup=dedup, top_n=top_n, limit=limit,
             on_info=on_info, on_warning=on_warning,
         )
+        drafted_uids = store.get_drafted_uids()
         if enrich_ran:
             on_info(format_usage(enricher.usage, config.llm))
 
     html = render_report(profile_name, profile, scored, enrichments,
-                         freshness_days=config.freshness_days)
+                         freshness_days=freshness, drafted_uids=drafted_uids)
     return ReportResult(
         profile_name=profile_name,
         html=html,
@@ -246,7 +249,8 @@ def run_report_all(
     db: str | None = None,
     limit: int | None = None,
     since: datetime | None = None,
-    dedup: bool = False,
+    dedup: bool = True,
+    all_jobs: bool = False,
     semantic: bool = True,
     model: str = DEFAULT_MODEL,
     enrich: bool = False,
@@ -291,10 +295,11 @@ def run_report_all(
             config, store, enrich=enrich, enrich_model=enrich_model,
             on_info=on_info, on_enrich_log=on_enrich_log,
         )
+        freshness = None if all_jobs else config.freshness_days
         for name, profile in profiles:
             scored, enrichments, enrich_ran = _score_one(
                 profile, postings, scorer, enricher,
-                freshness_days=config.freshness_days,
+                freshness_days=freshness,
                 dedup=dedup, top_n=top_n, limit=limit,
                 on_info=on_info, on_warning=on_warning,
             )
@@ -304,10 +309,11 @@ def run_report_all(
                 enriched_count=len(enrichments),
             ))
             panels.append(ReportPanel(name, profile, scored, enrichments))
+        drafted_uids = store.get_drafted_uids()
         if any_enrich:
             on_info(format_usage(enricher.usage, config.llm))
 
-    html = render_combined_report(panels, freshness_days=config.freshness_days)
+    html = render_combined_report(panels, freshness_days=freshness, drafted_uids=drafted_uids)
     return MultiReportResult(
         html=html,
         profiles=reports,

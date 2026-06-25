@@ -27,6 +27,7 @@
     const minR = root.querySelector('.min');
     const minOut = root.querySelector('.minOut');
     const shown = root.querySelector('.shown');
+    const hideDrafted = root.querySelector('.hide-drafted');
 
     function pairs() {
       const rows = Array.from(tbl.tBodies[0].rows);
@@ -38,12 +39,14 @@
     function applyFilter() {
       const term = q.value.trim().toLowerCase();
       const min = parseInt(minR.value, 10);
+      const hideDraft = hideDrafted && hideDrafted.checked;
       minOut.textContent = min;
       let visible = 0;
       for (const [job, detail] of pairs()) {
         const pct = parseInt(job.dataset.pct, 10);
         const hay = job.dataset.search;
-        const ok = pct >= min && (!term || hay.includes(term));
+        const isDrafted = job.dataset.drafted === '1';
+        const ok = pct >= min && (!term || hay.includes(term)) && !(hideDraft && isDrafted);
         job.style.display = ok ? '' : 'none';
         if (!ok) detail.classList.remove('open');
         detail.style.display = ok ? '' : 'none';
@@ -124,6 +127,7 @@
     });
     q.addEventListener('input', applyFilter);
     minR.addEventListener('input', applyFilter);
+    if (hideDrafted) hideDrafted.addEventListener('change', applyFilter);
     applyFilter();
   }
 

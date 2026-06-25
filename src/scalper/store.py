@@ -71,6 +71,11 @@ class JobStore:
         self._conn.row_factory = sqlite3.Row
         self._conn.executescript(_SCHEMA)
         self._conn.commit()
+        try:
+            self._conn.execute("ALTER TABLE postings ADD COLUMN drafted_at TEXT")
+            self._conn.commit()
+        except sqlite3.OperationalError:
+            pass  # column already exists
 
     def close(self) -> None:
         self._conn.close()
@@ -156,6 +161,20 @@ class JobStore:
             for row in rows:
                 out[row["uid"]] = self._row_to_posting(row)
         return out
+
+    def mark_drafted(self, uids: list[str]) -> None:
+        """Set drafted_at = now for each uid (idempotent — re-drafting updates the timestamp)."""
+        now = _to_iso(datetime.now(timezone.utc))
+        self._conn.executemany(
+            "UPDATE postings SET drafted_at = ? WHERE uid = ?",
+            [(now, uid) for uid in uids],
+        )
+        self._conn.commit()
+
+    def get_drafted_uids(self) -> set[str]:
+        """Return the set of uids that have been drafted."""
+        rows = self._conn.execute("SELECT uid FROM postings WHERE drafted_at IS NOT NULL")
+        return {row["uid"] for row in rows}
 
     def count(self) -> int:
         return self._conn.execute("SELECT COUNT(*) FROM postings").fetchone()[0]

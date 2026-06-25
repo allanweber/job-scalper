@@ -14,6 +14,7 @@
   <label>Min match <output class="minOut">0</output>%
     <input type="range" class="min" min="0" max="100" value="0" step="5">
   </label>
+  <label class="hide-drafted-label"><input type="checkbox" class="hide-drafted"> Hide drafted</label>
   <span class="meta shown"></span>
 </div>
 
@@ -34,7 +35,8 @@
   <tbody>
   {% for r in panel.rows %}
     {% set cls = 'good' if r.percent >= 70 else ('mid' if r.percent >= 40 else 'low') %}
-    <tr class="job" data-pct="{{ r.percent }}" data-pub="{{ r.published }}"
+    <tr class="job{% if r.drafted %} drafted{% endif %}" data-pct="{{ r.percent }}" data-pub="{{ r.published }}"
+        data-drafted="{{ '1' if r.drafted else '0' }}"
         data-search="{{ (r.title ~ ' ' ~ r.company ~ ' ' ~ (r.matched_skills | join(' ')) ~ ' ' ~ r.source ~ ' ' ~ (r.also_seen_on | join(' '))) | lower }}">
       <td class="selcol"><input type="checkbox" class="pick" data-uid="{{ r.uid }}"></td>
       <td class="pct {{ cls }}">{{ r.percent }}%</td>
@@ -43,7 +45,7 @@
       <td>{{ r.location }}{% if r.timezone %}<div class="sub">{{ r.timezone }}</div>{% endif %}</td>
       <td>{% if r.enrichment %}{% if r.enrichment.remote is none %}<span class="tag" title="AI could not determine remote status">?</span>{% elif r.enrichment.remote %}<span class="tag good" title="AI verified: fully remote">✓</span>{% else %}<span class="tag bad" title="AI verified: not remote">✗</span>{% endif %}{% elif r.remote %}<span class="tag" title="Source reports remote">remote</span>{% else %}—{% endif %}</td>
       <td>{% if r.salary %}{{ r.salary }}{% elif r.enrichment and r.enrichment.salary_range %}{% set sr = r.enrichment.salary_range %}{% if sr.min and sr.max %}{{ (sr.min / 1000) | int }}–{{ (sr.max / 1000) | int }}k{% if sr.currency %} {{ sr.currency }}{% endif %}<span class="sub"> (AI)</span>{% elif sr.min %}{{ (sr.min / 1000) | int }}k+<span class="sub"> (AI)</span>{% elif sr.max %}≤{{ (sr.max / 1000) | int }}k<span class="sub"> (AI)</span>{% else %}—{% endif %}{% else %}—{% endif %}</td>
-      <td class="sub">{{ r.source }}{% if r.enrichment %} <span class="tag ai" title="Enriched by AI">AI</span>{% endif %}{% if r.hard %} <span class="tag hard" title="Scraped source — anonymous, best-effort, may be incomplete">hard</span>{% endif %}{% if r.also_seen_on %}<div class="sub" title="Same job also found on these sources">also: {{ r.also_seen_on | join(', ') }}</div>{% endif %}</td>
+      <td class="sub">{{ r.source }}{% if r.enrichment %} <span class="tag ai" title="Enriched by AI">AI</span>{% endif %}{% if r.hard %} <span class="tag hard" title="Scraped source — anonymous, best-effort, may be incomplete">hard</span>{% endif %}{% if r.drafted %} <span class="tag drafted" title="Application drafted">drafted</span>{% endif %}{% if r.also_seen_on %}<div class="sub" title="Same job also found on these sources">also: {{ r.also_seen_on | join(', ') }}</div>{% endif %}</td>
       <td class="sub">{{ r.published or '—' }}</td>
     </tr>
     <tr class="detail">

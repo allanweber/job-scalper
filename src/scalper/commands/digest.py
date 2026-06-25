@@ -110,13 +110,15 @@ def run_digest(
                                freshness_days=config.freshness_days)
             results.append(ProfileDigest(profile_name=name, scored=scored, new=len(scored)))
             panels.append(ReportPanel(name, profile, scored, {}))
+        drafted_uids = store.get_drafted_uids()
 
     if len(profiles) == 1:
         name, profile = profiles[0]
         html = render_report(name, profile, results[0].scored, {},
-                             freshness_days=config.freshness_days)
+                             freshness_days=config.freshness_days, drafted_uids=drafted_uids)
     else:
-        html = render_combined_report(panels, freshness_days=config.freshness_days)
+        html = render_combined_report(panels, freshness_days=config.freshness_days,
+                                      drafted_uids=drafted_uids)
 
     return DigestResult(
         html=html, run_start=run_start, total_new=len(postings), profiles=results,

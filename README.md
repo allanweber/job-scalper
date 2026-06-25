@@ -20,7 +20,8 @@ scalper report --all-profiles --enrich --top 5
 
 scalper report --profile backend --since 14         # only postings from the last 14 days
 scalper report --profile backend --since 2026-06-01 # …or on/after a date
-scalper report --profile backend --dedup            # collapse the same job seen on >1 source
+scalper report --all-profiles --all-jobs --open     # full DB, all profiles, open in browser
+scalper report --profile backend --no-dedup         # disable cross-source dedup (on by default)
 
 scalper sources                                     # list adapters + configured sources with counts
 
@@ -28,9 +29,9 @@ scalper profile from-resume --name backend --resume resume.pdf         # draft, 
 scalper profile from-resume --name backend --resume resume.pdf --write # …and append to config.yaml
 scalper profile from-resume --name backend --resume resume.pdf --write --force # overwrite
 
-scalper draft remotive::123 -p backend --resume resume.pdf             # tailored resume + cover letter
+scalper draft remotive::123 -p backend --resume resume.pdf             # tailored resume + cover letter; marks as drafted
 scalper draft remotive::123 remotive::456 -p backend --resume resume.pdf --out drafts/  # several
-scalper draft --url https://jobs.example.com/123 -p backend --resume resume.pdf          # from a URL (ephemeral)
+scalper draft --url https://jobs.example.com/123 -p backend --resume resume.pdf          # from a URL (stored + marked drafted)
 scalper draft --url https://... --url https://... -p backend --resume resume.pdf         # multiple URLs
 
 scalper render drafts/backend_backend-engineer_remotive-123/  # (re)build PDFs from edited markdown

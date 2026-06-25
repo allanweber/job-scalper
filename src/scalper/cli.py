@@ -81,7 +81,8 @@ def cmd_report(args: argparse.Namespace) -> int:
     # pollute the report summary on stdout; --quiet-llm silences it.
     enrich_log = None if args.quiet_llm else (lambda msg: print(msg, file=sys.stderr))
     common = dict(
-        db=args.db, limit=args.limit, since=cutoff, dedup=args.dedup,
+        db=args.db, limit=args.limit, since=cutoff, dedup=not args.no_dedup,
+        all_jobs=args.all_jobs,
         semantic=not args.no_semantic, model=args.model,
         enrich=args.enrich, top=args.top, enrich_model=args.enrich_model,
         on_info=_out, on_warning=_err, on_enrich_log=enrich_log,
@@ -279,9 +280,9 @@ def build_parser() -> argparse.ArgumentParser:
     p_report.add_argument("--since", default=None, metavar="DAYS|DATE",
                           help="only score postings published within the last N days, or on/after "
                                "an ISO date (YYYY-MM-DD); postings with no known date are kept")
-    p_report.add_argument("--dedup", action="store_true",
-                          help="collapse the same job seen on multiple sources into one row "
-                               "(keeps the best-scoring, lists the others as 'also seen on')")
+    p_report.add_argument("--no-dedup", action="store_true",
+                          help="disable cross-source dedup (dedup is on by default: collapses the "
+                               "same job seen on multiple sources, keeps best-scoring row)")
     p_report.add_argument("--no-semantic", action="store_true",
                           help="skip the local semantic-similarity component")
     p_report.add_argument("--model", default=DEFAULT_MODEL,
@@ -294,6 +295,8 @@ def build_parser() -> argparse.ArgumentParser:
                           help="override the LLM model used for enrichment")
     p_report.add_argument("--quiet-llm", action="store_true",
                           help="suppress per-request/response LLM logs (keep the usage summary)")
+    p_report.add_argument("--all-jobs", action="store_true",
+                          help="ignore freshness_days and score all postings in the database")
     p_report.add_argument("--open", action="store_true", help="open the report in a browser")
     p_report.set_defaults(func=cmd_report)
 

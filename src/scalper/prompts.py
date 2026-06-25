@@ -77,7 +77,8 @@ Trim irrelevant content; do not pad. Use this exact shape:
   One-line context sentence (optional).
   - **Theme**: accomplishment grounded in the real resume.
 Section headings are `## ` in CAPS. Each experience entry is a `### ` line where the \
-role/company is left of ` :: ` and the dates are right of it.
+role/company is left of ` :: ` and the dates are right of it. \
+In the PROFESSIONAL EXPERIENCE section, never mention any country name — city or region only.
 <<<COVER_LETTER>>>
 A cover letter in Markdown. Start with the SAME letterhead as the resume:
   # Full Name
