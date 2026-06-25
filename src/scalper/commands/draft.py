@@ -188,7 +188,7 @@ def run_draft(
         folder = target_dir / draft_folder_name(profile_name, posting.title, uid)
         folder.mkdir(parents=True, exist_ok=True)
 
-        _write(folder / "apply.md", f"# Apply\n\n{posting.url}\n")
+        _write(folder / "apply.html", _apply_html(posting.url))
         md_files = [
             _write(folder / RESUME_MD, parts.resume),
             _write(folder / COVER_LETTER_MD, parts.cover_letter),
@@ -226,3 +226,12 @@ def run_draft(
 def _write(path: Path, text: str) -> Path:
     path.write_text(text if text.endswith("\n") else text + "\n")
     return path
+
+
+def _apply_html(url: str) -> str:
+    return (
+        '<!DOCTYPE html><html><head>'
+        f'<meta http-equiv="refresh" content="0; url={url}">'
+        f'</head><body><a href="{url}">Apply now</a></body></html>\n'
+    )
+
