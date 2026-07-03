@@ -208,6 +208,77 @@ def extract_timezone(location: str | None) -> str | None:
     return None
 
 
+def parse_jsonld_jobs(html: str) -> list[dict]:
+    """Extract Schema.org JobPosting objects from JSON-LD script tags.
+
+    Many job boards embed structured data for Google Jobs indexing. This is the
+    most portable parsing strategy for hard sources — it doesn't depend on CSS
+    class names that change with every redeploy.
+    """
+    import json
+    import re as _re
+
+    pattern = _re.compile(
+        r'<script[^>]+type=["\']application/ld\+json["\'][^>]*>(.*?)</script>',
+        _re.DOTALL | _re.IGNORECASE,
+    )
+    jobs: list[dict] = []
+    for m in pattern.finditer(html or ""):
+        try:
+            data = json.loads(m.group(1))
+        except (json.JSONDecodeError, ValueError):
+            continue
+        candidates = data if isinstance(data, list) else [data]
+        for item in candidates:
+            if not isinstance(item, dict):
+                continue
+            for obj in [item] + (item.get("@graph") or []):
+                if isinstance(obj, dict) and obj.get("@type") == "JobPosting":
+                    jobs.append(obj)
+    return jobs
+
+
+def jsonld_to_fields(job: dict) -> dict:
+    """Flatten a Schema.org JobPosting dict into our common field names."""
+    org = job.get("hiringOrganization") or {}
+    company = (org.get("name") or "").strip() if isinstance(org, dict) else ""
+
+    loc_raw = job.get("jobLocation")
+    location: str | None = None
+    if loc_raw:
+        if isinstance(loc_raw, list):
+            loc_raw = loc_raw[0]
+        if isinstance(loc_raw, dict):
+            addr = loc_raw.get("address") or {}
+            if isinstance(addr, dict):
+                parts = [addr.get("addressLocality"), addr.get("addressCountry")]
+                location = ", ".join(p for p in parts if p) or None
+
+    remote = job.get("jobLocationType") == "TELECOMMUTE"
+
+    sal = job.get("baseSalary") or {}
+    sal_min = sal_max = sal_currency = None
+    if isinstance(sal, dict):
+        sal_currency = sal.get("currency")
+        val = sal.get("value") or {}
+        if isinstance(val, dict):
+            sal_min = val.get("minValue")
+            sal_max = val.get("maxValue")
+
+    return {
+        "company": company,
+        "title": (job.get("title") or job.get("name") or "").strip(),
+        "description": strip_html(job.get("description", "")),
+        "location": location,
+        "remote": remote,
+        "url": job.get("url") or job.get("@id") or "",
+        "published_at": job.get("datePosted"),
+        "salary_min": float(sal_min) if sal_min is not None else None,
+        "salary_max": float(sal_max) if sal_max is not None else None,
+        "salary_currency": sal_currency,
+    }
+
+
 def matches_any_term(text: str, terms: list[str]) -> bool:
     """True if `text` matches any of `terms` (case-insensitive).
 

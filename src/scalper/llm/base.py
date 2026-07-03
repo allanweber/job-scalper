@@ -1,12 +1,10 @@
-"""LLM provider contract and registry (ADR 0003 / ADR 0004).
+"""LLM provider contract and registry (ADR 0003).
 
-Stage 2 enrichment and the future `add-source` codegen both talk to an LLM, but
-must stay decoupled from any one vendor. A provider is anything that can turn a
-prompt into text; models are chosen *per task* (cheap Haiku for enrichment, a
-stronger model for builds), so the model is a per-call argument, not baked into
-the provider. The whole layer is optional: if the chosen provider's SDK isn't
-installed (the `[llm]` extra), `build_provider` returns ``None`` and callers fall
-back to their deterministic, no-LLM behaviour.
+Stage 2 enrichment talks to an LLM but must stay decoupled from any one vendor.
+A provider is anything that can turn a prompt into text; the model is a per-call
+argument, not baked into the provider. The whole layer is optional: if the chosen
+provider's SDK isn't installed (the `[llm]` extra), `build_provider` returns
+``None`` and callers fall back to their deterministic, no-LLM behaviour.
 """
 
 from __future__ import annotations

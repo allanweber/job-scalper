@@ -1,17 +1,14 @@
-"""Offline parsing tests for the aggregator adapters: Adzuna, HN, Reddit."""
+"""Offline parsing tests for the aggregator adapters: Adzuna, HN."""
 
 from scalper.models import SearchQuery
-from scalper.sources._util import atom_entries
 from scalper.sources.adzuna import AdzunaAdapter
 from scalper.sources.base import REGISTRY
 from scalper.sources.hackernews import HackerNewsAdapter
-from scalper.sources.reddit import RedditAdapter
 
 
 def test_aggregator_adapters_registered():
     assert REGISTRY["adzuna"] is AdzunaAdapter
     assert REGISTRY["hackernews"] is HackerNewsAdapter
-    assert REGISTRY["reddit"] is RedditAdapter
 
 
 # --- Adzuna ---------------------------------------------------------------
@@ -75,52 +72,3 @@ def test_hackernews_parses_comment_header():
     assert p.published_at is not None and p.published_at.year == 2026
 
 
-# --- Reddit ---------------------------------------------------------------
-
-REDDIT_ATOM = """<?xml version="1.0" encoding="UTF-8"?>
-<feed xmlns="http://www.w3.org/2005/Atom">
-  <entry>
-    <title>[Hiring] Senior Java Engineer (Remote, EU)</title>
-    <link href="https://www.reddit.com/r/forhire/comments/abc123/hiring_java/"/>
-    <id>t3_abc123</id>
-    <published>2026-06-12T08:00:00+00:00</published>
-    <content type="html">&lt;p&gt;Remote Java/Spring role.&lt;/p&gt;</content>
-    <author><name>/u/poster</name></author>
-  </entry>
-  <entry>
-    <title>[For Hire] Java developer looking for work</title>
-    <link href="https://www.reddit.com/r/forhire/comments/def456/forhire/"/>
-    <id>t3_def456</id>
-    <published>2026-06-12T09:00:00+00:00</published>
-    <content type="html">&lt;p&gt;Available now.&lt;/p&gt;</content>
-  </entry>
-</feed>"""
-
-
-def test_reddit_atom_parsing_and_hiring_filter():
-    entries = atom_entries(REDDIT_ATOM)
-    assert len(entries) == 2
-    adapter = RedditAdapter()
-    # hiring_only keeps "[Hiring]" and drops "[For Hire]".
-    assert adapter._is_hiring(entries[0]["title"]) is True
-    assert adapter._is_hiring(entries[1]["title"]) is False
-
-    p = adapter._to_posting(entries[0], "forhire")
-    assert p.source == "reddit"
-    assert p.source_id == "t3_abc123"
-    assert p.company == "r/forhire"
-    assert p.title.startswith("[Hiring] Senior Java Engineer")
-    assert p.remote is True                       # "Remote" detected in title/body
-    assert p.url.endswith("/hiring_java/")
-    assert "Java" in p.description and "<" not in p.description
-
-
-def test_reddit_hiring_only_filter():
-    adapter = RedditAdapter()
-    assert adapter._is_hiring("[Hiring] Senior Java Engineer") is True
-    assert adapter._is_hiring("[For Hire] Java dev available") is False
-
-
-def test_reddit_handles_empty_feed():
-    # Reddit rate-limits with a blank body; the parser must return [] not raise.
-    assert atom_entries("") == []

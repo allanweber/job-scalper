@@ -438,10 +438,6 @@ Implemented:
 - ✅ `insights` — aggregate market view: skill demand, salary stats, source counts, weekly volume (no LLM)
 - ✅ Tests for scoring, semantic, enrichment, adapter parsing, digest, and insights
 
-Layered on next (designed, not yet built):
-- ⏳ Generic mapping-driven RSS/JSON adapter (declarative tier for `add-source`)
-- ⏳ `add-source <url>` self-building command, tiered + approval-gated (ADR 0004)
-
 ## Tests
 
 ```bash
