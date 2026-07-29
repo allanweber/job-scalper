@@ -123,6 +123,27 @@ class UserRepo:
     def count(self) -> int:
         return self._c.execute("SELECT COUNT(*) FROM users").fetchone()[0]
 
+    def list(self, *, query: str | None = None, limit: int = 50,
+             offset: int = 0) -> list[User]:
+        """List users (admin), optionally filtered by an email/name substring."""
+        where, params = "", []
+        if query:
+            where = "WHERE email LIKE ? OR display_name LIKE ?"
+            like = f"%{query.lower()}%"
+            params = [like, like]
+        rows = self._c.execute(
+            f"SELECT {_USER_COLS} FROM users {where} "
+            "ORDER BY created_at DESC LIMIT ? OFFSET ?",
+            (*params, limit, offset),
+        ).fetchall()
+        return [_to_user(r) for r in rows]
+
+    def count_by_status(self) -> dict[str, int]:
+        rows = self._c.execute(
+            "SELECT status, COUNT(*) FROM users GROUP BY status"
+        ).fetchall()
+        return {r[0]: r[1] for r in rows}
+
 
 @dataclass
 class RefreshRecord:

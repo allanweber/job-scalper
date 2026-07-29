@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block title %}Settings{% endblock %}
+{% block body %}
+<h1>Settings</h1>
+<p class="muted">Hot-applied global configuration. Changes take effect within seconds — no redeploy. Secrets stay in the environment and are not shown here.</p>
+<form method="post" action="/settings">
+  {% for key, value in settings.items() %}
+  <label for="s_{{ loop.index }}">{{ key }}</label>
+  <textarea id="s_{{ loop.index }}" name="key__{{ key }}" rows="{{ 2 if value|length > 60 else 1 }}">{{ value }}</textarea>
+  {% endfor %}
+  <div style="margin-top:16px"><button class="primary">Save all settings</button></div>
+</form>
+{% endblock %}

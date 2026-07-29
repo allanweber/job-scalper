@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Users{% endblock %}
+{% block body %}
+<h1>Users</h1>
+<form method="get" action="/users" style="margin-bottom:14px">
+  <input type="search" name="q" value="{{ q or '' }}" placeholder="Search email or name">
+  <button>Search</button>
+</form>
+<table>
+  <tr><th>Email</th><th>Name</th><th>Role</th><th>Plan</th><th>Status</th><th>Joined</th><th></th></tr>
+  {% for u in users %}
+  <tr>
+    <td>{{ u.email }}</td>
+    <td>{{ u.display_name or "" }}</td>
+    <td>{% if u.is_admin %}<span class="pill admin">admin</span>{% else %}user{% endif %}</td>
+    <td>{{ u.plan }}</td>
+    <td>{% if u.is_active %}active{% else %}<span class="pill suspended">suspended</span>{% endif %}</td>
+    <td class="muted">{{ u.created_at[:10] }}</td>
+    <td><a href="/users/{{ u.id }}">Manage</a></td>
+  </tr>
+  {% else %}
+  <tr><td colspan="7" class="muted">No users found.</td></tr>
+  {% endfor %}
+</table>
+{% endblock %}

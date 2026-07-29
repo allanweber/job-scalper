@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}Jobs & Pool{% endblock %}
+{% block body %}
+<h1>Jobs &amp; Pool</h1>
+<div class="cards">
+  <div class="card"><div class="n">{{ pool_count }}</div><div class="l">Pool postings</div></div>
+  {% for status, n in job_counts.items() %}
+  <div class="card"><div class="n">{{ n }}</div><div class="l">jobs {{ status }}</div></div>
+  {% endfor %}
+</div>
+
+<p style="margin-top:16px">
+  <form class="inline" method="post" action="/jobs/scrape-now"><button class="primary">Run scrape now</button></form>
+  <form class="inline" method="post" action="/jobs/purge-now"><button>Run purge now</button></form>
+</p>
+
+<h2>Recent jobs</h2>
+<table>
+  <tr><th>Kind</th><th>Status</th><th>User</th><th>Created</th><th>Error</th><th></th></tr>
+  {% for j in jobs %}
+  <tr>
+    <td>{{ j.kind }}</td>
+    <td><span class="pill {{ j.status }}">{{ j.status }}</span></td>
+    <td class="muted">{{ j.user_id[:8] if j.user_id else "system" }}</td>
+    <td class="muted">{{ j.created_at[:19] }}</td>
+    <td class="muted">{{ (j.error or "")[:60] }}</td>
+    <td>{% if j.status == 'failed' %}
+      <form class="inline" method="post" action="/jobs/{{ j.id }}/retry"><button>Retry</button></form>
+    {% endif %}</td>
+  </tr>
+  {% else %}
+  <tr><td colspan="6" class="muted">No jobs yet.</td></tr>
+  {% endfor %}
+</table>
+{% endblock %}

@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}Dashboard{% endblock %}
+{% block body %}
+<h1>Overview</h1>
+<div class="cards">
+  <div class="card"><div class="n">{{ users_total }}</div><div class="l">Users</div></div>
+  <div class="card"><div class="n">{{ users_active }}</div><div class="l">Active</div></div>
+  <div class="card"><div class="n">{{ users_suspended }}</div><div class="l">Suspended</div></div>
+  <div class="card"><div class="n">{{ pool_count }}</div><div class="l">Pool postings</div></div>
+</div>
+
+<h2>Jobs by status</h2>
+<div class="cards">
+  {% for status, n in job_counts.items() %}
+  <div class="card"><div class="n">{{ n }}</div><div class="l">{{ status }}</div></div>
+  {% else %}
+  <p class="muted">No jobs yet.</p>
+  {% endfor %}
+</div>
+
+<h2>Scraping</h2>
+<table>
+  <tr><th>Interval (min)</th><td>{{ scrape_interval }}</td></tr>
+  <tr><th>Last run</th><td>{{ last_run or "never" }}</td></tr>
+  <tr><th>Enabled sources</th><td>{{ enabled_sources|length }}</td></tr>
+  <tr><th>Maintenance mode</th><td>{{ "ON" if maintenance else "off" }}</td></tr>
+</table>
+<p style="margin-top:14px">
+  <form class="inline" method="post" action="/jobs/scrape-now"><button class="primary">Run scrape now</button></form>
+  <form class="inline" method="post" action="/jobs/purge-now"><button>Run purge now</button></form>
+</p>
+{% endblock %}

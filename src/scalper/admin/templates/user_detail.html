@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}{{ u.email }}{% endblock %}
+{% block body %}
+<p><a href="/users">← Users</a></p>
+<h1>{{ u.email }}</h1>
+<table>
+  <tr><th>ID</th><td><code>{{ u.id }}</code></td></tr>
+  <tr><th>Name</th><td>{{ u.display_name or "" }}</td></tr>
+  <tr><th>Role</th><td>{{ u.role }}</td></tr>
+  <tr><th>Status</th><td>{{ u.status }}</td></tr>
+  <tr><th>Plan</th><td>{{ u.plan }}</td></tr>
+  <tr><th>Joined</th><td>{{ u.created_at }}</td></tr>
+  <tr><th>Last login</th><td>{{ u.last_login_at or "—" }}</td></tr>
+  <tr><th>Consent</th><td>ToS {{ "✓" if u.tos_accepted_at else "✗" }} · Privacy {{ "✓" if u.privacy_accepted_at else "✗" }}</td></tr>
+  <tr><th>LLM tokens used</th><td>{{ tokens_used }}</td></tr>
+</table>
+
+<h2>Plan</h2>
+<form method="post" action="/users/{{ u.id }}/plan">
+  <select name="plan">
+    {% for p in plans %}<option value="{{ p }}" {{ 'selected' if p==u.plan }}>{{ p }}</option>{% endfor %}
+  </select>
+  <button class="primary">Update plan</button>
+</form>
+
+<h2>Quota overrides</h2>
+<p class="muted">Blank uses the plan default; -1 = unlimited.</p>
+<form method="post" action="/users/{{ u.id }}/quota">
+  {% for metric in metrics %}
+  <label>{{ metric }}</label>
+  <input type="number" name="{{ metric }}" value="{{ overrides.get(metric, '') }}" style="width:120px">
+  {% endfor %}
+  <div style="margin-top:12px"><button class="primary">Save overrides</button></div>
+</form>
+
+<h2>Account</h2>
+<p>
+  {% if u.is_active %}
+  <form class="inline" method="post" action="/users/{{ u.id }}/suspend"><button class="danger">Suspend</button></form>
+  {% else %}
+  <form class="inline" method="post" action="/users/{{ u.id }}/unsuspend"><button>Reactivate</button></form>
+  {% endif %}
+  <form class="inline" method="post" action="/users/{{ u.id }}/delete"
+        onsubmit="return confirm('Delete {{ u.email }} and ALL their data? This cannot be undone.')">
+    <button class="danger">Delete user + data</button>
+  </form>
+</p>
+{% endblock %}

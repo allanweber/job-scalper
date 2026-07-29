@@ -699,6 +699,60 @@ class JobRepo:
         )
         self._c.commit()
 
+    def list_recent(self, *, limit: int = 50, kind: str | None = None,
+                    status: str | None = None) -> list[JobRecord]:
+        where, params = [], []
+        if kind:
+            where.append("kind=?"); params.append(kind)
+        if status:
+            where.append("status=?"); params.append(status)
+        clause = f"WHERE {' AND '.join(where)}" if where else ""
+        rows = self._c.execute(
+            f"SELECT {_JOB_COLS} FROM jobs {clause} ORDER BY created_at DESC LIMIT ?",
+            (*params, limit),
+        ).fetchall()
+        return [_to_job(r) for r in rows]
+
+    def counts_by_status(self) -> dict[str, int]:
+        rows = self._c.execute(
+            "SELECT status, COUNT(*) FROM jobs GROUP BY status"
+        ).fetchall()
+        return {r[0]: r[1] for r in rows}
+
+
+class AuditRepo:
+    """Append-only admin action log (who / what / when / before -> after)."""
+
+    def __init__(self, conn: Any):
+        self._c = conn
+
+    def record(self, *, admin_user_id: str | None, action: str,
+               target_type: str | None = None, target_id: str | None = None,
+               before: Any = None, after: Any = None, note: str | None = None) -> None:
+        self._c.execute(
+            "INSERT INTO admin_audit (id, ts, admin_user_id, action, target_type, "
+            "target_id, before, after, note) VALUES (?,?,?,?,?,?,?,?,?)",
+            (_new_id(), now_iso(), admin_user_id, action, target_type, target_id,
+             _dumps(before) if before is not None else None,
+             _dumps(after) if after is not None else None, note),
+        )
+        self._c.commit()
+
+    def list_recent(self, *, limit: int = 100) -> list[dict[str, Any]]:
+        rows = self._c.execute(
+            "SELECT ts, admin_user_id, action, target_type, target_id, before, after, "
+            "note FROM admin_audit ORDER BY ts DESC LIMIT ?", (limit,),
+        ).fetchall()
+        out = []
+        for r in rows:
+            out.append({
+                "ts": r[0], "admin_user_id": r[1], "action": r[2],
+                "target_type": r[3], "target_id": r[4],
+                "before": json.loads(r[5]) if r[5] else None,
+                "after": json.loads(r[6]) if r[6] else None, "note": r[7],
+            })
+        return out
+
 
 # --------------------------------------------------------------------------- LLM ledger
 
