@@ -1,19 +1,20 @@
 # LLM access: a platform key with hard quotas, BYO to lift limits, and async job execution
 
 Every user starts on a **platform-provided LLM key** (the operator pays), subject to
-**hard, admin-configurable quotas**: drafts/mo, profile-builds/mo, enrich/mo, and
-scrapes/day (plus a scrape cooldown), with a per-request token ceiling as a backstop.
-**Adding a personal Anthropic/OpenAI key lifts the LLM-bound limits** — that work runs on
-the user's own tokens; infra limits still apply by plan. Providers are Anthropic **and**
-OpenAI behind the existing swappable `LLMProvider` interface.
+**hard, admin-configurable quotas**: drafts/mo, profile-builds/mo, enrich/mo, with a
+per-request token ceiling as a backstop. (There is no user scrape quota — users never
+trigger scrapes; see ADR 0011.) **Adding a personal Anthropic/OpenAI key lifts the
+LLM-bound limits** — that work runs on the user's own tokens. Providers are Anthropic
+**and** OpenAI behind the existing swappable `LLMProvider` interface.
 
 Platform-key work uses admin-configured **low-cost models**; BYO work uses an
 admin-configured **higher-quality model** — both live in the hot `settings` table. BYO keys
 are **encrypted at rest** (envelope; master key in env) and each ciphertext carries a
 **key-version** tag so rotation is a background re-encrypt. The platform key stays in env.
 
-**All slow operations run as async RQ jobs** (`job_id` + polling): scrape,
-profile-from-resume, draft, and enrich — none may block an HTTP request. **Enrichment is
+**All slow user operations run as async RQ jobs** (`job_id` + polling):
+profile-from-resume, draft, and enrich — none may block an HTTP request. (Scraping is a
+system/admin job, not user-triggered — see ADR 0011.) **Enrichment is
 cached and shared across users** by `(posting, profile_hash, model)` (its inputs are public
 posting text + profile criteria, not the resume); **drafts are strictly per-user**. Per-user
 token usage is tracked for quota enforcement and admin visibility. Semantic scoring is
@@ -29,7 +30,7 @@ dropped for MVP; enrichment is on-demand per job.
 - **Unified credits / per-user token budget** instead of per-action counters — flexible or
   tighter cost control respectively, but credits are more to build and a raw token budget is
   opaque to users. Rejected for per-action monthly counters + a token ceiling backstop.
-- **Synchronous LLM/scrape calls** — simpler flow, but 30–60s requests time out and drop on
+- **Synchronous LLM calls** — simpler flow, but 30–60s requests time out and drop on
   mobile networks. Rejected for async jobs across the board.
 - **Strictly per-user enrichment cache** — cleaner privacy story, but re-pays platform
   tokens for identical public-posting enrichments. Rejected; drafts stay private, enrichment

@@ -37,8 +37,9 @@ sourced from the database rather than YAML.
   manage users) — not an end-user surface.
 - **Data access:** raw SQL against the libsql client + a **numbered-`.sql` migration
   runner** (tracked in a `schema_migrations` table, applied on startup).
-- **All heavy operations run as async RQ jobs** returning a `job_id` the client polls:
-  scrape, profile-from-resume, draft, and enrich. Nothing slow blocks an HTTP request.
+- **User-facing heavy operations run as async RQ jobs** returning a `job_id` the client
+  polls: profile-from-resume, draft, and enrich. Nothing slow blocks an HTTP request.
+  Scraping is **not** user-triggered (see Scraping) — it is a system/admin job.
 
 ## Data model (single multi-tenant libsql database)
 
@@ -74,9 +75,9 @@ sourced from the database rather than YAML.
 - **Model policy (hot settings):** platform-key work uses admin-configured low-cost
   models; BYO work uses an admin-configured higher-quality model.
 - **Free-tier hard limits** (admin-set, monthly reset): drafts/mo, profile-builds/mo,
-  enrich/mo, and **scrapes/day** (plus the cooldown). A **per-request token ceiling** is a
-  backstop so one pathological resume can't blow the bill. At a limit: block + prompt to
-  add a personal key or wait for reset.
+  enrich/mo. (No user scrape quota — users don't scrape.) A **per-request token ceiling**
+  is a backstop so one pathological resume can't blow the bill. At a limit: block + prompt
+  to add a personal key or wait for reset.
 - **BYO keys are encrypted at rest** (envelope, master key from env/secret); each
   ciphertext is **tagged with a key-version** so future rotation is a background
   re-encrypt, not a migration. The platform key lives in env/secret, never the DB.
@@ -92,12 +93,17 @@ sourced from the database rather than YAML.
 - **Structured API sources only** for now — no Playwright/Chromium; the "hard" sources
   (LinkedIn/Indeed) are deferred pending a deliberate legal posture, since operating them
   commercially for many users is materially different from the original personal use.
-- **RQ + Redis**, sync workers in a separate container.
-- **On-demand scrape** (async job + poll) **and** a **scheduled collect** (a Dokploy cron
-  task enqueuing RQ jobs). Both write the shared pool.
-- **The "3 boards" limit gates both scraping and feed visibility:** a user's scrape only
-  touches their chosen sources, and their feed only shows postings from those sources —
-  otherwise the limit would be cosmetic in a shared pool.
+- **Scraping is admin/schedule-driven, never user-triggered** (ADR 0011). Users have no
+  scrape action; the shared pool is filled only by scheduled runs and admin "run now".
+- An **in-process scheduler** (its own always-on service, using RQ + Redis) reads
+  `scrape.interval_minutes` from the **hot settings** and enqueues a scrape job each
+  interval; the admin can change the interval live or trigger a run from the portal. It
+  also owns the periodic auto-purge. (This replaces Dokploy cron.)
+- **Scope of a run:** every admin-**enabled** source (`sources.enabled`), searched with the
+  **union of active users' profile terms** (active = seen within `active_user_window_days`);
+  broad-feed sources just pull recent. Demand-driven — the pool holds what users search for.
+- **The "3 boards" limit gates feed visibility only** (users don't scrape): a user's feed
+  shows only postings from their ≤3 chosen sources (a subset of the enabled catalog).
 - **Feed** = the full ranked list of pool postings matching the user's profile (within
   their allowed sources), with a per-user "new" badge derived from last-seen.
 
@@ -134,8 +140,9 @@ sourced from the database rather than YAML.
 
 ## Dokploy footprint
 
-Public API · Admin app (separate service/subdomain) · RQ worker · Redis (job queue +
-admin sessions) · `sqld` · Dokploy cron (scheduled collect + auto-purge).
+Public API · Admin app (separate service/subdomain) · RQ worker · **Scheduler** (always-on;
+enqueues scrape at `scrape.interval_minutes` + auto-purge) · Redis (job queue + admin
+sessions) · `sqld`. (No Dokploy cron — the scheduler owns periodic work.)
 
 ## Phasing
 
@@ -144,14 +151,16 @@ admin sessions) · `sqld` · Dokploy cron (scheduled collect + auto-purge).
    `admin_audit`, usage) + migration runner.
 2. **Auth** (mobile JWT + admin session) + user/role/plan model + admin allowlist +
    encrypted BYO keys (version-tagged) + the quota engine.
-3. **Public API + RQ worker:** async scrape/profile/draft/enrich, match feed, quotas +
-   cooldown, platform-vs-BYO key routing, shared-enrichment cache.
-4. **Admin web app** (HTMX): settings, users, plan/quota, queue/pool, audit.
+3. **Public API + RQ worker + scheduler:** admin/scheduled scrape (union-of-users scope),
+   async profile/draft/enrich, match feed, quotas, platform-vs-BYO key routing,
+   shared-enrichment cache.
+4. **Admin web app** (HTMX): settings (incl. scrape interval + enabled sources + "run now"),
+   users, plan/quota, queue/pool, audit.
 5. **Dokploy deployment** (all services) + `sqld` docs + ToS/Privacy stubs.
 6. **Flutter app** against the generated client.
 
 ## Knobs to pick at build time (not blockers)
 
-Exact free-tier numbers (drafts/mo, profile-builds/mo, enrich/mo, scrapes/day, cooldown
-minutes, per-request token ceiling); the 3 default sources; default platform vs BYO model
-IDs; the retention window.
+Exact free-tier numbers (drafts/mo, profile-builds/mo, enrich/mo, per-request token
+ceiling); the scrape interval + active-user window; the enabled-source catalog + 3 default
+sources; default platform vs BYO model IDs; the retention window.

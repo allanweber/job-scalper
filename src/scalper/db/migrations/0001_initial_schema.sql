@@ -230,7 +230,7 @@ CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs(status);
 -- Per-user, per-metric, per-period counters (period: 'YYYY-MM' or 'YYYY-MM-DD').
 CREATE TABLE IF NOT EXISTS usage_counters (
     user_id    TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    metric     TEXT NOT NULL,        -- 'draft'|'profile_build'|'enrich'|'scrape'
+    metric     TEXT NOT NULL,        -- 'draft'|'profile_build'|'enrich' (users never scrape)
     period     TEXT NOT NULL,
     count      INTEGER NOT NULL DEFAULT 0,
     updated_at TEXT NOT NULL,
@@ -292,11 +292,18 @@ CREATE INDEX IF NOT EXISTS idx_admin_audit_ts ON admin_audit(ts);
 ------------------------------------------------------------------------------
 
 INSERT OR IGNORE INTO settings (key, value, updated_at) VALUES
-    ('quota.free',          '{"draft_per_month":5,"profile_build_per_month":5,"enrich_per_month":30,"scrape_per_day":10}', '1970-01-01T00:00:00+00:00'),
-    ('scrape.cooldown_minutes', '15', '1970-01-01T00:00:00+00:00'),
+    -- User quotas (LLM-bound only; users never trigger scrapes — see ADR 0011).
+    ('quota.free',          '{"draft_per_month":5,"profile_build_per_month":5,"enrich_per_month":30}', '1970-01-01T00:00:00+00:00'),
     ('llm.per_request_token_ceiling', '20000', '1970-01-01T00:00:00+00:00'),
     ('llm.platform_models',  '{"anthropic":{"enrich":"claude-haiku-4-5","draft":"claude-haiku-4-5"}}', '1970-01-01T00:00:00+00:00'),
     ('llm.byo_models',       '{"anthropic":{"enrich":"claude-haiku-4-5","draft":"claude-sonnet-4-6"},"openai":{"enrich":"gpt-4o-mini","draft":"gpt-4o"}}', '1970-01-01T00:00:00+00:00'),
+    -- Scraping is admin/schedule-driven (ADR 0011). The scheduler reads
+    -- scrape.interval_minutes; runs scrape the union of active users' profile
+    -- terms across sources.enabled; active = seen within active_user_window_days.
+    ('scrape.interval_minutes', '360', '1970-01-01T00:00:00+00:00'),
+    ('scrape.active_user_window_days', '30', '1970-01-01T00:00:00+00:00'),
+    ('scrape.last_run_at',   'null', '1970-01-01T00:00:00+00:00'),
+    ('sources.enabled',      '["remotive","remoteok","arbeitnow","jobicy","themuse","workingnomads","himalayas","weworkremotely","hackernews","fourdayweek","jobspresso","authenticjobs","findwork"]', '1970-01-01T00:00:00+00:00'),
     ('sources.default',      '["remotive","remoteok","arbeitnow"]', '1970-01-01T00:00:00+00:00'),
     ('retention.days',       '30', '1970-01-01T00:00:00+00:00'),
     ('maintenance.enabled',  'false', '1970-01-01T00:00:00+00:00');
