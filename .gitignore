@@ -17,6 +17,10 @@ config.yaml
 reports/
 /report.html
 
+# Deployment secrets
+.env
+!.env.example
+
 # OS / editor
 .DS_Store
 .idea/
