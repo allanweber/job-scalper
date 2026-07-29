@@ -1,0 +1,74 @@
+# Job Scalper — single-stack deploy (Dokploy "Compose" service).
+#
+# Topology (per the chosen deploy decisions): one image runs four Python
+# processes (api, admin, worker, scheduler) against a self-hosted sqld + Redis,
+# all on the internal network. Nothing publishes a host port — a Cloudflare
+# Tunnel (cloudflared) is the only ingress and reaches api/admin over the
+# internal network. Configure the tunnel's public hostnames in the Cloudflare
+# dashboard to point at http://api:8080 and http://admin:8081.
+#
+# See docs/deployment/dokploy-cloudflare.md for the step-by-step setup.
+
+x-app: &app
+  build:
+    context: .
+  image: job-scalper:latest
+  env_file: .env
+  restart: unless-stopped
+  depends_on:
+    - sqld
+    - redis
+
+services:
+  sqld:
+    image: ghcr.io/tursodatabase/libsql-server:latest
+    restart: unless-stopped
+    environment:
+      SQLD_HTTP_LISTEN_ADDR: 0.0.0.0:8080
+      SQLD_DB_PATH: /var/lib/sqld/data
+    volumes:
+      - sqld-data:/var/lib/sqld/data
+    # No published ports: reachable only as http://sqld:8080 on the internal net.
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis-data:/data
+
+  api:
+    <<: *app
+    command: >
+      uvicorn --factory scalper.service.app:create_app
+      --host 0.0.0.0 --port 8080 --proxy-headers --forwarded-allow-ips=*
+    expose:
+      - "8080"
+
+  admin:
+    <<: *app
+    command: >
+      uvicorn --factory scalper.admin.app:create_admin_app
+      --host 0.0.0.0 --port 8081 --proxy-headers --forwarded-allow-ips=*
+    expose:
+      - "8081"
+
+  worker:
+    <<: *app
+    command: ["scalper-worker"]
+
+  scheduler:
+    <<: *app
+    command: ["scalper-scheduler"]
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    command: ["tunnel", "--no-autoupdate", "run", "--token", "${CLOUDFLARE_TUNNEL_TOKEN}"]
+    depends_on:
+      - api
+      - admin
+
+volumes:
+  sqld-data:
+  redis-data:

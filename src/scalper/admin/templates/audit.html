@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}Audit log{% endblock %}
+{% block body %}
+<h1>Audit log</h1>
+<p class="muted">Every state-changing admin action, most recent first.</p>
+<table>
+  <tr><th>When</th><th>Admin</th><th>Action</th><th>Target</th><th>Before → After</th></tr>
+  {% for e in entries %}
+  <tr>
+    <td class="muted">{{ e.ts[:19] }}</td>
+    <td class="muted">{{ (e.admin_user_id or "")[:8] }}</td>
+    <td><code>{{ e.action }}</code></td>
+    <td class="muted">{{ e.target_type or "" }} {{ (e.target_id or "")[:8] }}</td>
+    <td class="muted">{{ e.before or "" }} → {{ e.after or "" }}</td>
+  </tr>
+  {% else %}
+  <tr><td colspan="5" class="muted">No audit entries yet.</td></tr>
+  {% endfor %}
+</table>
+{% endblock %}

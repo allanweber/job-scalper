@@ -24,13 +24,45 @@ scrape = ["playwright>=1.44"]
 # PDF renditions of drafted resumes/cover letters: HTML->PDF via headless Chromium
 # (reusing Playwright) plus a markdown renderer. See ADR 0007.
 pdf = ["playwright>=1.44", "markdown>=3.5"]
+# Multi-tenant service (FastAPI API + RQ worker + admin web app). See docs/DESIGN.md.
+# Note: the libsql client is published as `libsql` (newer) or `libsql-experimental`;
+# scalper.db.connection imports whichever is present.
+api = [
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.29",
+    "libsql>=0.1",
+    "redis>=5.0",
+    "rq>=1.16",
+    "cryptography>=42.0",
+    "pyjwt>=2.8",
+    "google-auth>=2.29",
+    "authlib>=1.3",
+    "python-multipart>=0.0.9",
+    "weasyprint>=61.0",
+    "openai>=1.30",
+]
 dev = ["pytest>=8.0"]
+# Everything CI needs to run the full test suite green. Base deps come with the
+# package; semantic/pdf/scrape-only tests importorskip when their extras are absent.
+# Includes the FastAPI stack so the public API (Phase 3) is exercised end-to-end.
+test = [
+    "pytest>=8.0",
+    "cryptography>=42.0",
+    "pyjwt>=2.8",
+    "anthropic>=0.39",
+    "fastapi>=0.110",
+    "python-multipart>=0.0.9",
+    "httpx>=0.27",
+]
 
 [project.scripts]
 scalper = "scalper.cli:main"
+scalper-worker = "scalper.service.worker:main"
+scalper-scheduler = "scalper.service.scheduler:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
 
 [tool.setuptools.package-data]
-scalper = ["templates/*.html"]
+scalper = ["templates/*.html", "db/migrations/*.sql"]
+"scalper.admin" = ["templates/*.html"]

@@ -15,7 +15,11 @@ venv/
 *.sqlite3
 config.yaml
 reports/
-report.html
+/report.html
+
+# Deployment secrets
+.env
+!.env.example
 
 # OS / editor
 .DS_Store

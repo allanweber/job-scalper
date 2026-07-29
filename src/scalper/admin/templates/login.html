@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block title %}Sign in{% endblock %}
+{% block body %}
+<div class="login">
+  <h1>Job Scalper Admin</h1>
+  <p class="muted">Operator console. Access is limited to the admin allowlist.</p>
+  {% if error %}<div class="flash" style="background:#fef2f2;border-color:#fca5a5;color:#991b1b">{{ error }}</div>{% endif %}
+  <p style="margin-top:24px"><a class="btn primary" href="/auth/login">Sign in with Google</a></p>
+</div>
+{% endblock %}
