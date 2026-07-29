@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Job Scalper — {{ profile_name }}</title>
+{% include "_styles.html" %}
+</head>
+<body>
+<header>
+  <h1>Job Scalper — {{ profile_name }}</h1>
+  <div class="meta">{{ total }} matched ·
+    {% if profile.remote_only %}remote only · {% endif %}
+    {% if freshness_days %}last {{ freshness_days }} days · {% endif %}
+    generated {{ generated_at }}</div>
+  <div class="draft-bar">
+    <span class="dlabel">Draft command (<span class="dcount">0</span> selected):</span>
+    <input type="text" class="dcmd" readonly placeholder="select postings below to build a `scalper draft` command">
+    <button type="button" class="dcopy">Copy</button>
+  </div>
+</header>
+
+<section class="panel" data-name="{{ profile_name }}">
+  {% include "_panel.html" %}
+</section>
+
+<footer>Match % is deterministic (skill coverage + title + keyword + semantic), computed locally.
+  Green skills = found in the posting; red = required but not found.{% if enriched %}
+  AI summaries (top results only) are advisory and do not affect the Match %.{% endif %}{% if has_hard %}
+  Sources tagged <span class="tag hard">hard</span> are scraped anonymously and best-effort —
+  coverage may be partial and listings can lag the site.{% endif %}</footer>
+
+{% include "_script.html" %}
+</body>
+</html>

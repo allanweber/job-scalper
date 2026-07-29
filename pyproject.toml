@@ -42,6 +42,14 @@ api = [
     "openai>=1.30",
 ]
 dev = ["pytest>=8.0"]
+# Everything CI needs to run the full test suite green. Base deps come with the
+# package; semantic/pdf/scrape-only tests importorskip when their extras are absent.
+test = [
+    "pytest>=8.0",
+    "cryptography>=42.0",
+    "pyjwt>=2.8",
+    "anthropic>=0.39",
+]
 
 [project.scripts]
 scalper = "scalper.cli:main"
