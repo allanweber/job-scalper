@@ -1,0 +1,211 @@
+from __future__ import annotations
+
+from _helpers import make_container, posting
+
+from scalper.service.content_repos import PostingRepo, ProfileRepo, ResumeRepo
+from scalper.service.models import GoogleIdentity
+from scalper.service.repositories import UserRepo
+
+
+# --- public / system ---
+
+def test_health_and_legal(client):
+    assert client.get("/healthz").json() == {"message": "ok"}
+    assert client.get("/readyz").json()["message"] == "ready"
+    assert client.get("/legal/tos").json()["title"] == "Terms of Service"
+    assert client.get("/legal/privacy").json()["version"]
+
+
+# --- auth ---
+
+def test_sign_in_and_me(client):
+    r = client.post("/auth/google", json={"id_token": "good"})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["user"]["email"] == "user@example.com"
+    tokens = body["tokens"]
+    h = {"Authorization": f"Bearer {tokens['access_token']}"}
+    assert client.get("/me", headers=h).json()["email"] == "user@example.com"
+
+
+def test_sign_in_rejects_bad_token(client):
+    assert client.post("/auth/google", json={"id_token": "bad"}).status_code == 401
+
+
+def test_refresh_rotates(client):
+    tokens = client.post("/auth/google", json={"id_token": "good"}).json()["tokens"]
+    r = client.post("/auth/refresh", json={"refresh_token": tokens["refresh_token"]})
+    assert r.status_code == 200
+    # Old refresh token is now revoked (rotation) -> reuse fails.
+    again = client.post("/auth/refresh", json={"refresh_token": tokens["refresh_token"]})
+    assert again.status_code == 401
+
+
+def test_protected_requires_bearer(client):
+    assert client.get("/me").status_code == 401
+
+
+def test_suspended_account_blocked(client, conn):
+    tokens = client.post("/auth/google", json={"id_token": "good"}).json()["tokens"]
+    user = UserRepo(conn).get_by_email("user@example.com")
+    UserRepo(conn).set_status(user.id, "suspended")
+    h = {"Authorization": f"Bearer {tokens['access_token']}"}
+    assert client.get("/me", headers=h).status_code == 403
+
+
+# --- resume upload ---
+
+def test_resume_upload_validations(client, auth_headers, settings):
+    # empty
+    r = client.put("/me/resume", headers=auth_headers,
+                   files={"file": ("cv.txt", b"", "text/plain")})
+    assert r.status_code == 400
+    # size cap
+    settings.set("upload.max_bytes", 10)
+    r = client.put("/me/resume", headers=auth_headers,
+                   files={"file": ("cv.txt", b"x" * 50, "text/plain")})
+    assert r.status_code == 413
+    settings.set("upload.max_bytes", 5_000_000)
+    # disallowed content type + non-resume extension -> 415
+    r = client.put("/me/resume", headers=auth_headers,
+                   files={"file": ("cv.bin", b"\x00\x01binary", "application/octet-stream")})
+    assert r.status_code == 415
+    # ok
+    r = client.put("/me/resume", headers=auth_headers,
+                   files={"file": ("cv.txt", b"Jane Python FastAPI backend", "text/plain")})
+    assert r.status_code == 200 and r.json()["text_chars"] > 0
+
+
+def test_profile_from_resume_requires_resume_then_builds(client, auth_headers, conn):
+    # No resume yet -> 400
+    assert client.post("/me/profile/from-resume", headers=auth_headers).status_code == 400
+    client.put("/me/resume", headers=auth_headers,
+               files={"file": ("cv.txt", b"Jane Python FastAPI backend", "text/plain")})
+    r = client.post("/me/profile/from-resume", headers=auth_headers)
+    assert r.status_code == 202
+    job_id = r.json()["job_id"]
+    # Eager execution: job is already done by the time we poll.
+    job = client.get(f"/jobs/{job_id}", headers=auth_headers).json()
+    assert job["status"] == "succeeded"
+    assert client.get("/me/profile", headers=auth_headers).json()["titles"] == ["Python Engineer"]
+
+
+# --- sources ---
+
+def test_sources_validation(client, auth_headers):
+    r = client.put("/me/sources", headers=auth_headers, json={"sources": ["nope"]})
+    assert r.status_code == 400
+    r = client.put("/me/sources", headers=auth_headers,
+                   json={"sources": ["remotive", "remoteok", "arbeitnow", "jobicy"]})
+    assert r.status_code == 400 and "at most 3" in r.json()["detail"]
+    r = client.put("/me/sources", headers=auth_headers,
+                   json={"sources": ["remotive", "remoteok"]})
+    assert r.status_code == 200 and r.json()["sources"] == ["remotive", "remoteok"]
+
+
+# --- feed + draft + quota ---
+
+def _seed_user_content(conn):
+    user = UserRepo(conn).get_by_email("user@example.com")
+    ResumeRepo(conn).upsert(user.id, filename="cv.txt", content_type="text/plain",
+                            blob=b"Jane Python FastAPI", extracted_text="Jane Python FastAPI")
+    ProfileRepo(conn).upsert(user.id, "default", {
+        "titles": ["Python Engineer"], "required_skills": ["python", "fastapi"],
+        "keywords": ["backend"]})
+    p = posting("remotive", "a", company="Acme", title="Senior Python Engineer",
+                description="python fastapi backend remote")
+    PostingRepo(conn).ingest([p])
+    return user, p.dedup_key
+
+
+def test_feed_and_draft_flow(client, auth_headers, conn):
+    client.get("/me", headers=auth_headers)  # ensure user row exists
+    _user, pid = _seed_user_content(conn)
+    client.put("/me/sources", headers=auth_headers, json={"sources": ["remotive"]})
+    feed = client.get("/feed", headers=auth_headers).json()
+    assert feed["count"] == 1 and feed["items"][0]["posting_id"] == pid
+    # draft (eager job)
+    r = client.post("/drafts", headers=auth_headers, json={"posting_id": pid})
+    assert r.status_code == 202
+    job = client.get(f"/jobs/{r.json()['job_id']}", headers=auth_headers).json()
+    assert job["status"] == "succeeded"
+    draft_id = job["result"]["draft_id"]
+    d = client.get(f"/drafts/{draft_id}", headers=auth_headers).json()
+    assert d["resume_md"].startswith("# Jane")
+    assert len(client.get("/drafts", headers=auth_headers).json()) == 1
+
+
+def test_draft_blocked_when_quota_exhausted(client, auth_headers, conn, settings):
+    client.get("/me", headers=auth_headers)
+    _user, pid = _seed_user_content(conn)
+    settings.set("quota.free", {"draft_per_month": 0, "profile_build_per_month": 5,
+                                "enrich_per_month": 30})
+    r = client.post("/drafts", headers=auth_headers, json={"posting_id": pid})
+    assert r.status_code == 402
+
+
+def test_draft_unknown_posting_404(client, auth_headers):
+    assert client.post("/drafts", headers=auth_headers,
+                       json={"posting_id": "nope"}).status_code == 404
+
+
+# --- jobs isolation ---
+
+def test_cannot_read_another_users_job(client, auth_headers, conn):
+    from scalper.service.content_repos import JobRepo
+    other = UserRepo(conn).upsert_from_google(
+        GoogleIdentity(sub="other", email="other@example.com"), role="user")
+    jid = JobRepo(conn).create("draft", user_id=other.id, params={})
+    assert client.get(f"/jobs/{jid}", headers=auth_headers).status_code == 404
+
+
+# --- LLM keys ---
+
+def test_keys_crud(client, auth_headers):
+    r = client.put("/me/keys", headers=auth_headers,
+                   json={"provider": "anthropic", "api_key": "sk-secret"})
+    assert r.status_code == 200 and r.json()["keys"][0]["provider"] == "anthropic"
+    r = client.put("/me/keys", headers=auth_headers,
+                   json={"provider": "invalid", "api_key": "x"})
+    assert r.status_code == 400
+    r = client.delete("/me/keys/anthropic", headers=auth_headers)
+    assert r.json()["keys"] == []
+
+
+def test_keys_unavailable_without_vault(conn, vault):
+    # Container with no vault -> BYO keys disabled (503).
+    from fastapi.testclient import TestClient
+
+    from scalper.service.app import create_app
+    container = make_container(None)  # vault=None
+    with TestClient(create_app(container)) as c:
+        h = {"Authorization": "Bearer " +
+             c.post("/auth/google", json={"id_token": "good"}).json()["tokens"]["access_token"]}
+        r = c.put("/me/keys", headers=h, json={"provider": "anthropic", "api_key": "k"})
+        assert r.status_code == 503
+
+
+# --- quota endpoint + account deletion ---
+
+def test_quota_endpoint_reflects_byo(client, auth_headers):
+    q = client.get("/me/quota", headers=auth_headers).json()
+    assert q["byo_key"] is False
+    assert {m["metric"] for m in q["metrics"]} == {"draft", "profile_build", "enrich"}
+    client.put("/me/keys", headers=auth_headers,
+               json={"provider": "anthropic", "api_key": "sk"})
+    q2 = client.get("/me/quota", headers=auth_headers).json()
+    assert q2["byo_key"] is True
+    assert all(m["unlimited"] for m in q2["metrics"])
+
+
+def test_account_deletion(client, auth_headers, conn):
+    client.get("/me", headers=auth_headers)
+    assert UserRepo(conn).get_by_email("user@example.com") is not None
+    assert client.delete("/me", headers=auth_headers).json()["message"] == "account deleted"
+    assert UserRepo(conn).get_by_email("user@example.com") is None
+
+
+def test_legal_acceptance(client, auth_headers):
+    assert client.get("/me", headers=auth_headers).json()["tos_accepted"] is False
+    r = client.post("/me/legal/accept", headers=auth_headers)
+    assert r.json()["tos_accepted"] is True and r.json()["privacy_accepted"] is True

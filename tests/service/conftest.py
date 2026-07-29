@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 
 import pytest
+from _helpers import FakeAdapter, FakeProvider, make_container
 
 from scalper.db import apply_pending, connect
 from scalper.service.crypto import KeyVault, generate_master_key_b64
@@ -35,3 +36,38 @@ def vault():
 @pytest.fixture
 def quota(conn, settings):
     return QuotaService(conn=conn, settings=settings)
+
+
+@pytest.fixture
+def fake_provider():
+    return FakeProvider()
+
+
+@pytest.fixture
+def fake_adapter():
+    return FakeAdapter([])
+
+
+@pytest.fixture
+def container(conn, vault, fake_provider, fake_adapter):
+    # `conn` set SCALPER_DB_PATH + migrated the DB; the container's connections
+    # (opened via connect()) point at that same file.
+    return make_container(vault, provider=fake_provider, adapter=fake_adapter)
+
+
+@pytest.fixture
+def client(container):
+    from fastapi.testclient import TestClient
+
+    from scalper.service.app import create_app
+
+    with TestClient(create_app(container)) as c:
+        yield c
+
+
+@pytest.fixture
+def auth_headers(client):
+    """Sign in the fake identity and return an Authorization header dict."""
+    resp = client.post("/auth/google", json={"id_token": "good"})
+    assert resp.status_code == 200, resp.text
+    return {"Authorization": f"Bearer {resp.json()['tokens']['access_token']}"}

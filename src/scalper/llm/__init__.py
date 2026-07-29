@@ -9,6 +9,6 @@ from scalper.llm.base import (
 )
 
 # Register built-in providers by importing them.
-from scalper.llm import anthropic_provider  # noqa: E402,F401
+from scalper.llm import anthropic_provider, openai_provider  # noqa: E402,F401
 
 __all__ = ["REGISTRY", "Completion", "LLMProvider", "build_provider", "register_provider"]

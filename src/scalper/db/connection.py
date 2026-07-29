@@ -34,7 +34,11 @@ def _apply_sqlite_pragmas(conn: sqlite3.Connection) -> None:
 
 
 def _connect_sqlite(path: str) -> sqlite3.Connection:
-    conn = sqlite3.connect(path)
+    # check_same_thread=False: the API opens one connection per request but FastAPI
+    # may run a request's dependency and endpoint on different threadpool threads.
+    # Access stays sequential within a request, so this is safe (matches how the
+    # libsql client is used); it is not shared concurrently across requests.
+    conn = sqlite3.connect(path, check_same_thread=False)
     conn.row_factory = sqlite3.Row
     _apply_sqlite_pragmas(conn)
     return conn
