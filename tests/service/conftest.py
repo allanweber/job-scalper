@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import os
 
 import pytest
 from _helpers import FakeAdapter, FakeProvider, make_container
@@ -13,12 +14,24 @@ from scalper.service.settings import Settings
 
 @pytest.fixture
 def conn(tmp_path, monkeypatch):
-    monkeypatch.delenv("LIBSQL_URL", raising=False)
-    monkeypatch.setenv("SCALPER_DB_PATH", str(tmp_path / "svc.db"))
-    c = connect()
-    apply_pending(c)
-    yield c
-    c.close()
+    # When SCALPER_DATABASE_URL is set (CI's Postgres job), run the whole suite
+    # against Postgres with a fresh schema per test; otherwise use a sqlite file.
+    if os.environ.get("SCALPER_DATABASE_URL"):
+        c = connect()
+        c.execute("DROP SCHEMA IF EXISTS public CASCADE")
+        c.execute("CREATE SCHEMA public")
+        c.commit()
+        apply_pending(c)
+        yield c
+        c.close()
+    else:
+        monkeypatch.delenv("SCALPER_DATABASE_URL", raising=False)
+        monkeypatch.delenv("DATABASE_URL", raising=False)
+        monkeypatch.setenv("SCALPER_DB_PATH", str(tmp_path / "svc.db"))
+        c = connect()
+        apply_pending(c)
+        yield c
+        c.close()
 
 
 @pytest.fixture

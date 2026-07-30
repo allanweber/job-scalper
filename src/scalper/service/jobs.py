@@ -254,6 +254,12 @@ def execute(container: "Container", job_id: str) -> None:
                 raise JobError(f"unknown job kind: {rec.kind}")
             jobs.mark_succeeded(job_id, result)
         except Exception as e:  # noqa: BLE001 — persist failure for the poller
+            # A failed DB statement leaves Postgres' transaction aborted; clear it
+            # so the mark_failed UPDATE can run (harmless no-op on sqlite).
+            try:
+                conn.rollback()
+            except Exception:  # noqa: BLE001
+                pass
             jobs.mark_failed(job_id, str(e))
     finally:
         conn.close()

@@ -1,5 +1,9 @@
 # The tool becomes a multi-tenant service: tenant-native core, FastAPI, libsql, shared pool
 
+> **Update:** the database choice here (libsql/`sqld`) was later superseded by
+> **managed PostgreSQL** — see ADR 0012. Everything else in this ADR still holds;
+> read "libsql/`sqld`" below as "the service database".
+
 Job Scalper is extended from a single-user local CLI into a hosted, multi-tenant service
 (API + Flutter Android app + admin web app), self-deployed to Dokploy. The core is
 **rewritten tenant-native**: `user_id` is pushed through the command layer and the store,

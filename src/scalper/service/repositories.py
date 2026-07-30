@@ -1,7 +1,7 @@
 """Data-access repositories for the service layer (raw SQL over the DB-API conn).
 
 Rows are read positionally (explicit column lists) so the code is identical on
-the sqlite fallback and the libsql client. Timestamps are ISO-8601 UTC strings.
+the sqlite fallback and Postgres. Timestamps are ISO-8601 UTC strings.
 """
 
 from __future__ import annotations
@@ -274,9 +274,11 @@ class UsageRepo:
 
     def increment(self, user_id: str, metric: str, period: str, n: int = 1) -> int:
         self._c.execute(
+            # Qualify the existing value with the table name: bare `count` is
+            # ambiguous to Postgres in a DO UPDATE (valid on sqlite too).
             "INSERT INTO usage_counters (user_id, metric, period, count, updated_at) "
             "VALUES (?,?,?,?,?) ON CONFLICT(user_id, metric, period) DO UPDATE SET "
-            "count=count+excluded.count, updated_at=excluded.updated_at",
+            "count=usage_counters.count+excluded.count, updated_at=excluded.updated_at",
             (user_id, metric, period, n, now_iso()),
         )
         self._c.commit()

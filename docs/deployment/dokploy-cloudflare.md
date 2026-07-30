@@ -1,9 +1,10 @@
 # Deploying to Dokploy behind a Cloudflare Tunnel
 
 This is the end-to-end setup for the chosen topology: **one Docker Compose stack**
-on Dokploy (api + admin + worker + scheduler + `sqld` + Redis), fronted by a
-**Cloudflare Tunnel** — no public inbound ports on the server. Work through the
-steps in order; each produces a value you paste into the next.
+on Dokploy (api + admin + worker + scheduler + Redis) plus a **managed Dokploy
+PostgreSQL** service, fronted by a **Cloudflare Tunnel** — no public inbound ports
+on the server. Work through the steps in order; each produces a value you paste
+into the next.
 
 The stack files live at the repo root: `Dockerfile`, `docker-compose.yml`,
 `.env.example`.
@@ -84,14 +85,21 @@ In the **Cloudflare dashboard → Zero Trust → Networks → Tunnels**:
 
 ---
 
-## 4. Deploy the stack in Dokploy
+## 4. Create the managed Postgres service
 
-1. **Create a project**, then add a **Compose** service pointing at this repo
-   (branch with these files) — or paste `docker-compose.yml` directly.
+**Create Service → Database → PostgreSQL** (database `scalper`, user `scalper`, a
+strong password, pinned image e.g. `postgres:16`). Keep it internal (no public
+domain). Copy its **internal connection URL** — you'll paste it into
+`SCALPER_DATABASE_URL`. Full details + backups: `postgres-dokploy.md`.
+
+## 5. Deploy the stack in Dokploy
+
+1. **Create a Compose** service pointing at this repo (branch with these files),
+   or paste `docker-compose.yml` directly. It joins Dokploy's `dokploy-network`
+   so it can reach the Postgres service above.
 2. **Environment**: copy `.env.example` into the service's env / an `.env`, and
    fill every value:
-   - `LIBSQL_URL=http://sqld:8080` (leave `LIBSQL_AUTH_TOKEN` empty for the
-     internal-only default).
+   - `SCALPER_DATABASE_URL=postgresql://scalper:<password>@<pg-internal-host>:5432/scalper`
    - `SCALPER_REDIS_URL=redis://redis:6379/0`
    - `SCALPER_JWT_SECRET`, `SCALPER_ADMIN_COOKIE_SECRET`, `SCALPER_ENC_KEYS` from
      step 2.
@@ -103,14 +111,14 @@ In the **Cloudflare dashboard → Zero Trust → Networks → Tunnels**:
    - `SCALPER_ADMIN_BASE_URL=https://admin.example.com`
    - `SCALPER_PLATFORM_ANTHROPIC_KEY=` your Anthropic key.
    - `CLOUDFLARE_TUNNEL_TOKEN=` from step 3.
-3. **Persistence**: confirm the `sqld-data` and `redis-data` volumes are
-   persistent in Dokploy (the compose declares them; a redeploy must not wipe
-   them — losing `sqld-data` wipes every user, resume, and posting).
+3. **Backups**: enable Dokploy's **scheduled backups** on the Postgres service
+   (S3/R2 destination + schedule). The compose's only volume is `redis-data`,
+   which is ephemeral and needs no backup.
 4. **Deploy.** On first boot the API/admin apply DB migrations automatically.
 
 ---
 
-## 5. Verify
+## 6. Verify
 
 ```bash
 curl https://api.example.com/healthz     # {"message":"ok"}
@@ -123,7 +131,7 @@ email → you land on the dashboard.
 
 ---
 
-## 6. First-run configuration (in the admin app)
+## 7. First-run configuration (in the admin app)
 
 1. **Settings** — review the seeded hot settings: `scrape.interval_minutes`,
    `sources.enabled`, `sources.default`, `quota.free`, `llm.platform_models`,
@@ -138,15 +146,13 @@ email → you land on the dashboard.
 
 ## Notes & operations
 
-- **Scaling to real load:** `sqld` is a single writer here (accepted for MVP —
-  bulk writes funnel through the worker). Move `LIBSQL_URL`/`LIBSQL_AUTH_TOKEN`
-  to **Turso** later with no code change if you outgrow it.
-- **Backups:** snapshot the `sqld-data` volume on a schedule (everything is in
-  one DB). Test a restore before you have real users. See `sqld-dokploy.md`.
+- **Database + backups:** a managed Dokploy Postgres service with scheduled
+  backups to S3/R2 — see `postgres-dokploy.md`. Nothing to hand-roll.
 - **Key rotation:** add a new version to `SCALPER_ENC_KEYS`
   (`{"1":"…","2":"…"}`) and bump `SCALPER_ENC_ACTIVE_VERSION=2`; old ciphertexts
-  still decrypt with v1 (envelope encryption is version-tagged).
+  still decrypt with v1 (envelope encryption is version-tagged). Back up
+  `SCALPER_ENC_KEYS` separately — a DB restore can't decrypt BYO keys without it.
 - **Worker/scheduler share the image**, so a single rebuild updates every
   process. Redis-backed jobs run on the `worker`; the `scheduler` only enqueues.
-- **Locking sqld down:** it has no public hostname (not routed through the
-  tunnel), so it's only reachable inside the compose network.
+- **The DB is internal:** the Postgres service has no public hostname; only the
+  app stack reaches it over `dokploy-network`.

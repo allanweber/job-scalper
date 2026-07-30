@@ -35,21 +35,22 @@ sourced from the database rather than YAML.
   config (profile, sources, keys, quotas) is read from the DB, not `config.yaml`.
 - The **`scalper` CLI is kept as an admin/ops tool** (run collect, inspect the pool,
   manage users) — not an end-user surface.
-- **Data access:** raw SQL against the libsql client + a **numbered-`.sql` migration
-  runner** (tracked in a `schema_migrations` table, applied on startup).
+- **Data access:** raw SQL against PostgreSQL (via `psycopg`) + a **numbered-`.sql`
+  migration runner** (tracked in a `schema_migrations` table, applied on startup).
+  A thin dialect adapter lets the same SQL run on a sqlite fallback for local/CI.
 - **User-facing heavy operations run as async RQ jobs** returning a `job_id` the client
   polls: profile-from-resume, draft, and enrich. Nothing slow blocks an HTTP request.
   Scraping is **not** user-triggered (see Scraping) — it is a system/admin job.
 
-## Data model (single multi-tenant libsql database)
+## Data model (single multi-tenant PostgreSQL database)
 
-- **Self-hosted `sqld`**, single node, **WAL + busy-timeout**. The single-writer ceiling
-  is accepted for MVP; bulk writes funnel through workers. See `deployment/sqld-dokploy.md`.
+- **Managed PostgreSQL** (a Dokploy Postgres service with built-in scheduled backups;
+  ADR 0012). Bulk writes funnel through workers. See `deployment/postgres-dokploy.md`.
 - **Shared postings pool, deduped at storage-time:** one physical row per `dedup_key`;
   the contributing sources are retained as a list on the row so provenance isn't lost.
 - **Per-user overlays:** seen / saved / drafted / scores, plus a per-user last-seen
   timestamp that drives the feed's "new" badge.
-- **Resumes:** stored per user as a libsql BLOB + an extracted-text column.
+- **Resumes:** stored per user as a Postgres `BYTEA` blob + an extracted-text column.
 - **Drafts:** markdown + WeasyPrint-rendered PDF blobs, **private per user**, never shared.
 - **Retention:** a scheduled auto-purge job trims postings older than an
   admin-configurable window; the admin panel also has a manual purge.
@@ -121,7 +122,7 @@ sourced from the database rather than YAML.
 - **Capabilities:** global settings / management config; user management
   (list/search/suspend/delete + data deletion); plan/quota overrides; job/queue + pool
   monitoring (queue depth, running/failed jobs with retry/cancel, pool counts, purge).
-- **Settings** live in a libsql `settings` table, **hot-applied** (short cache, no
+- **Settings** live in a Postgres `settings` table, **hot-applied** (short cache, no
   redeploy). Secrets (admin allowlist, master key, DB URL, OAuth secrets, platform LLM key)
   stay in env.
 - **`admin_audit`** records who/what/when/before→after on every state-changing action.
@@ -142,11 +143,12 @@ sourced from the database rather than YAML.
 
 Public API · Admin app (separate service/subdomain) · RQ worker · **Scheduler** (always-on;
 enqueues scrape at `scrape.interval_minutes` + auto-purge) · Redis (job queue + admin
-sessions) · `sqld`. (No Dokploy cron — the scheduler owns periodic work.)
+sessions) · **managed PostgreSQL** (separate Dokploy service). (No Dokploy cron — the
+scheduler owns periodic work.)
 
 ## Phasing
 
-1. **Core tenant-native refactor** + libsql store (storage-time dedup, per-user overlays)
+1. **Core tenant-native refactor** + Postgres store (storage-time dedup, per-user overlays)
    + schema (`users`, roles, plans, tokens, sessions, `resumes`, `drafts`, `settings`,
    `admin_audit`, usage) + migration runner.
 2. **Auth** (mobile JWT + admin session) + user/role/plan model + admin allowlist +
@@ -156,7 +158,7 @@ sessions) · `sqld`. (No Dokploy cron — the scheduler owns periodic work.)
    shared-enrichment cache.
 4. **Admin web app** (HTMX): settings (incl. scrape interval + enabled sources + "run now"),
    users, plan/quota, queue/pool, audit.
-5. **Dokploy deployment** (all services) + `sqld` docs + ToS/Privacy stubs.
+5. **Dokploy deployment** (all services) + Postgres docs + ToS/Privacy stubs.
 6. **Flutter app** against the generated client.
 
 ## Knobs to pick at build time (not blockers)
