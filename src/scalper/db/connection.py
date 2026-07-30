@@ -74,6 +74,10 @@ def _split_statements(script: str) -> list[str]:
 class _PgConnection:
     """Adapts a psycopg connection to the sqlite3-style surface the repos use."""
 
+    #: Lets backend-aware code (e.g. the migration lock) detect Postgres without
+    #: importing psycopg; the sqlite3 connection simply lacks this attribute.
+    is_postgres = True
+
     def __init__(self, conn: Any):
         self._conn = conn
 
@@ -131,28 +135,24 @@ def _postgres_url(environ: dict[str, str]) -> str | None:
     return url if url.startswith(("postgres://", "postgresql://")) else None
 
 
-def _truthy(value: str | None) -> bool:
-    return bool(value) and value.strip().lower() not in {"0", "false", "no", ""}
-
-
 def connect() -> Any:
-    """Return a DB connection: Postgres when configured, else local sqlite.
+    """Return a DB connection.
 
-    In production the compose sets SCALPER_REQUIRE_POSTGRES=1 so a missing or
-    malformed database URL fails loudly here instead of silently falling back to
-    a (usually unwritable) sqlite file — the failure mode that hides a
-    misconfigured SCALPER_DATABASE_URL.
+    Production is **PostgreSQL**: set ``SCALPER_DATABASE_URL`` (``DATABASE_URL`` is
+    an alias). The **sqlite** fallback is an explicit opt-in for local/CI via
+    ``SCALPER_DB_PATH``. With neither set — e.g. a deploy whose database URL didn't
+    reach the container — this raises loudly instead of silently creating a
+    (usually unwritable) sqlite file.
     """
     url = _postgres_url(os.environ)
     if url:
         return _connect_postgres(url)
-    if _truthy(os.environ.get("SCALPER_REQUIRE_POSTGRES")):
-        raw = _raw_db_url(os.environ)
-        raise RuntimeError(
-            "SCALPER_REQUIRE_POSTGRES is set but no valid PostgreSQL URL was found. "
-            f"SCALPER_DATABASE_URL/DATABASE_URL = {raw!r}. Set it (unquoted) to "
-            "postgresql://user:pass@host:5432/db — e.g. the internal URL of your "
-            "Dokploy Postgres service."
-        )
-    path = os.environ.get("SCALPER_DB_PATH", "scalper-service.db")
-    return _connect_sqlite(path)
+    path = os.environ.get("SCALPER_DB_PATH")
+    if path:
+        return _connect_sqlite(path)
+    raise RuntimeError(
+        "No database configured. Set SCALPER_DATABASE_URL to a PostgreSQL URL "
+        "(production — e.g. your Dokploy Postgres service's internal URL), or "
+        "SCALPER_DB_PATH to a sqlite file path (local/tests). Got "
+        f"SCALPER_DATABASE_URL/DATABASE_URL = {_raw_db_url(os.environ)!r}."
+    )

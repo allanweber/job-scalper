@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+import os
 import sqlite3
 
 import pytest
 
-from scalper.db import apply_pending, pending_migrations
+from scalper.db import apply_pending, connect, pending_migrations
 from scalper.db.migrate import _all_migration_files
 
 
@@ -56,3 +57,24 @@ def test_schema_and_seeds_present(conn):
 def test_migrations_sorted_by_numeric_prefix():
     names = [p.name for p in _all_migration_files()]
     assert names == sorted(names)
+
+
+@pytest.mark.skipif(not os.environ.get("SCALPER_DATABASE_URL"),
+                    reason="Postgres advisory-lock behaviour (needs a Postgres URL)")
+def test_apply_pending_lock_safe_across_connections():
+    # Two separate connections apply against a fresh schema: one does the work,
+    # the other sees it already migrated. Proves the advisory lock is acquired
+    # AND released (a leaked lock would deadlock the second call).
+    c1 = connect()
+    c1.execute("DROP SCHEMA IF EXISTS public CASCADE")
+    c1.execute("CREATE SCHEMA public")
+    c1.commit()
+    try:
+        assert apply_pending(c1)          # first run applies everything
+        c2 = connect()
+        try:
+            assert apply_pending(c2) == []  # second connection: no-op, no deadlock
+        finally:
+            c2.close()
+    finally:
+        c1.close()

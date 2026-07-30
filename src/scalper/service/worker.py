@@ -14,6 +14,17 @@ def main() -> None:  # pragma: no cover - requires Redis
     from redis import Redis
     from rq import Queue, Worker
 
+    from scalper.db import apply_pending
+    from scalper.service.container import Container
+
+    # Apply migrations on startup so a job never runs against a missing schema
+    # (serialized with the other services by a Postgres advisory lock).
+    conn = Container.from_env().connect()
+    try:
+        apply_pending(conn)
+    finally:
+        conn.close()
+
     redis_url = os.environ.get("SCALPER_REDIS_URL") or os.environ.get("REDIS_URL")
     if not redis_url:
         raise RuntimeError("SCALPER_REDIS_URL (or REDIS_URL) is not set")

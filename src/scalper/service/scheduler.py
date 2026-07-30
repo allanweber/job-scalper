@@ -14,6 +14,7 @@ import time
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
+from scalper.db import apply_pending
 from scalper.service.container import Container
 from scalper.service.jobs import KIND_PURGE, KIND_SCRAPE, JobQueue
 from scalper.service.settings import Settings
@@ -69,6 +70,13 @@ def tick(container: Container, *, now: datetime | None = None) -> dict[str, str 
 def run_forever(container: Container | None = None, *, poll_seconds: int = 60) -> None:  # pragma: no cover
     """Service loop: check for due work every `poll_seconds`."""
     container = container or Container.from_env()
+    # Apply migrations on startup so the scheduler doesn't tick against a schema
+    # that no other service has created yet (serialized by an advisory lock).
+    conn = container.connect()
+    try:
+        apply_pending(conn)
+    finally:
+        conn.close()
     while True:
         try:
             tick(container)
