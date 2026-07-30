@@ -5,7 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}Admin{% endblock %} · Job Scalper</title>
   <style>
-    :root { color-scheme: light dark; }
+    /* This console is a light theme. Pin color-scheme to light so a device in
+       dark mode doesn't get dark-mode form defaults (white text on our white
+       inputs -> invisible values). */
+    :root { color-scheme: light; }
     * { box-sizing: border-box; }
     body { margin: 0; font: 15px/1.5 system-ui, sans-serif; color: #1a1a1a; background: #f6f7f9; }
     header { background: #111827; color: #fff; padding: 0 20px; display: flex; align-items: center; gap: 18px; }
@@ -25,11 +28,12 @@
     .card .n { font-size: 26px; font-weight: 700; }
     .card .l { color: #6b7280; font-size: 13px; }
     form.inline { display: inline; }
-    button, .btn { font: inherit; padding: 6px 12px; border: 1px solid #d1d5db; background: #fff; border-radius: 6px; cursor: pointer; }
+    button, .btn { font: inherit; padding: 6px 12px; border: 1px solid #d1d5db; background: #fff; color: #1a1a1a; border-radius: 6px; cursor: pointer; }
     button:hover { background: #f3f4f6; }
     button.danger { color: #b91c1c; border-color: #fca5a5; }
     button.primary { background: #2563eb; color: #fff; border-color: #2563eb; }
-    input, select, textarea { font: inherit; padding: 6px 8px; border: 1px solid #d1d5db; border-radius: 6px; background: #fff; }
+    input, select, textarea { font: inherit; padding: 6px 8px; border: 1px solid #d1d5db; border-radius: 6px; background: #fff; color: #1a1a1a; }
+    input::placeholder, textarea::placeholder { color: #9ca3af; }
     textarea { width: 100%; font-family: ui-monospace, monospace; font-size: 13px; }
     label { display: block; margin: 12px 0 4px; font-size: 13px; color: #4b5563; font-weight: 600; }
     .flash { background: #ecfdf5; border: 1px solid #a7f3d0; color: #065f46; padding: 10px 14px; border-radius: 6px; margin-bottom: 16px; }
