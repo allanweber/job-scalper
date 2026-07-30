@@ -192,6 +192,15 @@ class PostingRepo:
     def count(self) -> int:
         return self._c.execute("SELECT COUNT(*) FROM postings").fetchone()[0]
 
+    def counts_by_source(self) -> list[tuple[str, int]]:
+        """Distinct pool postings per source (provenance), most first — for the
+        admin 'jobs by source' view."""
+        rows = self._c.execute(
+            "SELECT source, COUNT(DISTINCT posting_id) AS n FROM posting_sources "
+            "GROUP BY source ORDER BY n DESC, source"
+        ).fetchall()
+        return [(r[0], r[1]) for r in rows]
+
     def purge_older_than(self, days: int) -> int:
         """Delete pool postings whose last_seen_at is older than `days`. Returns count."""
         cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()

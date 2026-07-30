@@ -51,6 +51,17 @@ def test_ingest_second_run_updates_last_seen(conn):
     assert repo.get(p.dedup_key).last_seen_at >= before
 
 
+def test_counts_by_source(conn):
+    repo = PostingRepo(conn)
+    repo.ingest([
+        posting("remotive", "a", company="Acme", title="Python Dev"),
+        posting("remoteok", "b", company="Acme", title="Python Dev"),  # same dedup, 2nd source
+        posting("remotive", "c", company="Beta", title="Go Dev"),
+    ])
+    counts = dict(repo.counts_by_source())
+    assert counts == {"remotive": 2, "remoteok": 1}
+
+
 def test_candidates_filtered_by_source(conn):
     repo = PostingRepo(conn)
     repo.ingest([

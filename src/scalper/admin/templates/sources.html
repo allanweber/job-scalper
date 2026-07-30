@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}Sources{% endblock %}
+{% block body %}
+<h1>Jobs by source</h1>
+<p class="muted">Distinct pool postings contributed by each source. Enable/disable
+sources by editing <code>sources.enabled</code> on the
+<a href="/settings">Settings</a> page.</p>
+
+<div class="cards" style="margin-bottom:8px">
+  <div class="card"><div class="n">{{ pool_total }}</div><div class="l">Total pool postings</div></div>
+  <div class="card"><div class="n">{{ rows|selectattr('enabled')|list|length }}</div><div class="l">Enabled sources</div></div>
+</div>
+
+<table>
+  <tr><th>Source</th><th>Postings</th><th>Enabled</th></tr>
+  {% for r in rows %}
+  <tr>
+    <td>{{ r.source }}</td>
+    <td>{{ r.count }}</td>
+    <td>{% if r.enabled %}<span class="pill succeeded">enabled</span>{% else %}<span class="pill">off</span>{% endif %}</td>
+  </tr>
+  {% else %}
+  <tr><td colspan="3" class="muted">No sources yet — run a scrape from Jobs &amp; Pool.</td></tr>
+  {% endfor %}
+</table>
+{% endblock %}

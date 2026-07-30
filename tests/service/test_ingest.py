@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
+
 from _helpers import FakeAdapter, posting
 
 from scalper.service.content_repos import PostingRepo, ProfileRepo
@@ -37,6 +39,28 @@ def test_scope_terms_uses_active_user_profiles(conn, settings):
 def test_scope_terms_fallback_when_no_active_users(conn, settings):
     terms = _ingestor(conn, settings, FakeAdapter([])).scope_terms()
     assert terms  # non-empty fallback so broad feeds still refresh
+
+
+def test_scope_terms_uses_admin_default_terms(conn, settings):
+    # No active users -> the admin-configured default scrape terms are used.
+    settings.set("scrape.default_terms", ["kubernetes", "platform engineer"])
+    terms = _ingestor(conn, settings, FakeAdapter([])).scope_terms()
+    assert terms == ["kubernetes", "platform engineer"]
+
+
+def test_freshness_drops_stale_postings(conn, settings):
+    now = datetime.now(timezone.utc)
+    adapter = FakeAdapter([
+        posting("remotive", "fresh", company="A", title="New", published_at=now),
+        posting("remotive", "stale", company="B", title="Old",
+                published_at=now - timedelta(days=40)),
+        posting("remotive", "undated", company="C", title="NoDate"),  # kept
+    ])
+    settings.set("scrape.freshness_days", 7)
+    out = _ingestor(conn, settings, adapter).run(sources=["remotive"], terms=["x"])
+    assert out["dropped_stale"] == 1
+    titles = {p.title for p in PostingRepo(conn).candidates_for_sources(["remotive"])}
+    assert titles == {"New", "NoDate"}  # stale dropped, undated kept
 
 
 def test_per_source_failure_is_isolated(conn, settings):

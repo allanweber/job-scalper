@@ -140,3 +140,15 @@ def test_audit_page_renders(logged_in, conn):
     u = _make_user(conn)
     logged_in.post(f"/users/{u.id}/suspend", follow_redirects=False)
     assert "user.suspend" in logged_in.get("/audit").text
+
+
+def test_sources_page_shows_counts_by_source(logged_in, conn):
+    PostingRepo(conn).ingest([
+        JobPosting(source="remotive", source_id="1", url="http://x/1", company="Acme",
+                   title="Dev", remote=True),
+        JobPosting(source="remoteok", source_id="2", url="http://x/2", company="Beta",
+                   title="Eng", remote=True),
+    ])
+    page = logged_in.get("/sources").text
+    assert "Jobs by source" in page
+    assert "remotive" in page and "remoteok" in page

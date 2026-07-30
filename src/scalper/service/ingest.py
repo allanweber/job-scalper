@@ -12,6 +12,7 @@ registry) so tests drive ingestion with a fake adapter and no network.
 
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
 from typing import Any, Callable
 
 from scalper.models import JobPosting, SearchQuery
@@ -22,8 +23,12 @@ from scalper.sources import build_adapter
 
 Logger = Callable[[str], None]
 
-#: A scheduled run with no active users still refreshes broad feeds with these.
-_FALLBACK_TERMS = ["engineer", "developer"]
+#: Last-resort scope if neither active users nor `scrape.default_terms` yield any.
+_FALLBACK_TERMS = ["software engineer", "developer"]
+
+
+def _aware(dt: datetime) -> datetime:
+    return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
 
 
 class Ingestor:
@@ -36,10 +41,24 @@ class Ingestor:
         self._log = logger or (lambda _m: None)
 
     def scope_terms(self) -> list[str]:
-        """Union of active users' profile terms (the demand-driven scrape scope)."""
+        """Scrape scope: the union of active users' profile terms, or — when there
+        are none yet — the admin-configured `scrape.default_terms` (see ADR 0011)."""
         window = int(self._settings.get("scrape.active_user_window_days", 30) or 30)
         terms = ActiveUsersRepo(self._conn).profile_terms(window)
-        return terms or list(_FALLBACK_TERMS)
+        if terms:
+            return terms
+        default = self._settings.get("scrape.default_terms") or []
+        return [t for t in default if str(t).strip()] or list(_FALLBACK_TERMS)
+
+    def _freshness_cutoff(self) -> datetime | None:
+        raw = self._settings.get("scrape.freshness_days")
+        if raw is None:
+            return None
+        try:
+            days = int(raw)
+        except (TypeError, ValueError):
+            return None
+        return datetime.now(timezone.utc) - timedelta(days=days)
 
     def enabled_sources(self) -> list[str]:
         return list(self._settings.get("sources.enabled", []) or [])
@@ -70,10 +89,21 @@ class Ingestor:
                 errors[stype] = str(e)
                 self._log(f"scrape {stype} FAILED: {e}")
 
+        # Drop stale postings before ingest if a freshness window is configured
+        # (postings without a published date are always kept).
+        cutoff = self._freshness_cutoff()
+        dropped_stale = 0
+        if cutoff is not None:
+            kept = [p for p in collected
+                    if p.published_at is None or _aware(p.published_at) >= cutoff]
+            dropped_stale = len(collected) - len(kept)
+            collected = kept
+
         stats = repo.ingest(collected)
         self._settings.set("scrape.last_run_at", now_iso())
         return {
             "fetched": len(collected),
+            "dropped_stale": dropped_stale,
             "ingested": stats,
             "per_source": per_source,
             "errors": errors,
