@@ -12,15 +12,23 @@ sources by editing <code>sources.enabled</code> on the
 </div>
 
 <table>
-  <tr><th>Source</th><th>Postings</th><th>Enabled</th></tr>
+  <tr><th>Source</th><th>Postings</th><th>Enabled</th><th>Actions</th></tr>
   {% for r in rows %}
   <tr>
     <td>{{ r.source }}</td>
     <td>{% if r.count %}<a href="/postings?source={{ r.source | urlencode }}">{{ r.count }}</a>{% else %}0{% endif %}</td>
     <td>{% if r.enabled %}<span class="pill succeeded">enabled</span>{% else %}<span class="pill">off</span>{% endif %}</td>
+    <td>
+      {% if r.count %}
+      <form class="inline" method="post" action="/sources/{{ r.source | urlencode }}/delete"
+            onsubmit="return confirm('Hard-delete all {{ r.count }} postings from {{ r.source }}? This cannot be undone.');">
+        <button class="danger">Delete all jobs</button>
+      </form>
+      {% else %}<span class="muted">—</span>{% endif %}
+    </td>
   </tr>
   {% else %}
-  <tr><td colspan="3" class="muted">No sources yet — run a scrape from Jobs &amp; Pool.</td></tr>
+  <tr><td colspan="4" class="muted">No sources yet — run a scrape from Jobs &amp; Pool.</td></tr>
   {% endfor %}
 </table>
 {% endblock %}

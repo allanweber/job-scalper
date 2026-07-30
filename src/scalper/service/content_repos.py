@@ -257,6 +257,21 @@ class PostingRepo:
         self._c.commit()
         return cur.rowcount if cur.rowcount is not None else 0
 
+    def delete_by_source(self, source: str) -> int:
+        """Hard-delete every pool posting seen on `source`. Returns the count.
+
+        Provenance, enrichment, and overlay rows cascade via FK. A posting shared
+        with another source is removed too (it's the whole posting that goes), so
+        this is an admin escape hatch for flushing a bad/irrelevant source.
+        """
+        cur = self._c.execute(
+            "DELETE FROM postings WHERE id IN "
+            "(SELECT posting_id FROM posting_sources WHERE source=?)",
+            (source,),
+        )
+        self._c.commit()
+        return cur.rowcount if cur.rowcount is not None else 0
+
 
 # --------------------------------------------------------------------------- profiles
 

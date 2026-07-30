@@ -144,7 +144,7 @@ stored postings against a Profile → render HTML. See ADR 0002.
   `collect` is driven by a global `search:` query . The early company-keyed ATS
   adapters (Greenhouse/Lever/Ashby) were removed.
 - Data acquisition: API/RSS-first backbone (Remotive, RemoteOK, Arbeitnow, Adzuna, HN,
-  4dayweek.io, Jobspresso); LinkedIn, Indeed, Wellfound, Arc, Remote.co,
+  Jobspresso); LinkedIn, Indeed, Wellfound, Arc, Remote.co,
   Otta, Jobgether, Just Join IT as hard sources via self-hosted Playwright (anonymous/guest only).
 - Architecture: Python CLI over a local SQLite store; collect/report split (ADR 0002).
 - Source adapters return normalized Job Postings (ADR 0001).

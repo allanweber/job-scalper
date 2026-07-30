@@ -104,6 +104,20 @@ def test_purge_older_than(conn):
     assert repo.count() == 0
 
 
+def test_delete_by_source(conn):
+    repo = PostingRepo(conn)
+    repo.ingest([
+        posting("remotive", "a", company="Acme", title="Python Dev"),
+        posting("remoteok", "b", company="Beta", title="Go Dev"),
+        posting("remoteok", "c", company="Gamma", title="Rust Dev"),
+    ])
+    assert repo.count() == 3
+    deleted = repo.delete_by_source("remoteok")
+    assert deleted == 2 and repo.count() == 1
+    # remoteok is fully cleared from provenance; the remotive posting is untouched.
+    assert dict(repo.counts_by_source()) == {"remotive": 1}
+
+
 # --- profiles ---
 
 def test_profile_upsert_and_criteria(conn, user):

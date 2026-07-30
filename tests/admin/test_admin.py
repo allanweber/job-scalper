@@ -160,6 +160,21 @@ def test_postings_page_lists_and_filters(logged_in, conn):
     assert "Go Developer" in by_source and "Python Engineer" not in by_source
 
 
+def test_delete_all_jobs_from_source(logged_in, conn):
+    PostingRepo(conn).ingest([
+        JobPosting(source="remotive", source_id="1", url="http://x/1", company="Acme",
+                   title="Dev", remote=True),
+        JobPosting(source="remoteok", source_id="2", url="http://x/2", company="Beta",
+                   title="Eng", remote=True),
+    ])
+    r = logged_in.post("/sources/remoteok/delete", follow_redirects=False)
+    assert r.status_code == 303
+    counts = dict(PostingRepo(conn).counts_by_source())
+    assert "remoteok" not in counts and counts.get("remotive") == 1
+    assert any(e["action"] == "sources.delete_postings"
+               for e in AuditRepo(conn).list_recent())
+
+
 def test_sources_page_shows_counts_by_source(logged_in, conn):
     PostingRepo(conn).ingest([
         JobPosting(source="remotive", source_id="1", url="http://x/1", company="Acme",
