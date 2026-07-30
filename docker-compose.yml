@@ -18,6 +18,10 @@ x-app: &app
     context: .
   image: job-scalper:latest
   env_file: .env
+  # Fail loudly if SCALPER_DATABASE_URL is missing/malformed instead of silently
+  # falling back to sqlite (this stack has no sqlite volume).
+  environment:
+    SCALPER_REQUIRE_POSTGRES: "1"
   restart: unless-stopped
   depends_on:
     - redis

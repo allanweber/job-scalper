@@ -14,6 +14,7 @@ from scalper.db.connection import (
 def test_sqlite_fallback_used_without_database_url(tmp_path, monkeypatch):
     monkeypatch.delenv("SCALPER_DATABASE_URL", raising=False)
     monkeypatch.delenv("DATABASE_URL", raising=False)
+    monkeypatch.delenv("SCALPER_REQUIRE_POSTGRES", raising=False)
     db = tmp_path / "fallback.db"
     monkeypatch.setenv("SCALPER_DB_PATH", str(db))
     conn = connect()
@@ -30,6 +31,7 @@ def test_sqlite_fallback_used_without_database_url(tmp_path, monkeypatch):
 def test_pragmas_applied_on_sqlite(tmp_path, monkeypatch):
     monkeypatch.delenv("SCALPER_DATABASE_URL", raising=False)
     monkeypatch.delenv("DATABASE_URL", raising=False)
+    monkeypatch.delenv("SCALPER_REQUIRE_POSTGRES", raising=False)
     monkeypatch.setenv("SCALPER_DB_PATH", str(tmp_path / "p.db"))
     conn = connect()
     try:
@@ -56,6 +58,21 @@ def test_database_url_alias_recognized():
 def test_non_postgres_url_ignored():
     assert _postgres_url({"SCALPER_DATABASE_URL": "mysql://x/y"}) is None
     assert _postgres_url({}) is None
+
+
+def test_postgres_url_strips_quotes_and_whitespace():
+    # A dashboard/.env copy-paste with surrounding quotes or spaces still works.
+    assert _postgres_url({"SCALPER_DATABASE_URL": '  "postgresql://u:p@h/db" '}) \
+        == "postgresql://u:p@h/db"
+    assert _postgres_url({"SCALPER_DATABASE_URL": "'postgres://h/db'"}) == "postgres://h/db"
+
+
+def test_require_postgres_fails_loudly_without_url(monkeypatch):
+    monkeypatch.delenv("SCALPER_DATABASE_URL", raising=False)
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    monkeypatch.setenv("SCALPER_REQUIRE_POSTGRES", "1")
+    with pytest.raises(RuntimeError, match="valid PostgreSQL URL"):
+        connect()
 
 
 # --- the sqlite->postgres dialect adapter (pure, no server) ---

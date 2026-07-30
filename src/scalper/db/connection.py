@@ -116,17 +116,43 @@ def _connect_postgres(url: str) -> _PgConnection:
 # --------------------------------------------------------------------------- factory
 
 
+def _raw_db_url(environ: dict[str, str]) -> str | None:
+    return environ.get("SCALPER_DATABASE_URL") or environ.get("DATABASE_URL")
+
+
 def _postgres_url(environ: dict[str, str]) -> str | None:
-    url = environ.get("SCALPER_DATABASE_URL") or environ.get("DATABASE_URL")
-    if url and url.startswith(("postgres://", "postgresql://")):
-        return url
-    return None
+    raw = _raw_db_url(environ)
+    if not raw:
+        return None
+    # Be forgiving of values wrapped in quotes or padded with whitespace — a
+    # common .env / dashboard copy-paste mistake that otherwise silently routes
+    # to the sqlite fallback.
+    url = raw.strip().strip('"').strip("'").strip()
+    return url if url.startswith(("postgres://", "postgresql://")) else None
+
+
+def _truthy(value: str | None) -> bool:
+    return bool(value) and value.strip().lower() not in {"0", "false", "no", ""}
 
 
 def connect() -> Any:
-    """Return a DB connection: Postgres when configured, else local sqlite."""
+    """Return a DB connection: Postgres when configured, else local sqlite.
+
+    In production the compose sets SCALPER_REQUIRE_POSTGRES=1 so a missing or
+    malformed database URL fails loudly here instead of silently falling back to
+    a (usually unwritable) sqlite file — the failure mode that hides a
+    misconfigured SCALPER_DATABASE_URL.
+    """
     url = _postgres_url(os.environ)
     if url:
         return _connect_postgres(url)
+    if _truthy(os.environ.get("SCALPER_REQUIRE_POSTGRES")):
+        raw = _raw_db_url(os.environ)
+        raise RuntimeError(
+            "SCALPER_REQUIRE_POSTGRES is set but no valid PostgreSQL URL was found. "
+            f"SCALPER_DATABASE_URL/DATABASE_URL = {raw!r}. Set it (unquoted) to "
+            "postgresql://user:pass@host:5432/db — e.g. the internal URL of your "
+            "Dokploy Postgres service."
+        )
     path = os.environ.get("SCALPER_DB_PATH", "scalper-service.db")
     return _connect_sqlite(path)

@@ -21,8 +21,8 @@ COPY pyproject.toml README.md ./
 COPY src ./src
 RUN pip install ".[api]"
 
-# A non-root runtime user.
-RUN useradd --create-home --uid 10001 appuser
+# A non-root runtime user that owns the workdir (so any incidental writes work).
+RUN useradd --create-home --uid 10001 appuser && chown -R appuser /app
 USER appuser
 
 EXPOSE 8080 8081
