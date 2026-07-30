@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+{% block title %}Postings{% endblock %}
+{% block body %}
+<h1>Job postings</h1>
+<p class="muted">Browse the shared scraped pool. Filters combine; text search matches
+title, company, or description.</p>
+
+{# Preserve active filters (minus page) so pagination links keep them. #}
+{% set qs = [] %}
+{% if q %}{% set _ = qs.append('q=' + (q | urlencode)) %}{% endif %}
+{% if source %}{% set _ = qs.append('source=' + (source | urlencode)) %}{% endif %}
+{% if remote %}{% set _ = qs.append('remote=' + (remote | urlencode)) %}{% endif %}
+{% if days %}{% set _ = qs.append('days=' + (days | urlencode)) %}{% endif %}
+{% set base_qs = qs | join('&') %}
+
+<form method="get" action="/postings" style="display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end;margin-bottom:16px">
+  <div>
+    <label for="q">Search</label>
+    <input id="q" name="q" value="{{ q }}" placeholder="title, company, keyword" style="min-width:220px">
+  </div>
+  <div>
+    <label for="source">Source</label>
+    <select id="source" name="source">
+      <option value="">Any source</option>
+      {% for s in sources %}
+      <option value="{{ s }}" {{ 'selected' if s == source }}>{{ s }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div>
+    <label for="remote">Remote</label>
+    <select id="remote" name="remote">
+      <option value="" {{ 'selected' if not remote }}>Any</option>
+      <option value="remote" {{ 'selected' if remote == 'remote' }}>Remote</option>
+      <option value="onsite" {{ 'selected' if remote == 'onsite' }}>On-site</option>
+    </select>
+  </div>
+  <div>
+    <label for="days">Last seen</label>
+    <select id="days" name="days">
+      <option value="" {{ 'selected' if not days }}>Any time</option>
+      <option value="1" {{ 'selected' if days == '1' }}>24 hours</option>
+      <option value="7" {{ 'selected' if days == '7' }}>7 days</option>
+      <option value="30" {{ 'selected' if days == '30' }}>30 days</option>
+    </select>
+  </div>
+  <div>
+    <button class="primary" type="submit">Filter</button>
+    {% if base_qs %}<a class="btn" href="/postings">Clear</a>{% endif %}
+  </div>
+</form>
+
+<p class="muted">{{ total }} matched{% if total != pool_total %} of {{ pool_total }} in pool{% endif %} · page {{ page }} of {{ pages }}</p>
+
+<table>
+  <tr>
+    <th>Title</th><th>Company</th><th>Location</th><th>Remote</th>
+    <th>Salary</th><th>Sources</th><th>Published</th><th>Last seen</th>
+  </tr>
+  {% for p in posts %}
+  <tr>
+    <td>{% if p.url %}<a href="{{ p.url }}" target="_blank" rel="noopener">{{ p.title }}</a>{% else %}{{ p.title }}{% endif %}</td>
+    <td>{{ p.company or "—" }}</td>
+    <td class="muted">{{ p.location or "—" }}</td>
+    <td>{% if p.remote %}<span class="pill succeeded">remote</span>{% else %}<span class="pill">on-site</span>{% endif %}</td>
+    <td class="muted">
+      {%- if p.salary_min or p.salary_max -%}
+        {{ p.salary_currency or "" }}{{ (p.salary_min or p.salary_max) | int }}{% if p.salary_max and p.salary_max != p.salary_min %}–{{ p.salary_max | int }}{% endif %}
+      {%- else -%}—{%- endif -%}
+    </td>
+    <td>{% for s in p.sources %}<span class="pill" style="margin-right:3px">{{ s }}</span>{% endfor %}</td>
+    <td class="muted">{{ (p.published_at or "")[:10] or "—" }}</td>
+    <td class="muted">{{ (p.last_seen_at or "")[:10] }}</td>
+  </tr>
+  {% else %}
+  <tr><td colspan="8" class="muted">No postings match these filters.</td></tr>
+  {% endfor %}
+</table>
+
+{% if pages > 1 %}
+<p style="margin-top:14px;display:flex;gap:10px;align-items:center">
+  {% if page > 1 %}<a class="btn" href="/postings?{% if base_qs %}{{ base_qs }}&{% endif %}page={{ page - 1 }}">← Prev</a>{% endif %}
+  <span class="muted">Page {{ page }} of {{ pages }}</span>
+  {% if page < pages %}<a class="btn" href="/postings?{% if base_qs %}{{ base_qs }}&{% endif %}page={{ page + 1 }}">Next →</a>{% endif %}
+</p>
+{% endif %}
+{% endblock %}

@@ -62,6 +62,30 @@ def test_counts_by_source(conn):
     assert counts == {"remotive": 2, "remoteok": 1}
 
 
+def test_search_filters_and_paginates(conn):
+    repo = PostingRepo(conn)
+    repo.ingest([
+        posting("remotive", "a", company="Acme", title="Python Dev", remote=True),
+        posting("remoteok", "b", company="Beta", title="Go Dev", remote=False),
+        posting("remotive", "c", company="Acme", title="Rust Dev", remote=True),
+    ])
+    # Text search matches title/company (case-insensitive).
+    got, total = repo.search(q="python")
+    assert total == 1 and got[0].title == "Python Dev"
+    assert repo.search(q="acme")[1] == 2
+    # Source filter (provenance).
+    assert repo.search(source="remoteok")[1] == 1
+    # Remote filter.
+    assert repo.search(remote=True)[1] == 2
+    assert repo.search(remote=False)[1] == 1
+    # Pagination: total reflects all matches, page is bounded by limit.
+    page, total = repo.search(limit=2, offset=0)
+    assert total == 3 and len(page) == 2
+    assert len(repo.search(limit=2, offset=2)[0]) == 1
+    # Provenance is attached to returned rows.
+    assert repo.search(q="python")[0][0].sources == ["remotive"]
+
+
 def test_candidates_filtered_by_source(conn):
     repo = PostingRepo(conn)
     repo.ingest([

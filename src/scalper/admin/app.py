@@ -299,7 +299,30 @@ def create_admin_app(admin_container: AdminContainer | None = None) -> FastAPI:
                before={"of": job_id})
         return _flash_redirect("/jobs", "Job re-enqueued.")
 
-    # -- audit --
+    # -- postings (browse the scraped job pool) --
+
+    @app.get("/postings", response_class=HTMLResponse)
+    def postings_page(request: Request, q: str | None = None,
+                      source: str | None = None, remote: str | None = None,
+                      days: str | None = None, page: int = 1,
+                      ctx: AdminContext = Depends(get_admin_ctx),
+                      admin: User = Depends(current_admin)):
+        per_page = 50
+        page = max(1, page)
+        remote_flag = {"remote": True, "onsite": False}.get(remote or "")
+        days_val = int(days) if (days or "").isdigit() else None
+        repo = PostingRepo(ctx.conn)
+        posts, total = repo.search(
+            q=q, source=source or None, remote=remote_flag,
+            seen_within_days=days_val, limit=per_page, offset=(page - 1) * per_page)
+        pages = max(1, (total + per_page - 1) // per_page)
+        return _render(request, "postings.html", admin=admin, active="postings",
+                       posts=posts, total=total, page=page, pages=pages,
+                       q=q or "", source=source or "", remote=remote or "",
+                       days=days or "", pool_total=repo.count(),
+                       sources=[s for s, _ in repo.counts_by_source()])
+
+    # -- sources / audit --
 
     @app.get("/sources", response_class=HTMLResponse)
     def sources_page(request: Request, ctx: AdminContext = Depends(get_admin_ctx),
