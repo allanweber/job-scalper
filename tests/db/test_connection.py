@@ -11,7 +11,7 @@ from scalper.db.connection import (
 )
 
 
-def test_sqlite_fallback_used_without_database_url(tmp_path, monkeypatch):
+def test_sqlite_used_when_db_path_set(tmp_path, monkeypatch):
     monkeypatch.delenv("SCALPER_DATABASE_URL", raising=False)
     monkeypatch.delenv("DATABASE_URL", raising=False)
     db = tmp_path / "fallback.db"
@@ -56,6 +56,23 @@ def test_database_url_alias_recognized():
 def test_non_postgres_url_ignored():
     assert _postgres_url({"SCALPER_DATABASE_URL": "mysql://x/y"}) is None
     assert _postgres_url({}) is None
+
+
+def test_postgres_url_strips_quotes_and_whitespace():
+    # A dashboard/.env copy-paste with surrounding quotes or spaces still works.
+    assert _postgres_url({"SCALPER_DATABASE_URL": '  "postgresql://u:p@h/db" '}) \
+        == "postgresql://u:p@h/db"
+    assert _postgres_url({"SCALPER_DATABASE_URL": "'postgres://h/db'"}) == "postgres://h/db"
+
+
+def test_connect_raises_when_nothing_configured(monkeypatch):
+    # No Postgres URL and no sqlite path => loud error, never a silent fallback
+    # (this is the deploy failure mode we want surfaced immediately).
+    monkeypatch.delenv("SCALPER_DATABASE_URL", raising=False)
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    monkeypatch.delenv("SCALPER_DB_PATH", raising=False)
+    with pytest.raises(RuntimeError, match="No database configured"):
+        connect()
 
 
 # --- the sqlite->postgres dialect adapter (pure, no server) ---

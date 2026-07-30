@@ -301,6 +301,19 @@ def create_admin_app(admin_container: AdminContainer | None = None) -> FastAPI:
 
     # -- audit --
 
+    @app.get("/sources", response_class=HTMLResponse)
+    def sources_page(request: Request, ctx: AdminContext = Depends(get_admin_ctx),
+                     admin: User = Depends(current_admin)):
+        counts = dict(PostingRepo(ctx.conn).counts_by_source())
+        enabled = list(ctx.settings.get("sources.enabled", []) or [])
+        # Every source that's enabled or has postings, with its pool count.
+        names = sorted(set(counts) | set(enabled))
+        rows = [{"source": s, "count": counts.get(s, 0), "enabled": s in enabled}
+                for s in names]
+        rows.sort(key=lambda r: (-r["count"], r["source"]))
+        return _render(request, "sources.html", admin=admin, active="sources",
+                       rows=rows, pool_total=PostingRepo(ctx.conn).count())
+
     @app.get("/audit", response_class=HTMLResponse)
     def audit_page(request: Request, ctx: AdminContext = Depends(get_admin_ctx),
                    admin: User = Depends(current_admin)):
