@@ -304,7 +304,7 @@ INSERT INTO settings (key, value, updated_at) VALUES
     ('scrape.interval_minutes', '360', '1970-01-01T00:00:00+00:00'),
     ('scrape.active_user_window_days', '30', '1970-01-01T00:00:00+00:00'),
     ('scrape.last_run_at',   'null', '1970-01-01T00:00:00+00:00'),
-    ('sources.enabled',      '["remotive","remoteok","arbeitnow","jobicy","themuse","workingnomads","himalayas","weworkremotely","hackernews","fourdayweek","jobspresso"]', '1970-01-01T00:00:00+00:00'),
+    ('sources.enabled',      '["remotive","remoteok","arbeitnow","jobicy","themuse","workingnomads","himalayas","weworkremotely","hackernews","jobspresso"]', '1970-01-01T00:00:00+00:00'),
     ('sources.default',      '["remotive","remoteok","arbeitnow"]', '1970-01-01T00:00:00+00:00'),
     ('retention.days',       '30', '1970-01-01T00:00:00+00:00'),
     ('maintenance.enabled',  'false', '1970-01-01T00:00:00+00:00')

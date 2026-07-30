@@ -337,6 +337,14 @@ def create_admin_app(admin_container: AdminContainer | None = None) -> FastAPI:
         return _render(request, "sources.html", admin=admin, active="sources",
                        rows=rows, pool_total=PostingRepo(ctx.conn).count())
 
+    @app.post("/sources/{source}/delete")
+    def delete_source_postings(source: str, ctx: AdminContext = Depends(get_admin_ctx),
+                               admin: User = Depends(current_admin)):
+        n = PostingRepo(ctx.conn).delete_by_source(source)
+        _audit(ctx, admin, "sources.delete_postings", target_type="source",
+               target_id=source, after={"deleted": n})
+        return _flash_redirect("/sources", f"Deleted {n} posting(s) from {source}.")
+
     @app.get("/audit", response_class=HTMLResponse)
     def audit_page(request: Request, ctx: AdminContext = Depends(get_admin_ctx),
                    admin: User = Depends(current_admin)):
