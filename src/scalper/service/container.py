@@ -2,7 +2,7 @@
 
 Holds process-wide configuration and factories (not a live DB connection — each
 request and each job opens its own connection via `conn_factory`, matching how the
-libsql client and the RQ worker run). `from_env` builds the production container;
+Postgres client and the RQ worker run). `from_env` builds the production container;
 tests construct one directly with fakes (an injected verifier, a temp-file DB
 factory, a stub provider/adapter builder).
 """

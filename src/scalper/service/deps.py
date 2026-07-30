@@ -1,6 +1,6 @@
 """FastAPI dependencies: request-scoped DB connection + authenticated user.
 
-Each request opens its own connection from the container (matching libsql/worker
+Each request opens its own connection from the container (matching Postgres/worker
 semantics) and closes it when the request ends. `current_user` verifies the access
 JWT, loads the user, and rejects suspended accounts.
 """

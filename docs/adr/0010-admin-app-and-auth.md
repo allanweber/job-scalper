@@ -5,7 +5,7 @@ Operators get a dedicated **admin web app**: server-rendered **FastAPI + Jinja2 
 subdomain** so it can be network-isolated and deployed independently of the public API.
 Its capabilities are global settings / management config, user management
 (list/search/suspend/delete + data deletion), plan/quota overrides, and job/queue + pool
-monitoring. Runtime settings live in a libsql **`settings` table, hot-applied**; every
+monitoring. Runtime settings live in a Postgres **`settings` table, hot-applied**; every
 state-changing action is written to an **`admin_audit`** table (who/what/when/before→after).
 
 There are **two auth surfaces**:

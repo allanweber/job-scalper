@@ -41,8 +41,8 @@ Secrets stay in the environment; hot runtime config lives in the `settings` tabl
 | `SCALPER_PLATFORM_ANTHROPIC_KEY` | for platform LLM | Platform Anthropic key all free users run on (operator pays). `SCALPER_PLATFORM_LLM_KEY` is an alias. |
 | `SCALPER_PLATFORM_LLM_PROVIDER` | no | Platform provider (default `anthropic`). |
 | `SCALPER_REDIS_URL` / `REDIS_URL` | for the queue | Redis URL for the RQ queue. Unset ⇒ eager in-process jobs. |
-| `LIBSQL_URL` / `LIBSQL_AUTH_TOKEN` | prod DB | libsql (`sqld`) endpoint + token. Unset ⇒ local sqlite fallback (`SCALPER_DB_PATH`). See `sqld-dokploy.md`. |
-| `SCALPER_DB_PATH` | no | Local sqlite path when `LIBSQL_URL` is unset (default `scalper-service.db`). |
+| `SCALPER_DATABASE_URL` | prod DB | PostgreSQL URL (`postgresql://user:pass@host:5432/db`); `DATABASE_URL` is accepted as an alias. Unset ⇒ local sqlite fallback (`SCALPER_DB_PATH`). See `postgres-dokploy.md`. |
+| `SCALPER_DB_PATH` | no | Local sqlite path when no Postgres URL is set (default `scalper-service.db`). |
 | `SCALPER_CORS_ORIGINS` | no | Comma-separated allowed CORS origins (default `*`). |
 
 ## Health

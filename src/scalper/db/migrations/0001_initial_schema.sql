@@ -287,11 +287,12 @@ CREATE TABLE IF NOT EXISTS admin_audit (
 CREATE INDEX IF NOT EXISTS idx_admin_audit_ts ON admin_audit(ts);
 
 ------------------------------------------------------------------------------
--- Seed default hot settings (edited later via the admin app). INSERT OR IGNORE
--- so re-running is a no-op and admin edits are never clobbered.
+-- Seed default hot settings (edited later via the admin app). ON CONFLICT DO
+-- NOTHING so re-running is a no-op and admin edits are never clobbered. (This
+-- form is valid on both Postgres and sqlite.)
 ------------------------------------------------------------------------------
 
-INSERT OR IGNORE INTO settings (key, value, updated_at) VALUES
+INSERT INTO settings (key, value, updated_at) VALUES
     -- User quotas (LLM-bound only; users never trigger scrapes — see ADR 0011).
     ('quota.free',          '{"draft_per_month":5,"profile_build_per_month":5,"enrich_per_month":30}', '1970-01-01T00:00:00+00:00'),
     ('llm.per_request_token_ceiling', '20000', '1970-01-01T00:00:00+00:00'),
@@ -306,4 +307,5 @@ INSERT OR IGNORE INTO settings (key, value, updated_at) VALUES
     ('sources.enabled',      '["remotive","remoteok","arbeitnow","jobicy","themuse","workingnomads","himalayas","weworkremotely","hackernews","fourdayweek","jobspresso","authenticjobs","findwork"]', '1970-01-01T00:00:00+00:00'),
     ('sources.default',      '["remotive","remoteok","arbeitnow"]', '1970-01-01T00:00:00+00:00'),
     ('retention.days',       '30', '1970-01-01T00:00:00+00:00'),
-    ('maintenance.enabled',  'false', '1970-01-01T00:00:00+00:00');
+    ('maintenance.enabled',  'false', '1970-01-01T00:00:00+00:00')
+ON CONFLICT (key) DO NOTHING;

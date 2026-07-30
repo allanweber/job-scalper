@@ -1,13 +1,17 @@
 # Job Scalper — single-stack deploy (Dokploy "Compose" service).
 #
-# Topology (per the chosen deploy decisions): one image runs four Python
-# processes (api, admin, worker, scheduler) against a self-hosted sqld + Redis,
-# all on the internal network. Nothing publishes a host port — a Cloudflare
-# Tunnel (cloudflared) is the only ingress and reaches api/admin over the
-# internal network. Configure the tunnel's public hostnames in the Cloudflare
-# dashboard to point at http://api:8080 and http://admin:8081.
+# The database is a SEPARATE managed Dokploy PostgreSQL service (automatic
+# backups, no self-managed volume). This stack runs one image as four Python
+# processes (api, admin, worker, scheduler) plus Redis, fronted by a Cloudflare
+# Tunnel (cloudflared) — the only ingress. Nothing publishes a host port.
 #
-# See docs/deployment/dokploy-cloudflare.md for the step-by-step setup.
+# Networking:
+#   * `internal`      — private to this stack (cloudflared ⇄ api/admin, ⇄ redis).
+#   * `dokploy-network` — Dokploy's shared network, so api/worker/scheduler can
+#     reach the managed Postgres service by its hostname. Set that hostname in
+#     SCALPER_DATABASE_URL (see .env.example).
+#
+# See docs/deployment/dokploy-cloudflare.md and postgres-dokploy.md.
 
 x-app: &app
   build:
@@ -16,26 +20,20 @@ x-app: &app
   env_file: .env
   restart: unless-stopped
   depends_on:
-    - sqld
     - redis
+  networks:
+    - internal
+    - dokploy-network
 
 services:
-  sqld:
-    image: ghcr.io/tursodatabase/libsql-server:latest
-    restart: unless-stopped
-    environment:
-      SQLD_HTTP_LISTEN_ADDR: 0.0.0.0:8080
-      SQLD_DB_PATH: /var/lib/sqld/data
-    volumes:
-      - sqld-data:/var/lib/sqld/data
-    # No published ports: reachable only as http://sqld:8080 on the internal net.
-
   redis:
     image: redis:7-alpine
     restart: unless-stopped
     command: ["redis-server", "--appendonly", "yes"]
     volumes:
       - redis-data:/data
+    networks:
+      - internal
 
   api:
     <<: *app
@@ -68,7 +66,16 @@ services:
     depends_on:
       - api
       - admin
+    networks:
+      - internal
+
+networks:
+  internal:
+    driver: bridge
+  # Dokploy's shared network; must already exist (created by Dokploy). Lets this
+  # stack reach the managed Postgres service by hostname.
+  dokploy-network:
+    external: true
 
 volumes:
-  sqld-data:
   redis-data:

@@ -9,11 +9,11 @@ ENV PYTHONUNBUFFERED=1 \
 
 WORKDIR /app
 
-# Build deps only for the install step (libsql/cryptography may build); the final
-# layer keeps the runtime slim. No PDF/Playwright system libs — the service does
-# not render PDFs at runtime (see docs/DESIGN.md).
+# curl for healthchecks. psycopg[binary] and cryptography ship wheels, so no
+# build toolchain is needed. No PDF/Playwright system libs either — the service
+# does not render PDFs at runtime (see docs/DESIGN.md).
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        build-essential curl \
+        curl \
     && rm -rf /var/lib/apt/lists/*
 
 # Install dependencies first (cached until pyproject changes).

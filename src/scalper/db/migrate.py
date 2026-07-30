@@ -3,11 +3,12 @@
 Migrations are plain SQL files in ``migrations/`` named ``NNNN_description.sql``.
 They are applied in filename order; each applied version is recorded in a
 ``schema_migrations`` table so re-running is idempotent. Migrations are written
-to be safe to re-run anyway (``CREATE TABLE IF NOT EXISTS`` / ``INSERT OR IGNORE``),
-which makes the whole system tolerant of partial application.
+to be safe to re-run anyway (``CREATE TABLE IF NOT EXISTS`` / ``ON CONFLICT DO
+NOTHING``), which makes the whole system tolerant of partial application.
 
-The runner executes on API startup and is also exposed to the ops CLI
-(``scalper admin migrate``). See ADR 0008.
+Migrations are backend-agnostic: they run on Postgres (prod) via the connection
+adapter and on sqlite (local/CI) directly. The runner executes on API startup.
+See ADR 0008 and ADR 0012.
 """
 
 from __future__ import annotations

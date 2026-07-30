@@ -34,6 +34,40 @@ jobs:
       - name: Run test suite
         run: pytest -q
 
+  postgres:
+    name: tests (postgres)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: scalper
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s --health-timeout 5s --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - name: Install package + test deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e '.[test]'
+
+      - name: Run test suite against Postgres
+        run: pytest -q
+        env:
+          SCALPER_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/scalper
+
   lint:
     name: lint (ruff)
     runs-on: ubuntu-latest
