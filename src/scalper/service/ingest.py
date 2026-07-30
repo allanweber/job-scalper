@@ -81,6 +81,12 @@ class Ingestor:
         for stype in sources:
             try:
                 adapter = self._build(stype, {})
+            except KeyError:
+                # Source no longer exists (e.g. removed adapter still lingering in
+                # an admin's sources.enabled) — skip quietly, don't count as failed.
+                self._log(f"scrape {stype}: unknown source, skipping")
+                continue
+            try:
                 found = adapter.fetch(query)
                 collected.extend(found)
                 per_source[stype] = len(found)
