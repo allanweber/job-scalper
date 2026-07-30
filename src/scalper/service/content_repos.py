@@ -189,6 +189,55 @@ class PostingRepo:
             p.sources = prov.get(p.id, [])
         return posts
 
+    def search(
+        self,
+        *,
+        q: str | None = None,
+        source: str | None = None,
+        remote: bool | None = None,
+        seen_within_days: int | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> tuple[list[PoolPosting], int]:
+        """Filtered, paginated pool browse for the admin console.
+
+        Returns (page of postings ordered by most-recently-seen, total matched).
+        All filters are optional and combine with AND; text `q` matches title,
+        company, or description (case-insensitive substring).
+        """
+        where: list[str] = []
+        params: list[Any] = []
+        if q and q.strip():
+            like = f"%{q.strip().lower()}%"
+            where.append("(LOWER(p.title) LIKE ? OR LOWER(p.company) LIKE ? "
+                         "OR LOWER(p.description) LIKE ?)")
+            params += [like, like, like]
+        if source:
+            where.append("p.id IN (SELECT posting_id FROM posting_sources WHERE source=?)")
+            params.append(source)
+        if remote is not None:
+            where.append("p.remote = ?")
+            params.append(1 if remote else 0)
+        if seen_within_days is not None:
+            cutoff = (datetime.now(timezone.utc)
+                      - timedelta(days=seen_within_days)).isoformat()
+            where.append("p.last_seen_at >= ?")
+            params.append(cutoff)
+        clause = (" WHERE " + " AND ".join(where)) if where else ""
+        total = self._c.execute(
+            f"SELECT COUNT(*) FROM postings p{clause}", tuple(params)
+        ).fetchone()[0]
+        rows = self._c.execute(
+            f"SELECT {_POSTING_COLS} FROM postings p{clause} "
+            f"ORDER BY p.last_seen_at DESC LIMIT ? OFFSET ?",
+            (*params, limit, offset),
+        ).fetchall()
+        posts = [_to_pool_posting(r) for r in rows]
+        prov = self._sources_for([p.id for p in posts])
+        for p in posts:
+            p.sources = prov.get(p.id, [])
+        return posts, total
+
     def count(self) -> int:
         return self._c.execute("SELECT COUNT(*) FROM postings").fetchone()[0]
 

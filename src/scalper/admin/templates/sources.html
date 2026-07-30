@@ -16,7 +16,7 @@ sources by editing <code>sources.enabled</code> on the
   {% for r in rows %}
   <tr>
     <td>{{ r.source }}</td>
-    <td>{{ r.count }}</td>
+    <td>{% if r.count %}<a href="/postings?source={{ r.source | urlencode }}">{{ r.count }}</a>{% else %}0{% endif %}</td>
     <td>{% if r.enabled %}<span class="pill succeeded">enabled</span>{% else %}<span class="pill">off</span>{% endif %}</td>
   </tr>
   {% else %}

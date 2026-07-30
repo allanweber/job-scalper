@@ -142,6 +142,24 @@ def test_audit_page_renders(logged_in, conn):
     assert "user.suspend" in logged_in.get("/audit").text
 
 
+def test_postings_page_lists_and_filters(logged_in, conn):
+    PostingRepo(conn).ingest([
+        JobPosting(source="remotive", source_id="1", url="http://x/1", company="Acme",
+                   title="Python Engineer", remote=True),
+        JobPosting(source="remoteok", source_id="2", url="http://x/2", company="Beta",
+                   title="Go Developer", remote=False),
+    ])
+    page = logged_in.get("/postings").text
+    assert "Job postings" in page
+    assert "Python Engineer" in page and "Go Developer" in page
+    # Text filter narrows the result set.
+    filtered = logged_in.get("/postings?q=python").text
+    assert "Python Engineer" in filtered and "Go Developer" not in filtered
+    # Source filter narrows by provenance.
+    by_source = logged_in.get("/postings?source=remoteok").text
+    assert "Go Developer" in by_source and "Python Engineer" not in by_source
+
+
 def test_sources_page_shows_counts_by_source(logged_in, conn):
     PostingRepo(conn).ingest([
         JobPosting(source="remotive", source_id="1", url="http://x/1", company="Acme",
