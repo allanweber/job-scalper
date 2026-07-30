@@ -280,19 +280,25 @@ def jsonld_to_fields(job: dict) -> dict:
 
 
 def matches_any_term(text: str, terms: list[str]) -> bool:
-    """True if `text` matches any of `terms` (case-insensitive).
+    """True if `text` matches any of `terms` (case-insensitive), OR across terms.
 
-    A multi-word term matches when *all* its words appear somewhere in `text`
-    (AND within a term), and the result is OR across terms — so "python backend"
-    matches a posting mentioning both "Python" and "Backend" anywhere, not only
-    the literal phrase. Used by broad-feed sources that can't search server-side.
-    Empty `terms` matches everything (the source's whole feed is in scope).
+    Each term is matched on **word boundaries**: a single-word term (e.g. a skill
+    like ``python``) matches that whole word anywhere in `text`, and a multi-word
+    term (e.g. a role like ``product manager``) matches only as a **contiguous
+    phrase** (``\\bproduct\\s+manager\\b``). This is deliberately strict: matching
+    a multi-word term as independent words scattered across a long description let
+    unrelated roles leak in (a sales JD mentioning "product" and a "manager"
+    satisfied ``product manager``). Used by broad-feed sources that can't search
+    server-side. Empty `terms` matches everything (the whole feed is in scope).
     """
     if not terms:
         return True
     low = text.lower()
     for term in terms:
-        words = [w for w in term.lower().split() if w]
-        if words and all(w in low for w in words):
+        words = [re.escape(w) for w in term.lower().split() if w]
+        if not words:
+            continue
+        pattern = r"\b" + r"\s+".join(words) + r"\b"
+        if re.search(pattern, low):
             return True
     return False

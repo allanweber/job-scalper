@@ -1,6 +1,26 @@
 """Offline tests for the shared salary/timezone parsing helpers (Phase 5)."""
 
-from scalper.sources._util import extract_timezone, parse_salary
+from scalper.sources._util import extract_timezone, matches_any_term, parse_salary
+
+
+def test_matches_single_word_term_is_word_bounded():
+    assert matches_any_term("Senior Python Engineer", ["python"]) is True
+    assert matches_any_term("We love Pythonic code", ["python"]) is False  # not "python"
+    assert matches_any_term("A DevOps engineering role", ["engineer"]) is False  # engineering
+    assert matches_any_term("anything", []) is True  # no terms => keep all
+
+
+def test_multiword_term_requires_contiguous_phrase():
+    # The exact role title matches...
+    assert matches_any_term("Senior Product Manager", ["product manager"]) is True
+    assert matches_any_term("We need a data engineer now", ["data engineer"]) is True
+    # ...but scattered words across a description do NOT (the real leak):
+    sales_jd = "Regional Sales Manager. Sell our product to enterprise buyers."
+    assert matches_any_term(sales_jd, ["product manager"]) is False
+    ops_jd = "AI Operations Manager building data pipelines for the team."
+    assert matches_any_term(ops_jd, ["data engineer"]) is False
+    # OR across terms still holds.
+    assert matches_any_term("Backend Developer", ["product manager", "backend developer"]) is True
 
 
 def test_parse_salary_range_with_symbol_and_commas():
