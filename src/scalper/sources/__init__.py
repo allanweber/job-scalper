@@ -7,8 +7,6 @@ from scalper.sources import (  # noqa: E402,F401
     adzuna,
     arbeitnow,
     arc,
-    authenticjobs,
-    findwork,
     fourdayweek,
     hackernews,
     himalayas,
