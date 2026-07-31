@@ -34,7 +34,10 @@ api = [
     "rq>=1.16",
     "cryptography>=42.0",
     "pyjwt>=2.8",
-    "google-auth>=2.29",
+    # The [requests] extra pulls in `requests`, which google-auth's
+    # transport.requests module (used to verify Google ID tokens) requires at
+    # runtime but does not install by default.
+    "google-auth[requests]>=2.29",
     "authlib>=1.3",
     "python-multipart>=0.0.9",
     "weasyprint>=61.0",
