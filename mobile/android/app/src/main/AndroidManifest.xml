@@ -1,4 +1,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Required for the app to reach the API. Flutter only adds this to the
+         debug/profile manifests automatically, so release builds need it here
+         or every network call fails with "Failed host lookup" (errno 7). -->
+    <uses-permission android:name="android.permission.INTERNET"/>
     <application
         android:label="Job Scalper"
         android:name="${applicationName}"
