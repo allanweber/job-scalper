@@ -21,6 +21,10 @@ class AppTheme {
     );
     final scheme = base.copyWith(
       primary: AppTokens.brandPrimary,
+      // Brand teal is dark enough for white foreground in both themes; the
+      // seed-generated onPrimary is dark in dark mode and would render
+      // low-contrast labels on filled buttons.
+      onPrimary: Colors.white,
       primaryContainer: isDark
           ? AppTokens.brandPrimaryContainerDark
           : AppTokens.brandPrimaryContainerLight,

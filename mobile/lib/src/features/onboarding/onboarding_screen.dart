@@ -1,95 +1,91 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 
-import '../../config/env.dart';
-import '../../state/session.dart';
-import '../../theme/tokens.dart';
+import 'onboarding_controller.dart';
+import 'steps/boards_step.dart';
+import 'steps/consent_step.dart';
+import 'steps/notifications_step.dart';
+import 'steps/resume_step.dart';
+import 'steps/review_profile_step.dart';
+import 'steps/signin_step.dart';
+import 'steps/welcome_step.dart';
+import 'widgets/staged_progress.dart';
 
-/// M1 placeholder for the onboarding flow.
-///
-/// The full flow (welcome slides → Google sign-in → consent → resume upload →
-/// async profile build → review → boards → notifications → feed build) lands in
-/// M2. For now this offers a single dev entry so Launch routing and the shell
-/// are reviewable end-to-end.
-class OnboardingScreen extends ConsumerStatefulWidget {
+/// The onboarding flow. A single route whose body is driven by
+/// [OnboardingController]'s current [OnboardingStep]; the controller commits each
+/// step to the backend and, on the final feed build, flips the session's
+/// onboarding-complete flag (the router then redirects to the feed).
+class OnboardingScreen extends ConsumerWidget {
   const OnboardingScreen({super.key});
 
   @override
-  ConsumerState<OnboardingScreen> createState() => _OnboardingScreenState();
-}
-
-class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
-  bool _busy = false;
-  String? _error;
-
-  Future<void> _devEnter() async {
-    setState(() {
-      _busy = true;
-      _error = null;
-    });
-    try {
-      await ref.read(sessionProvider.notifier).signInWithGoogle(Env.devIdToken);
-      await ref.read(sessionProvider.notifier).completeOnboarding();
-      if (mounted) context.go('/feed');
-    } catch (e) {
-      setState(() => _error = 'Sign-in failed: $e');
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
+  Widget build(BuildContext context, WidgetRef ref) {
+    final step = ref.watch(onboardingControllerProvider.select((s) => s.step));
+    return PopScope(
+      // Back is handled inside each step via the controller.
+      canPop: false,
+      child: AnimatedSwitcher(
+        duration: const Duration(milliseconds: 220),
+        child: KeyedSubtree(
+          key: ValueKey(step),
+          child: _bodyFor(step),
+        ),
+      ),
+    );
   }
 
+  Widget _bodyFor(OnboardingStep step) => switch (step) {
+        OnboardingStep.welcome => const WelcomeStep(),
+        OnboardingStep.signIn => const SignInStep(),
+        OnboardingStep.consent => const ConsentStep(),
+        OnboardingStep.resume => const ResumeStep(),
+        OnboardingStep.buildingProfile => const _BuildingProfile(),
+        OnboardingStep.reviewProfile => const ReviewProfileStep(),
+        OnboardingStep.boards => const BoardsStep(),
+        OnboardingStep.notifications => const NotificationsStep(),
+        OnboardingStep.buildingFeed => const _BuildingFeed(),
+      };
+}
+
+class _BuildingProfile extends ConsumerWidget {
+  const _BuildingProfile();
+
   @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
+  Widget build(BuildContext context, WidgetRef ref) {
+    final st = ref.watch(onboardingControllerProvider);
     return Scaffold(
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const Spacer(),
-              Image.asset('assets/brand/icon-circle.png',
-                  width: 96, height: 96, fit: BoxFit.contain),
-              const SizedBox(height: 20),
-              Text('Welcome to Job Scalper',
-                  textAlign: TextAlign.center,
-                  style: Theme.of(context).textTheme.headlineSmall),
-              const SizedBox(height: 10),
-              Text(
-                'We scan remote job boards, rank roles against your resume, and '
-                'draft a tailored application in one tap.',
-                textAlign: TextAlign.center,
-                style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 14),
-              ),
-              const Spacer(),
-              if (_error != null) ...[
-                Text(_error!,
-                    style: const TextStyle(color: AppTokens.destructive, fontSize: 13)),
-                const SizedBox(height: 12),
-              ],
-              FilledButton(
-                onPressed: _busy ? null : _devEnter,
-                child: _busy
-                    ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(
-                            strokeWidth: 2, color: Colors.white))
-                    : const Text('Get started'),
-              ),
-              const SizedBox(height: 12),
-              Text(
-                Env.devLogin
-                    ? 'Dev sign-in enabled'
-                    : 'Full onboarding arrives in the next milestone',
-                textAlign: TextAlign.center,
-                style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 12),
-              ),
-            ],
-          ),
-        ),
+      body: StagedProgress(
+        title: 'Building your profile',
+        subtitle: 'Reading your resume and extracting your skills…',
+        steps: const [
+          'Uploading resume',
+          'Analyzing experience',
+          'Extracting skills & keywords',
+        ],
+        currentStep: st.buildStepIndex,
+        phase: st.buildPhase,
+      ),
+    );
+  }
+}
+
+class _BuildingFeed extends ConsumerWidget {
+  const _BuildingFeed();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final st = ref.watch(onboardingControllerProvider);
+    return Scaffold(
+      body: StagedProgress(
+        title: 'Building your feed',
+        subtitle: 'Scoring live postings against your new profile…',
+        steps: const [
+          'Gathering postings from your boards',
+          'Scoring against your profile',
+          'Ranking your best matches',
+        ],
+        currentStep: st.buildStepIndex,
+        phase: st.buildPhase,
       ),
     );
   }

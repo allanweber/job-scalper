@@ -90,6 +90,9 @@ class SessionController extends Notifier<SessionState> implements TokenStore {
     state = state.copyWith(status: AuthStatus.signedOut, clearAuth: true);
   }
 
+  /// Replace the cached user (e.g. after accepting legal terms mid-onboarding).
+  void updateUser(ApiUser user) => state = state.copyWith(user: user);
+
   Future<void> completeOnboarding() async {
     await _prefs.setBool(_kOnboarding, true);
     state = state.copyWith(onboardingComplete: true);

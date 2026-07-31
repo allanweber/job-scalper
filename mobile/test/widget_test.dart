@@ -25,11 +25,12 @@ void main() {
     expect(find.text('Job Scalper'), findsOneWidget);
     expect(find.text('Warming up…'), findsOneWidget);
 
-    // After the splash delay, a signed-out first run lands on onboarding.
+    // After the splash delay, a signed-out first run lands on onboarding's
+    // first welcome slide.
     await tester.pump(const Duration(milliseconds: 1700));
     await tester.pumpAndSettle();
-    expect(find.text('Welcome to Job Scalper'), findsOneWidget);
-    expect(find.text('Get started'), findsOneWidget);
+    expect(find.text('Remote roles, already ranked'), findsOneWidget);
+    expect(find.text('Next'), findsOneWidget);
   });
 
   testWidgets('restoring copy shows when a session is persisted',
