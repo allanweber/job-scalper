@@ -10,13 +10,17 @@ following fields. Reply with STRICT JSON only — no prose, no code fences:
   "remote": true | false | null,
   "seniority": "junior" | "mid" | "senior" | "staff" | "principal" | null,
   "salary_range": {"min": integer | null, "max": integer | null, "currency": string | null} | null,
-  "timezone_requirement": string | null
+  "timezone_requirement": string | null,
+  "key_requirements": [string, ...],
+  "red_flags": [string, ...]
 }
 Rules:
 - remote: true only if the role explicitly allows fully remote work; null if unclear
 - seniority: infer from title + description; null if not determinable
 - salary_range: extract numbers from text (e.g. "$120k–150k" → min:120000, max:150000, currency:"USD"); null if not mentioned
-- timezone_requirement: quote any timezone constraint or "async-friendly" language; null if none mentioned\
+- timezone_requirement: quote any timezone constraint or "async-friendly" language; null if none mentioned
+- key_requirements: 2–5 concise must-have requirements the posting emphasises (skills, years, credentials); [] if none stand out
+- red_flags: 0–4 short concerns worth noting before applying (e.g. vague scope, on-call heavy, equity-only pay, unrealistic breadth); [] if none\
 """
 
 PROFILE_DRAFT_SYSTEM = (

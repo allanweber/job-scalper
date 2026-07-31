@@ -20,9 +20,19 @@ from scalper.service.schemas import (
     DraftRequest,
     DraftResponse,
     DraftSummary,
+    DraftUpdateRequest,
     EnrichRequest,
     JobAccepted,
 )
+
+
+def _draft_response(d: "object") -> DraftResponse:
+    return DraftResponse(
+        id=d.id, posting_id=d.posting_id, job_source=d.job_source,
+        resume_md=d.resume_md, cover_letter_md=d.cover_letter_md,
+        stretch_claims_md=d.stretch_claims_md, provider=d.provider, model=d.model,
+        key_source=d.key_source, created_at=d.created_at,
+    )
 
 router = APIRouter(tags=["drafts"])
 
@@ -83,12 +93,19 @@ def get_draft(draft_id: str, ctx: RequestContext = Depends(get_ctx),
     d = DraftRepo(ctx.conn).get(draft_id, user.id)
     if d is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "draft not found")
-    return DraftResponse(
-        id=d.id, posting_id=d.posting_id, job_source=d.job_source,
-        resume_md=d.resume_md, cover_letter_md=d.cover_letter_md,
-        stretch_claims_md=d.stretch_claims_md, provider=d.provider, model=d.model,
-        key_source=d.key_source, created_at=d.created_at,
-    )
+    return _draft_response(d)
+
+
+@router.put("/drafts/{draft_id}", response_model=DraftResponse, tags=["drafts"])
+def update_draft(draft_id: str, body: DraftUpdateRequest,
+                 ctx: RequestContext = Depends(get_ctx),
+                 user: User = Depends(current_user)):
+    d = DraftRepo(ctx.conn).update_content(
+        draft_id, user.id, resume_md=body.resume_md,
+        cover_letter_md=body.cover_letter_md)
+    if d is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "draft not found")
+    return _draft_response(d)
 
 
 @router.get("/drafts/{draft_id}/{which}.pdf", tags=["drafts"])

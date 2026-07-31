@@ -206,6 +206,19 @@ def test_draft_create_get_list(conn, user):
     assert len(repo.list_for(user.id)) == 1
 
 
+def test_draft_update_content(conn, user):
+    repo = DraftRepo(conn)
+    did = repo.create(user.id, profile_id=None, posting_id=None, job_source="pool",
+                      source_url=None, resume_md="# R", cover_letter_md="Dear",
+                      stretch_claims_md=None, provider="anthropic", model="m",
+                      key_source="platform")
+    # Only the provided field changes; the other is untouched.
+    upd = repo.update_content(did, user.id, cover_letter_md="Dear team,")
+    assert upd.cover_letter_md == "Dear team," and upd.resume_md == "# R"
+    # Not the owner -> no update.
+    assert repo.update_content(did, "other-user", resume_md="x") is None
+
+
 # --- jobs / usage ledger ---
 
 def test_job_lifecycle(conn, user):

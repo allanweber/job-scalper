@@ -17,7 +17,7 @@ import json
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Callable
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, Field, field_validator
 
 from scalper.config import LLMConfig, Profile
 from scalper.llm import build_provider
@@ -52,7 +52,7 @@ def _lookup_price(model: str) -> tuple[float, float] | None:
 _DESC_LIMIT = 2000
 
 #: Increment when the JSON schema changes so old cache entries are naturally invalidated.
-_SCHEMA_VERSION = 2
+_SCHEMA_VERSION = 3
 
 
 class SalaryRange(BaseModel):
@@ -68,6 +68,21 @@ class Enrichment(BaseModel):
     seniority: str | None = None
     salary_range: SalaryRange | None = None
     timezone_requirement: str | None = None
+    #: A few concrete "must-have" requirements the posting emphasises.
+    key_requirements: list[str] = Field(default_factory=list)
+    #: Notable concerns worth flagging before applying (empty when none).
+    red_flags: list[str] = Field(default_factory=list)
+
+    @field_validator("key_requirements", "red_flags", mode="before")
+    @classmethod
+    def _coerce_list(cls, v: object) -> list[str]:
+        if v is None:
+            return []
+        if isinstance(v, str):
+            return [v] if v.strip() else []
+        if isinstance(v, list):
+            return [str(x).strip() for x in v if str(x).strip()]
+        return []
 
     @field_validator("remote", mode="before")
     @classmethod

@@ -48,6 +48,7 @@ class PoolPosting:
     published_at: str | None
     first_seen_at: str
     last_seen_at: str
+    timezone: str | None = None
     sources: list[str] = field(default_factory=list)
 
     def to_job_posting(self) -> JobPosting:
@@ -64,6 +65,7 @@ class PoolPosting:
             salary_min=self.salary_min,
             salary_max=self.salary_max,
             salary_currency=self.salary_currency,
+            timezone=self.timezone,
             published_at=_parse_dt(self.published_at),
         )
 
@@ -80,7 +82,7 @@ def _parse_dt(value: str | None) -> datetime | None:
 
 _POSTING_COLS = (
     "id, company, title, description, location, remote, url, salary_min, "
-    "salary_max, salary_currency, published_at, first_seen_at, last_seen_at"
+    "salary_max, salary_currency, published_at, first_seen_at, last_seen_at, timezone"
 )
 
 
@@ -90,6 +92,7 @@ def _to_pool_posting(row: Any) -> PoolPosting:
         location=row[4], remote=bool(row[5]), url=row[6], salary_min=row[7],
         salary_max=row[8], salary_currency=row[9], published_at=row[10],
         first_seen_at=row[11], last_seen_at=row[12],
+        timezone=row[13] if len(row) > 13 else None,
     )
 
 
@@ -177,7 +180,7 @@ class PostingRepo:
         rows = self._c.execute(
             f"SELECT DISTINCT p.id, p.company, p.title, p.description, p.location, "
             f"p.remote, p.url, p.salary_min, p.salary_max, p.salary_currency, "
-            f"p.published_at, p.first_seen_at, p.last_seen_at "
+            f"p.published_at, p.first_seen_at, p.last_seen_at, p.timezone "
             f"FROM postings p JOIN posting_sources ps ON ps.posting_id = p.id "
             f"WHERE ps.source IN ({placeholders}) "
             f"ORDER BY p.last_seen_at DESC LIMIT ?",
@@ -696,6 +699,30 @@ class DraftRepo:
             "ORDER BY created_at DESC LIMIT ?", (user_id, limit),
         ).fetchall()
         return [_to_draft(r) for r in rows]
+
+    def update_content(self, draft_id: str, user_id: str, *,
+                       resume_md: str | None = None,
+                       cover_letter_md: str | None = None) -> "Draft | None":
+        """Persist edited resume/cover-letter markdown for a user's own draft.
+
+        Only the provided fields are changed. Any stale rendered PDF for an edited
+        document is cleared so a download never serves text that no longer matches
+        the markdown. Returns the updated draft, or None if it isn't the user's.
+        """
+        sets, args = ["updated_at=?"], [now_iso()]
+        if resume_md is not None:
+            sets += ["resume_md=?", "resume_pdf=NULL"]
+            args.append(resume_md)
+        if cover_letter_md is not None:
+            sets += ["cover_letter_md=?", "cover_letter_pdf=NULL"]
+            args.append(cover_letter_md)
+        args += [draft_id, user_id]
+        cur = self._c.execute(
+            f"UPDATE drafts SET {', '.join(sets)} WHERE id=? AND user_id=?", tuple(args))
+        self._c.commit()
+        if not cur.rowcount:
+            return None
+        return self.get(draft_id, user_id)
 
 
 # --------------------------------------------------------------------------- async jobs

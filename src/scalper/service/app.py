@@ -14,7 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from scalper.db import apply_pending
 from scalper.service.container import Container
-from scalper.service.routers import account, auth, drafts, feed, jobs, system
+from scalper.service.routers import account, auth, drafts, feed, jobs, postings, system
 
 _TITLE = "Job Scalper API"
 _VERSION = "0.1.0"
@@ -42,7 +42,7 @@ def create_app(container: Container | None = None) -> FastAPI:
         allow_headers=["*"],
     )
 
-    for module in (system, auth, account, feed, drafts, jobs):
+    for module in (system, auth, account, feed, drafts, postings, jobs):
         app.include_router(module.router)
 
     return app

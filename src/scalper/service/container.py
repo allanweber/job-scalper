@@ -24,6 +24,7 @@ from scalper.service.auth import (
 )
 from scalper.service.crypto import KeyVault
 from scalper.service.settings import Settings
+from scalper.service.url_import import UrlFetcher, default_url_fetch
 from scalper.sources import build_adapter
 
 ConnFactory = Callable[[], Any]
@@ -40,6 +41,7 @@ class Container:
     redis_url: str | None = None
     provider_builder: Callable[..., Any] = build_provider
     adapter_builder: Callable[..., Any] = build_adapter
+    url_fetcher: UrlFetcher = default_url_fetch
     settings_ttl: float = 5.0
 
     # -- per-request/-job helpers --

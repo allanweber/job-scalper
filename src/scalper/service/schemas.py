@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, HttpUrl, model_validator
 
 
 # --- auth ---
@@ -134,6 +134,32 @@ class FeedResponse(BaseModel):
     count: int
 
 
+class PostingDetailResponse(BaseModel):
+    """A single posting's full text plus the requesting user's match breakdown."""
+
+    posting_id: str
+    company: str
+    title: str
+    url: str
+    description: str
+    location: str | None = None
+    remote: bool
+    timezone: str | None = None
+    salary_min: float | None = None
+    salary_max: float | None = None
+    salary_currency: str | None = None
+    published_at: str | None = None
+    score: int
+    matched_skills: list[str]
+    missing_skills: list[str]
+    matched_keywords: list[str]
+    sources: list[str]
+    is_new: bool
+    saved: bool
+    drafted: bool
+    breakdown: dict[str, float]
+
+
 # --- jobs ---
 
 class JobResponse(BaseModel):
@@ -157,6 +183,23 @@ class DraftRequest(BaseModel):
 
 class EnrichRequest(BaseModel):
     posting_id: str
+
+
+class ImportUrlRequest(BaseModel):
+    url: HttpUrl
+
+
+class DraftUpdateRequest(BaseModel):
+    """Edit a draft's resume and/or cover-letter markdown (mobile edit sheets)."""
+
+    resume_md: str | None = None
+    cover_letter_md: str | None = None
+
+    @model_validator(mode="after")
+    def _at_least_one(self) -> "DraftUpdateRequest":
+        if self.resume_md is None and self.cover_letter_md is None:
+            raise ValueError("provide resume_md and/or cover_letter_md")
+        return self
 
 
 # --- drafts ---

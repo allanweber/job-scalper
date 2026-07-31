@@ -12,9 +12,10 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-from scalper.scoring import score_all
+from scalper.scoring import score_all, score_posting
 from scalper.service.content_repos import (
     OverlayRepo,
+    PoolPosting,
     PostingRepo,
     ProfileRepo,
     StoredProfile,
@@ -31,6 +32,33 @@ class FeedItem:
     url: str
     location: str | None
     remote: bool
+    salary_min: float | None
+    salary_max: float | None
+    salary_currency: str | None
+    published_at: str | None
+    score: int
+    matched_skills: list[str]
+    missing_skills: list[str]
+    matched_keywords: list[str]
+    sources: list[str]
+    is_new: bool
+    saved: bool
+    drafted: bool
+    breakdown: dict[str, float] = field(default_factory=dict)
+
+
+@dataclass
+class PostingDetail:
+    """A single posting with its full text and the user's match breakdown."""
+
+    posting_id: str
+    company: str
+    title: str
+    url: str
+    description: str
+    location: str | None
+    remote: bool
+    timezone: str | None
     salary_min: float | None
     salary_max: float | None
     salary_currency: str | None
@@ -106,3 +134,33 @@ class FeedService:
             if len(items) >= limit:
                 break
         return items
+
+    def detail(self, user_id: str, posting: PoolPosting,
+               *, profile: StoredProfile | None = None) -> PostingDetail:
+        """Full posting text + this user's match breakdown and overlay flags.
+
+        Unlike `build`, this scores a single posting regardless of the user's
+        source filter, so it also backs postings reached by URL import.
+        """
+        profile = profile or self._profiles.primary_for(user_id)
+        s = score_posting(profile.criteria(), posting.to_job_posting()) if profile else None
+        if s is not None:
+            self._overlay.upsert_score(user_id, posting.id, s.percent,
+                                       s.breakdown.model_dump())
+        ov = self._overlay.get_many(user_id, [posting.id]).get(posting.id)
+        return PostingDetail(
+            posting_id=posting.id, company=posting.company, title=posting.title,
+            url=posting.url, description=posting.description, location=posting.location,
+            remote=posting.remote, timezone=posting.timezone,
+            salary_min=posting.salary_min, salary_max=posting.salary_max,
+            salary_currency=posting.salary_currency, published_at=posting.published_at,
+            score=s.percent if s else 0,
+            matched_skills=s.matched_skills if s else [],
+            missing_skills=s.missing_skills if s else [],
+            matched_keywords=s.matched_keywords if s else [],
+            sources=posting.sources,
+            is_new=(ov is None or ov.seen_at is None),
+            saved=bool(ov and ov.saved),
+            drafted=bool(ov and ov.drafted_at),
+            breakdown=s.breakdown.components() if s else {},
+        )
