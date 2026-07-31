@@ -83,7 +83,7 @@ class Profile {
         origin: j['origin'] as String?,
       );
 
-  /// The `ProfileFields` body for `PUT /account/profile`.
+  /// The `ProfileFields` body for `PUT /me/profile`.
   Map<String, dynamic> toFields() => {
         'name': name,
         'titles': titles,
@@ -97,7 +97,7 @@ class Profile {
       };
 }
 
-/// Metadata about the user's stored resume (`GET/PUT /account/resume`).
+/// Metadata about the user's stored resume (`GET/PUT /me/resume`).
 class ResumeInfo {
   const ResumeInfo({
     this.filename,
@@ -122,7 +122,7 @@ class ResumeInfo {
       );
 }
 
-/// The job-board selection state (`GET/PUT /account/sources`).
+/// The job-board selection state (`GET/PUT /me/sources`).
 class SourcesInfo {
   const SourcesInfo({
     required this.selected,

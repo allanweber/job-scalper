@@ -10,7 +10,7 @@ import 'models/api_models.dart';
 /// inject an in-memory fake; the app always runs [HttpAccountRepository] against
 /// the real FastAPI backend.
 abstract class AccountRepository {
-  /// Accept ToS + Privacy (`POST /account/legal/accept`); returns the updated user.
+  /// Accept ToS + Privacy (`POST /me/legal/accept`); returns the updated user.
   Future<ApiUser> acceptLegal();
 
   Future<Profile> getProfile();
@@ -19,7 +19,7 @@ abstract class AccountRepository {
   /// Kick off an async resume-driven profile build; returns the job id to poll.
   Future<String> buildProfileFromResume();
 
-  /// Upload the resume bytes (`PUT /account/resume`, multipart).
+  /// Upload the resume bytes (`PUT /me/resume`, multipart).
   Future<ResumeInfo> uploadResume({
     required List<int> bytes,
     required String filename,
@@ -43,19 +43,19 @@ class HttpAccountRepository implements AccountRepository {
 
   @override
   Future<ApiUser> acceptLegal() async {
-    final r = await _api.post<Map<String, dynamic>>('/account/legal/accept');
+    final r = await _api.post<Map<String, dynamic>>('/me/legal/accept');
     return ApiUser.fromJson(r.data!);
   }
 
   @override
   Future<Profile> getProfile() async {
-    final r = await _api.get<Map<String, dynamic>>('/account/profile');
+    final r = await _api.get<Map<String, dynamic>>('/me/profile');
     return Profile.fromJson(r.data!);
   }
 
   @override
   Future<Profile> saveProfile(Profile profile) async {
-    final r = await _api.put<Map<String, dynamic>>('/account/profile',
+    final r = await _api.put<Map<String, dynamic>>('/me/profile',
         data: profile.toFields());
     return Profile.fromJson(r.data!);
   }
@@ -63,7 +63,7 @@ class HttpAccountRepository implements AccountRepository {
   @override
   Future<String> buildProfileFromResume() async {
     final r =
-        await _api.post<Map<String, dynamic>>('/account/profile/from-resume');
+        await _api.post<Map<String, dynamic>>('/me/profile/from-resume');
     return r.data!['job_id'] as String;
   }
 
@@ -82,7 +82,7 @@ class HttpAccountRepository implements AccountRepository {
     });
     // Content-Type must be multipart here, not the client-default JSON.
     final r = await _api.raw.put<Map<String, dynamic>>(
-      '/account/resume',
+      '/me/resume',
       data: form,
       options: Options(contentType: 'multipart/form-data'),
     );
@@ -92,7 +92,7 @@ class HttpAccountRepository implements AccountRepository {
   @override
   Future<ResumeInfo?> getResume() async {
     try {
-      final r = await _api.get<Map<String, dynamic>>('/account/resume');
+      final r = await _api.get<Map<String, dynamic>>('/me/resume');
       return ResumeInfo.fromJson(r.data!);
     } on DioException catch (e) {
       if (e.response?.statusCode == 404) return null;
@@ -102,13 +102,13 @@ class HttpAccountRepository implements AccountRepository {
 
   @override
   Future<SourcesInfo> getSources() async {
-    final r = await _api.get<Map<String, dynamic>>('/account/sources');
+    final r = await _api.get<Map<String, dynamic>>('/me/sources');
     return SourcesInfo.fromJson(r.data!);
   }
 
   @override
   Future<SourcesInfo> saveSources(List<String> sources) async {
-    final r = await _api.put<Map<String, dynamic>>('/account/sources',
+    final r = await _api.put<Map<String, dynamic>>('/me/sources',
         data: {'sources': sources});
     return SourcesInfo.fromJson(r.data!);
   }

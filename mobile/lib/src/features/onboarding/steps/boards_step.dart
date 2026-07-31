@@ -6,7 +6,7 @@ import '../onboarding_controller.dart';
 import '../widgets/onboarding_scaffold.dart';
 
 /// Step 8 — pick job boards. Select up to `maxAllowed` (3 on free); a 4th tap is
-/// blocked with a toast. Saved with `PUT /account/sources`.
+/// blocked with a toast. Saved with `PUT /me/sources`.
 class BoardsStep extends ConsumerWidget {
   const BoardsStep({super.key});
 

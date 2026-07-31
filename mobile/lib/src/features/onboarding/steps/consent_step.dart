@@ -7,7 +7,7 @@ import '../widgets/onboarding_scaffold.dart';
 
 /// Step 3 — consent. Two required checkable cards (Terms, Privacy); the text
 /// links open bottom sheets with the full prose. The CTA (`POST
-/// /account/legal/accept`) is disabled until both are checked.
+/// /me/legal/accept`) is disabled until both are checked.
 class ConsentStep extends ConsumerStatefulWidget {
   const ConsentStep({super.key});
 

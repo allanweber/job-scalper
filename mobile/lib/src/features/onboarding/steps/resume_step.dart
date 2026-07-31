@@ -8,7 +8,7 @@ import '../onboarding_controller.dart';
 import '../widgets/onboarding_scaffold.dart';
 
 /// Step 5 — upload resume. Pick a PDF/DOC(X)/TXT, show a selected-file card,
-/// then "Build my profile" uploads the bytes (`PUT /account/resume`) and kicks
+/// then "Build my profile" uploads the bytes (`PUT /me/resume`) and kicks
 /// off the async profile build. Uses `file_selector` (the official federated
 /// plugin) so the native Android/iOS builds stay compatible with current Flutter.
 class ResumeStep extends ConsumerStatefulWidget {

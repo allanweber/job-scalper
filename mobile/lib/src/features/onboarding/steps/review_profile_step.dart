@@ -7,7 +7,7 @@ import '../widgets/chip_input.dart';
 import '../widgets/onboarding_scaffold.dart';
 
 /// Step 7 — review profile. A fully editable form pre-filled from the resume
-/// build; saved with `PUT /account/profile`.
+/// build; saved with `PUT /me/profile`.
 class ReviewProfileStep extends ConsumerStatefulWidget {
   const ReviewProfileStep({super.key});
 

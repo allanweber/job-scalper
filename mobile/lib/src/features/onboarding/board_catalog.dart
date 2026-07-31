@@ -1,5 +1,5 @@
 /// Human-friendly names + one-liners for job-board source slugs returned by
-/// `GET /account/sources`. Unknown slugs fall back to a title-cased label.
+/// `GET /me/sources`. Unknown slugs fall back to a title-cased label.
 class BoardInfo {
   const BoardInfo(this.name, this.blurb);
   final String name;
