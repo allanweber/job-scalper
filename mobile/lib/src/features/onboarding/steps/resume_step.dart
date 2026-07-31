@@ -1,4 +1,6 @@
-import 'package:file_picker/file_picker.dart';
+import 'dart:typed_data';
+
+import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -7,7 +9,8 @@ import '../widgets/onboarding_scaffold.dart';
 
 /// Step 5 — upload resume. Pick a PDF/DOC(X)/TXT, show a selected-file card,
 /// then "Build my profile" uploads the bytes (`PUT /account/resume`) and kicks
-/// off the async profile build.
+/// off the async profile build. Uses `file_selector` (the official federated
+/// plugin) so the native Android/iOS builds stay compatible with current Flutter.
 class ResumeStep extends ConsumerStatefulWidget {
   const ResumeStep({super.key});
 
@@ -16,54 +19,65 @@ class ResumeStep extends ConsumerStatefulWidget {
 }
 
 class _ResumeStepState extends ConsumerState<ResumeStep> {
-  PlatformFile? _file;
+  Uint8List? _bytes;
+  String? _name;
   String? _pickError;
 
   Future<void> _pick() async {
     setState(() => _pickError = null);
     try {
-      final res = await FilePicker.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: const ['pdf', 'doc', 'docx', 'txt', 'md'],
-        withData: true,
+      const group = XTypeGroup(
+        label: 'Resume',
+        extensions: ['pdf', 'doc', 'docx', 'txt', 'md'],
+        mimeTypes: [
+          'application/pdf',
+          'application/msword',
+          'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+          'text/plain',
+          'text/markdown',
+        ],
       );
-      if (res == null || res.files.isEmpty) return; // cancelled
-      final picked = res.files.first;
-      if (picked.bytes == null) {
-        setState(() => _pickError = 'Could not read that file — try another.');
-        return;
-      }
-      setState(() => _file = picked);
+      final file = await openFile(acceptedTypeGroups: const [group]);
+      if (file == null) return; // cancelled
+      final bytes = await file.readAsBytes();
+      setState(() {
+        _bytes = bytes;
+        _name = file.name;
+      });
     } catch (e) {
       setState(() => _pickError = 'File picker error: $e');
     }
   }
 
   Future<void> _submit() async {
-    final f = _file;
-    if (f == null || f.bytes == null) return;
+    final bytes = _bytes;
+    final name = _name;
+    if (bytes == null || name == null) return;
     await ref.read(onboardingControllerProvider.notifier).submitResume(
-          bytes: f.bytes!,
-          filename: f.name,
-          contentType: _contentType(f.extension),
+          bytes: bytes,
+          filename: name,
+          contentType: _contentType(name),
         );
   }
 
-  String? _contentType(String? ext) => switch (ext?.toLowerCase()) {
-        'pdf' => 'application/pdf',
-        'doc' => 'application/msword',
-        'docx' =>
-          'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-        'txt' => 'text/plain',
-        'md' => 'text/markdown',
-        _ => null,
-      };
+  String? _contentType(String name) {
+    final ext = name.contains('.') ? name.split('.').last.toLowerCase() : '';
+    return switch (ext) {
+      'pdf' => 'application/pdf',
+      'doc' => 'application/msword',
+      'docx' =>
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'txt' => 'text/plain',
+      'md' => 'text/markdown',
+      _ => null,
+    };
+  }
 
   @override
   Widget build(BuildContext context) {
     final st = ref.watch(onboardingControllerProvider);
     final ctrl = ref.read(onboardingControllerProvider.notifier);
-    final hasFile = _file != null;
+    final hasFile = _bytes != null;
     return OnboardingScaffold(
       progress: 5 / 8,
       title: 'Add your resume',
@@ -77,7 +91,14 @@ class _ResumeStepState extends ConsumerState<ResumeStep> {
       primaryEnabled: hasFile,
       onPrimary: _submit,
       child: hasFile
-          ? _FileCard(file: _file!, onClear: () => setState(() => _file = null))
+          ? _FileCard(
+              name: _name!,
+              size: _bytes!.length,
+              onClear: () => setState(() {
+                _bytes = null;
+                _name = null;
+              }),
+            )
           : _Dropzone(onTap: _pick),
     );
   }
@@ -121,8 +142,14 @@ class _Dropzone extends StatelessWidget {
 }
 
 class _FileCard extends StatelessWidget {
-  const _FileCard({required this.file, required this.onClear});
-  final PlatformFile file;
+  const _FileCard({
+    required this.name,
+    required this.size,
+    required this.onClear,
+  });
+
+  final String name;
+  final int size;
   final VoidCallback onClear;
 
   @override
@@ -152,13 +179,13 @@ class _FileCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(file.name,
+                Text(name,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
                         fontSize: 14, fontWeight: FontWeight.w600)),
                 const SizedBox(height: 2),
-                Text(_fmtSize(file.size),
+                Text(_fmtSize(size),
                     style: TextStyle(
                         fontSize: 12, color: scheme.onSurfaceVariant)),
               ],
