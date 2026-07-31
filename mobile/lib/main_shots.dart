@@ -30,6 +30,8 @@ Future<void> main() async {
       overrides: [
         sharedPrefsProvider.overrideWithValue(prefs),
         accountRepositoryProvider.overrideWithValue(FakeAccountRepository()),
+        googleAuthenticatorProvider
+            .overrideWithValue(FakeGoogleAuthenticator()),
         onboardingControllerProvider
             .overrideWith(() => SeededOnboardingController(seededState(step))),
       ],

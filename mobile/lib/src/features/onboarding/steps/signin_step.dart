@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../config/env.dart';
 import '../../../theme/tokens.dart';
 import '../onboarding_controller.dart';
 
@@ -59,7 +58,7 @@ class SignInStep extends ConsumerWidget {
               ],
               _GoogleButton(
                 busy: st.busy,
-                onPressed: st.busy ? null : () => ctrl.signIn(Env.devIdToken),
+                onPressed: st.busy ? null : ctrl.signIn,
               ),
               const SizedBox(height: 16),
               Text(

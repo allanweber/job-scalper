@@ -105,11 +105,14 @@ class OnboardingController extends Notifier<OnboardingState> {
 
   void startFromWelcome() => _go(OnboardingStep.signIn);
 
-  /// Continue with Google. Uses the platform sign-in on device; the web
-  /// verification build passes a dev id-token stand-in.
-  Future<void> signIn(String idToken) => _guard(() async {
+  /// Continue with Google. Runs native Google Sign-In (or the dev stand-in),
+  /// exchanges the returned ID token for an app session, then advances — to
+  /// consent, or straight to resume for a returning user who already accepted.
+  Future<void> signIn() => _guard(() async {
+        final idToken =
+            await ref.read(googleAuthenticatorProvider).obtainIdToken();
+        if (idToken == null) return; // user cancelled
         await _session.signInWithGoogle(idToken);
-        // Skip the consent step if this returning user already accepted.
         final user = ref.read(sessionProvider).user;
         _go(user?.legalAccepted == true
             ? OnboardingStep.resume

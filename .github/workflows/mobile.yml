@@ -84,7 +84,13 @@ jobs:
           fi
 
       - name: Build release APK
-        run: flutter build apk --release ${{ steps.ver.outputs.args }}
+        # GOOGLE_SERVER_CLIENT_ID is the Google *Web* OAuth client id; it makes
+        # the returned ID token's audience match the backend's
+        # SCALPER_GOOGLE_AUDIENCES. Empty when the secret is unset (build still
+        # succeeds; native sign-in just won't return a token until it's set).
+        run: >-
+          flutter build apk --release ${{ steps.ver.outputs.args }}
+          --dart-define=GOOGLE_SERVER_CLIENT_ID=${{ secrets.GOOGLE_SERVER_CLIENT_ID }}
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4

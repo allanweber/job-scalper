@@ -52,6 +52,57 @@ session so the nav shell renders without a backend. `--no-web-resources-cdn`
 bundles CanvasKit locally, and Roboto/Roboto Mono are bundled as assets, so the
 web build renders fully offline.
 
+## Google Sign-In setup
+
+Sign-in uses native Google Sign-In (`google_sign_in`) to obtain a Google **ID
+token**, which the app posts to `POST /auth/google`. Getting it working end to
+end requires configuration in three places.
+
+### 1. Google Cloud OAuth clients (you create these)
+
+In the Google Cloud console (APIs & Services → Credentials), create OAuth client
+IDs for your project:
+
+- **Web application** client — this is the *server/audience* client. Its client
+  ID is what the app passes as `serverClientId` and what the backend must accept
+  as an audience. **Required for Android and iOS** (it's what makes the returned
+  ID token's `aud` match the backend).
+- **Android** client — enter the package name `dev.allanweber.job_scalper` and
+  the SHA-1 of your signing key. Add **two**: the SHA-1 of your upload keystore,
+  and (if you use Play App Signing) the SHA-1 Google shows under App Signing.
+  Get your upload SHA-1 with:
+  `keytool -list -v -keystore upload-keystore.jks -alias upload`
+- **iOS** client (only for iOS builds) — enter the bundle ID. Copy its
+  *reversed* client ID into `ios/Runner/Info.plist` (replace
+  `REPLACE_WITH_REVERSED_IOS_CLIENT_ID`).
+
+### 2. Build-time config (client IDs are not secrets, but injected at build)
+
+| dart-define | Value |
+| --- | --- |
+| `GOOGLE_SERVER_CLIENT_ID` | the **Web** client ID (ends in `.apps.googleusercontent.com`) |
+| `GOOGLE_IOS_CLIENT_ID` | the **iOS** client ID (iOS builds only) |
+
+CI passes `GOOGLE_SERVER_CLIENT_ID` from the repo secret of the same name into
+the release APK. Set it under **Settings → Secrets and variables → Actions**.
+Local run:
+
+```
+flutter run --dart-define=GOOGLE_SERVER_CLIENT_ID=<web-client-id>.apps.googleusercontent.com
+```
+
+### 3. Backend (your Dokploy deployment)
+
+- Install the API with the `.[api]` extra (the Dockerfile already does; the
+  current 500 on `/auth/google` means the **deployed image is stale** — redeploy
+  from latest so `google-auth` is present).
+- Set `SCALPER_GOOGLE_AUDIENCES` to the **Web** client ID (comma-separated if you
+  accept more than one). The ID token's `aud` must be in this list.
+
+Until real clients are configured, the **web verification build** uses a dev
+shim (`--dart-define=DEV_LOGIN=true`) that skips native Google and posts the
+`DEV_ID_TOKEN` stand-in, which a dev/test backend accepts.
+
 ## Branding
 
 The brand5 handoff (mint magnifier glyph on brand teal `#006B5E`, mint accent

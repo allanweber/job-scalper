@@ -12,7 +12,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// signed-in session, and the controller seeded onto [step].
 Future<(ProviderContainer, FakeAccountRepository)> _container(
     OnboardingStep step,
-    {FakeAccountRepository? repo}) async {
+    {FakeAccountRepository? repo, String? googleToken = 'fake-id-token'}) async {
   SharedPreferences.setMockInitialValues({
     'session.tokens':
         '{"access_token":"a","refresh_token":"r","expires_in":900}',
@@ -22,6 +22,8 @@ Future<(ProviderContainer, FakeAccountRepository)> _container(
   final container = ProviderContainer(overrides: [
     sharedPrefsProvider.overrideWithValue(prefs),
     accountRepositoryProvider.overrideWithValue(fake),
+    googleAuthenticatorProvider
+        .overrideWithValue(FakeGoogleAuthenticator(token: googleToken)),
     onboardingControllerProvider.overrideWith(
         () => SeededOnboardingController(seededState(step))),
   ]);
@@ -44,6 +46,21 @@ void main() {
     expect(find.text('Remote roles, already ranked'), findsOneWidget);
     expect(find.text('Skip'), findsOneWidget);
     expect(find.text('Next'), findsOneWidget);
+  });
+
+  testWidgets('cancelling Google sign-in stays on the sign-in step',
+      (tester) async {
+    final (container, _) = await _container(OnboardingStep.signIn,
+        googleToken: null); // authenticator returns null == cancelled
+    await _pump(tester, container);
+
+    await tester.tap(find.text('Continue with Google'));
+    await tester.pumpAndSettle();
+
+    // No crash, no error, still on sign-in.
+    expect(container.read(onboardingControllerProvider).step,
+        OnboardingStep.signIn);
+    expect(container.read(onboardingControllerProvider).error, isNull);
   });
 
   testWidgets('consent CTA is gated until both boxes are checked',

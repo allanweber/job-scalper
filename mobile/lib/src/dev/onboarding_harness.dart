@@ -1,4 +1,5 @@
 import '../data/account_repository.dart';
+import '../data/google_authenticator.dart';
 import '../data/models/account_models.dart';
 import '../data/models/api_models.dart';
 import '../features/onboarding/onboarding_controller.dart';
@@ -135,6 +136,16 @@ class FakeAccountRepository implements AccountRepository {
       error: jobFails ? 'unreadable resume' : null,
     );
   }
+}
+
+/// A [GoogleAuthenticator] that returns a canned token (or null to simulate a
+/// cancelled sign-in) without touching the platform.
+class FakeGoogleAuthenticator implements GoogleAuthenticator {
+  FakeGoogleAuthenticator({this.token = 'fake-id-token'});
+  final String? token;
+
+  @override
+  Future<String?> obtainIdToken() async => token;
 }
 
 /// An [OnboardingController] pre-positioned on a given step with seeded data —

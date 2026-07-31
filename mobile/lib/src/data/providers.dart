@@ -1,8 +1,10 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../config/env.dart';
 import '../state/session.dart';
 import 'account_repository.dart';
 import 'api_client.dart';
+import 'google_authenticator.dart';
 
 /// The shared, token-aware HTTP client (owned by the session controller).
 final apiClientProvider =
@@ -12,3 +14,9 @@ final apiClientProvider =
 /// widget tests and the screenshot harness.
 final accountRepositoryProvider = Provider<AccountRepository>(
     (ref) => HttpAccountRepository(ref.watch(apiClientProvider)));
+
+/// Source of Google ID tokens: native Google Sign-In in normal builds, or the
+/// dev stand-in when `DEV_LOGIN=true` (web verification / screenshots).
+/// Overridden with a fake in tests.
+final googleAuthenticatorProvider = Provider<GoogleAuthenticator>((ref) =>
+    Env.devLogin ? DevGoogleAuthenticator() : GoogleSignInAuthenticator());
