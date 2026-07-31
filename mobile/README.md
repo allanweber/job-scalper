@@ -52,6 +52,23 @@ session so the nav shell renders without a backend. `--no-web-resources-cdn`
 bundles CanvasKit locally, and Roboto/Roboto Mono are bundled as assets, so the
 web build renders fully offline.
 
+## Branding
+
+The brand5 handoff (mint magnifier glyph on brand teal `#006B5E`, mint accent
+`#7FF0DD`) is applied across every surface:
+
+- **Launcher / app icons** — Android legacy mipmaps + adaptive icon
+  (`mipmap-anydpi-v26` + `ic_launcher_foreground`, teal background via
+  `colors.xml`), the full iOS `AppIcon.appiconset` (opaque), and the web
+  favicon + PWA icons (standard + maskable, `manifest.json` theme color).
+- **Native Android splash** — teal fill with the centered glyph
+  (`drawable/launch_background.xml`).
+- **In-app** — the glyph and wordmarks ship as assets under `assets/brand/`
+  and appear on the Flutter splash and onboarding welcome.
+
+Icons are generated from the source PNGs (no Flutter SDK needed); re-run
+`tool/gen_icons.py` if the source art changes.
+
 ## Layout
 
 ```

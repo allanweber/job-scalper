@@ -61,6 +61,10 @@ flutter:
   # the material Icons class.
   uses-material-design: true
 
+  # Brand assets (wordmark + app glyph) used in-app on the splash/onboarding.
+  assets:
+    - assets/brand/
+
   # Bundle Roboto / Roboto Mono locally (the handoff typography) so text renders
   # offline — Flutter web would otherwise fetch the default font from a CDN.
   fonts:

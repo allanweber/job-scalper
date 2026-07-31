@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Brand teal (#006B5E) — adaptive-icon background + native splash. -->
+    <color name="ic_launcher_background">#006B5E</color>
+    <color name="brand_splash">#006B5E</color>
+</resources>

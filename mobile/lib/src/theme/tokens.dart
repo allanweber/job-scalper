@@ -10,6 +10,8 @@ class AppTokens {
 
   // Brand.
   static const brandPrimary = Color(0xFF006B5E);
+  static const brandMint = Color(0xFF7FF0DD); // logo glyph / on-brand accent
+  static const brandDeep = Color(0xFF00463C); // splash gradient end
   static const brandPrimaryContainerLight = Color(0xFFCCE8E2);
   static const brandPrimaryContainerDark = Color(0xFF17332B);
   static const onBrandContainerLight = Color(0xFF00382F);

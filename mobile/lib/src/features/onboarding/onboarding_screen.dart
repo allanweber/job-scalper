@@ -50,7 +50,8 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               const Spacer(),
-              Icon(Icons.radar_rounded, size: 64, color: scheme.primary),
+              Image.asset('assets/brand/icon-circle.png',
+                  width: 96, height: 96, fit: BoxFit.contain),
               const SizedBox(height: 20),
               Text('Welcome to Job Scalper',
                   textAlign: TextAlign.center,

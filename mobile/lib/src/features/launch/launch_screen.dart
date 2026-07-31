@@ -47,7 +47,7 @@ class _LaunchScreenState extends ConsumerState<LaunchScreen> {
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: [AppTokens.brandPrimary, Color(0xFF00463C)],
+            colors: [AppTokens.brandPrimary, AppTokens.brandDeep],
           ),
         ),
         child: Center(
@@ -55,12 +55,13 @@ class _LaunchScreenState extends ConsumerState<LaunchScreen> {
             mainAxisSize: MainAxisSize.min,
             children: [
               _Glyph(),
-              const SizedBox(height: 20),
+              const SizedBox(height: 22),
               const Text('Job Scalper',
                   style: TextStyle(
                       color: Colors.white,
-                      fontSize: 24,
-                      fontWeight: FontWeight.w700)),
+                      fontSize: 26,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: -0.2)),
               const SizedBox(height: 28),
               const SizedBox(
                 width: 26,
@@ -83,15 +84,16 @@ class _LaunchScreenState extends ConsumerState<LaunchScreen> {
 class _Glyph extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
+    // The app glyph (mint magnifier on brand teal), shown in a soft ring.
     return Container(
-      width: 84,
-      height: 84,
+      padding: const EdgeInsets.all(6),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.16),
-        borderRadius: BorderRadius.circular(24),
+        color: Colors.white.withValues(alpha: 0.10),
+        shape: BoxShape.circle,
         border: Border.all(color: Colors.white24),
       ),
-      child: const Icon(Icons.radar_rounded, color: Colors.white, size: 44),
+      child: Image.asset('assets/brand/icon-circle.png',
+          width: 104, height: 104, fit: BoxFit.contain),
     );
   }
 }
