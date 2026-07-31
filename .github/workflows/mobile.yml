@@ -70,14 +70,17 @@ jobs:
           keyPassword=$ANDROID_KEY_PASSWORD
           EOF
 
-      - name: Derive version from tag
+      - name: Derive version
         id: ver
+        # Every build gets a monotonic versionCode (the run number) so successive
+        # installs register as real updates instead of "version 1 over version 1".
+        # Tag builds additionally set the versionName from the tag (mobile-v1.2.3).
         run: |
           if [[ "${GITHUB_REF_TYPE}" == "tag" && "${GITHUB_REF_NAME}" == mobile-v* ]]; then
             name="${GITHUB_REF_NAME#mobile-v}"
             echo "args=--build-name=${name} --build-number=${GITHUB_RUN_NUMBER}" >> "$GITHUB_OUTPUT"
           else
-            echo "args=" >> "$GITHUB_OUTPUT"
+            echo "args=--build-number=${GITHUB_RUN_NUMBER}" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Build release APK
