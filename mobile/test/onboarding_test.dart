@@ -132,6 +132,17 @@ void main() {
     expect(container.read(sessionProvider).onboardingComplete, isTrue);
   });
 
+  testWidgets('back from review skips the build loader and lands on resume',
+      (tester) async {
+    final (container, _) = await _container(OnboardingStep.reviewProfile);
+    await _pump(tester, container);
+
+    container.read(onboardingControllerProvider.notifier).back();
+    // Must NOT strand the user on the non-rewindable buildingProfile loader.
+    expect(container.read(onboardingControllerProvider).step,
+        OnboardingStep.resume);
+  });
+
   testWidgets('every step renders without error', (tester) async {
     for (final step in OnboardingStep.values) {
       final (container, _) = await _container(step);

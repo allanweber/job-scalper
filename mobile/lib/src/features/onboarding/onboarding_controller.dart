@@ -250,14 +250,23 @@ class OnboardingController extends Notifier<OnboardingState> {
 
   void back() {
     const order = OnboardingStep.values;
-    final i = order.indexOf(state.step);
-    // The async build steps aren't rewindable; everything else steps back one.
-    if (i <= 0 ||
-        state.step == OnboardingStep.buildingProfile ||
+    // The async build steps only make sense while their build is running: they
+    // have nothing to re-trigger them and can't be stepped back from.
+    if (state.step == OnboardingStep.buildingProfile ||
         state.step == OnboardingStep.buildingFeed) {
       return;
     }
-    _go(order[i - 1]);
+    // Step back, skipping over any async build step so e.g. Review -> back lands
+    // on Resume (not on the finished "Building your profile" loader, which would
+    // strand the user with no way forward or back).
+    var i = order.indexOf(state.step) - 1;
+    while (i > 0 &&
+        (order[i] == OnboardingStep.buildingProfile ||
+            order[i] == OnboardingStep.buildingFeed)) {
+      i--;
+    }
+    if (i < 0) return;
+    _go(order[i]);
   }
 
   // -- helpers --------------------------------------------------------------
