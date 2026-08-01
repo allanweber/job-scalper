@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../data/models/feed_models.dart';
 import '../../../theme/tokens.dart';
+import '../../../util/format.dart';
 import 'score_ring.dart';
 
 /// A single ranked posting in the feed: score ring, title/company, match
@@ -155,7 +156,8 @@ class _MetaRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final salary = _formatSalary(item);
+    final salary = formatSalary(
+        min: item.salaryMin, max: item.salaryMax, currency: item.salaryCurrency);
     return Wrap(
       spacing: 8,
       runSpacing: 6,
@@ -165,7 +167,7 @@ class _MetaRow extends StatelessWidget {
         if (item.location != null && item.location!.isNotEmpty)
           _MetaChip(icon: Icons.place_outlined, label: item.location!),
         if (salary != null) _MetaChip(icon: Icons.payments_outlined, label: salary),
-        if (_relative(item.publishedAt) case final t?)
+        if (relativeTime(item.publishedAt) case final t?)
           Text(t, style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant)),
       ],
     );
@@ -266,7 +268,7 @@ class _Sources extends StatelessWidget {
       children: [
         Expanded(
           child: Text(
-            sources.map(_prettySource).join(' · '),
+            sources.map(prettySource).join(' · '),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: TextStyle(fontSize: 11.5, color: scheme.onSurfaceVariant),
@@ -287,51 +289,3 @@ class _Sources extends StatelessWidget {
   }
 }
 
-// --- formatting helpers ------------------------------------------------------
-
-String? _formatSalary(FeedItem item) {
-  final sym = switch (item.salaryCurrency) {
-    'USD' || null => r'$',
-    'EUR' => '€',
-    'GBP' => '£',
-    final c => '$c ',
-  };
-  String k(double v) {
-    if (v >= 1000) {
-      final n = v / 1000;
-      return '$sym${n == n.roundToDouble() ? n.toStringAsFixed(0) : n.toStringAsFixed(1)}k';
-    }
-    return '$sym${v.toStringAsFixed(0)}';
-  }
-
-  final lo = item.salaryMin, hi = item.salaryMax;
-  if (lo != null && hi != null && hi > 0) return '${k(lo)}–${k(hi)}';
-  if (lo != null && lo > 0) return '${k(lo)}+';
-  if (hi != null && hi > 0) return 'up to ${k(hi)}';
-  return null;
-}
-
-String? _relative(String? iso) {
-  if (iso == null || iso.isEmpty) return null;
-  final t = DateTime.tryParse(iso);
-  if (t == null) return null;
-  final d = DateTime.now().difference(t);
-  if (d.inDays >= 30) return '${(d.inDays / 30).floor()}mo ago';
-  if (d.inDays >= 1) return '${d.inDays}d ago';
-  if (d.inHours >= 1) return '${d.inHours}h ago';
-  return 'just now';
-}
-
-String _prettySource(String slug) => switch (slug) {
-      'remotive' => 'Remotive',
-      'remoteok' => 'RemoteOK',
-      'weworkremotely' => 'We Work Remotely',
-      'arbeitnow' => 'Arbeitnow',
-      'jobicy' => 'Jobicy',
-      'himalayas' => 'Himalayas',
-      'workingnomads' => 'Working Nomads',
-      'themuse' => 'The Muse',
-      _ => slug.isEmpty
-          ? slug
-          : slug[0].toUpperCase() + slug.substring(1),
-    };

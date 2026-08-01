@@ -89,6 +89,7 @@ class FakeFeedRepository implements FeedRepository {
 
   final List<String> savedCalls = [];
   final List<String> unsavedCalls = [];
+  final List<String> draftCalls = [];
   final Set<String> seen = {};
 
   @override
@@ -97,6 +98,42 @@ class FakeFeedRepository implements FeedRepository {
     if (fails) throw Exception('Failed host lookup');
     final filtered = _items.where((i) => i.score >= minScore).toList();
     return Feed(items: filtered, count: filtered.length);
+  }
+
+  @override
+  Future<PostingDetail> getPosting(String postingId) async {
+    if (delay != null) await Future.delayed(delay!);
+    if (fails) throw Exception('Failed host lookup');
+    final i = _items.firstWhere((e) => e.postingId == postingId,
+        orElse: () => _items.first);
+    return PostingDetail(
+      postingId: i.postingId,
+      company: i.company,
+      title: i.title,
+      url: i.url,
+      description: _demoDescription,
+      location: i.location,
+      remote: i.remote,
+      timezone: 'UTC±3',
+      salaryMin: i.salaryMin,
+      salaryMax: i.salaryMax,
+      salaryCurrency: i.salaryCurrency,
+      publishedAt: i.publishedAt,
+      score: i.score,
+      matchedSkills: i.matchedSkills,
+      missingSkills: i.missingSkills,
+      matchedKeywords: i.matchedKeywords,
+      sources: i.sources,
+      isNew: i.isNew,
+      saved: i.saved,
+      drafted: i.drafted,
+      breakdown: const {
+        'skills': 0.62,
+        'keywords': 0.20,
+        'title': 0.12,
+        'salary': 0.06,
+      },
+    );
   }
 
   @override
@@ -109,4 +146,27 @@ class FakeFeedRepository implements FeedRepository {
   Future<void> markSeen(String postingId) async {
     seen.add(postingId);
   }
+
+  @override
+  Future<String> createDraft(String postingId) async {
+    draftCalls.add(postingId);
+    return 'draft-job-1';
+  }
 }
+
+const _demoDescription = '''
+We're looking for a Senior Backend Engineer to help scale our core platform.
+
+What you'll do
+- Design and build reliable, high-throughput services in Python.
+- Own PostgreSQL schema design, query performance, and data integrity.
+- Deploy and operate services on AWS with Docker.
+
+What we're looking for
+- 5+ years building production backend systems.
+- Deep Python experience; strong SQL and PostgreSQL.
+- Comfort with cloud infrastructure and CI/CD.
+
+Nice to have
+- Kubernetes, event-driven architectures, fintech domain experience.
+''';

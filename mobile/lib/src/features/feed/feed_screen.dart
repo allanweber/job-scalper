@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../theme/tokens.dart';
 import 'feed_controller.dart';
@@ -66,7 +67,12 @@ class _FeedList extends StatelessWidget {
         final item = items[index - (hasBanner ? 1 : 0)];
         // Building lazily ~ scrolled into view: record it as seen (deduped).
         ctrl.onSeen(item.postingId);
-        return JobCard(item: item, onToggleSave: () => ctrl.toggleSave(item));
+        return JobCard(
+          item: item,
+          onToggleSave: () => ctrl.toggleSave(item),
+          onTap: () =>
+              context.push('/feed/job/${item.postingId}', extra: item),
+        );
       },
     );
   }

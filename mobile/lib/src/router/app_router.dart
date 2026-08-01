@@ -2,12 +2,25 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../data/models/feed_models.dart';
+import '../features/detail/job_detail_screen.dart';
 import '../features/feed/feed_screen.dart';
 import '../features/launch/launch_screen.dart';
 import '../features/onboarding/onboarding_screen.dart';
+import '../features/saved/saved_screen.dart';
 import '../features/shell/home_shell.dart';
 import '../features/shell/placeholder_tab.dart';
 import '../state/session.dart';
+
+/// The `job/:id` detail sub-route shared by the Feed and Saved branches. The
+/// tapped [FeedItem] is passed via `extra` so the header renders instantly.
+GoRoute _jobRoute() => GoRoute(
+      path: 'job/:id',
+      builder: (_, state) => JobDetailScreen(
+        postingId: state.pathParameters['id']!,
+        initial: state.extra as FeedItem?,
+      ),
+    );
 
 /// App routes. Launch is the entry; the four tabs live under a persistent
 /// [StatefulShellRoute] so each keeps its own navigation stack.
@@ -25,12 +38,16 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (_, _, shell) => HomeShell(shell: shell),
         branches: [
           StatefulShellBranch(routes: [
-            GoRoute(path: '/feed', builder: (_, _) => const FeedScreen()),
+            GoRoute(
+                path: '/feed',
+                builder: (_, _) => const FeedScreen(),
+                routes: [_jobRoute()]),
           ]),
           StatefulShellBranch(routes: [
             GoRoute(
                 path: '/saved',
-                builder: (_, _) => const PlaceholderTab(title: 'Saved')),
+                builder: (_, _) => const SavedScreen(),
+                routes: [_jobRoute()]),
           ]),
           StatefulShellBranch(routes: [
             GoRoute(
