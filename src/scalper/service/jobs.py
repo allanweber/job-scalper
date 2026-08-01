@@ -14,6 +14,7 @@ the same `execute` dispatch, so behaviour is identical.
 from __future__ import annotations
 
 import json
+import logging
 from typing import TYPE_CHECKING, Any, Callable
 
 from scalper.app_draft import draft_application, split_draft
@@ -36,6 +37,8 @@ from scalper.service.repositories import LLMCredentialRepo, UserRepo
 
 if TYPE_CHECKING:
     from scalper.service.container import Container
+
+_log = logging.getLogger(__name__)
 
 # Job kinds.
 KIND_PROFILE = "profile"
@@ -254,6 +257,11 @@ def execute(container: "Container", job_id: str) -> None:
                 raise JobError(f"unknown job kind: {rec.kind}")
             jobs.mark_succeeded(job_id, result)
         except Exception as e:  # noqa: BLE001 — persist failure for the poller
+            # RQ only sees that execute() returned, so a swallowed job failure
+            # otherwise shows up as "Job OK" in the worker log with no reason.
+            # Log the traceback so operators can see *why* a job failed.
+            _log.warning("job %s (%s) failed: %s", job_id, rec.kind, e,
+                         exc_info=True)
             # A failed DB statement leaves Postgres' transaction aborted; clear it
             # so the mark_failed UPDATE can run (harmless no-op on sqlite).
             try:
