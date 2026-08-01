@@ -78,6 +78,14 @@ def _parse_dt(value: str | None) -> datetime | None:
         return None
 
 
+def _duration_seconds(started: str | None, finished: str | None) -> float | None:
+    """Wall-clock seconds between two ISO timestamps, or None if not both present."""
+    a, b = _parse_dt(started), _parse_dt(finished)
+    if a is None or b is None:
+        return None
+    return max(0.0, (b - a).total_seconds())
+
+
 _POSTING_COLS = (
     "id, company, title, description, location, remote, url, salary_min, "
     "salary_max, salary_currency, published_at, first_seen_at, last_seen_at"
@@ -830,6 +838,35 @@ class AuditRepo:
 # --------------------------------------------------------------------------- LLM ledger
 
 
+@dataclass
+class UsageEvent:
+    """One LLM call in the ledger, joined to its user + the job that ran it."""
+
+    id: str
+    user_id: str
+    user_email: str | None
+    ts: str
+    action: str
+    provider: str
+    model: str
+    key_source: str
+    input_tokens: int
+    output_tokens: int
+    est_cost_usd: float | None
+    job_id: str | None
+    started_at: str | None
+    finished_at: str | None
+    job_status: str | None
+
+    @property
+    def total_tokens(self) -> int:
+        return (self.input_tokens or 0) + (self.output_tokens or 0)
+
+    @property
+    def duration_seconds(self) -> float | None:
+        return _duration_seconds(self.started_at, self.finished_at)
+
+
 class LLMUsageRepo:
     """Detailed per-user token/cost ledger (admin visibility + cost tracking)."""
 
@@ -854,3 +891,49 @@ class LLMUsageRepo:
             "FROM llm_usage_events WHERE user_id=?", (user_id,),
         ).fetchone()
         return row[0] if row else 0
+
+    _EVENT_SELECT = (
+        "SELECT e.id, e.user_id, u.email, e.ts, e.action, e.provider, e.model, "
+        "e.key_source, e.input_tokens, e.output_tokens, e.est_cost_usd, e.job_id, "
+        "j.started_at, j.finished_at, j.status "
+        "FROM llm_usage_events e "
+        "LEFT JOIN users u ON u.id = e.user_id "
+        "LEFT JOIN jobs j ON j.id = e.job_id"
+    )
+
+    def list_recent(self, *, limit: int = 100, action: str | None = None,
+                    user_id: str | None = None) -> list[UsageEvent]:
+        """Most-recent LLM events (newest first), joined to user email + job timing.
+
+        Optionally scoped to one `action` (e.g. 'draft') and/or one `user_id`.
+        """
+        where, params = [], []
+        if action:
+            where.append("e.action = ?"); params.append(action)
+        if user_id:
+            where.append("e.user_id = ?"); params.append(user_id)
+        clause = (" WHERE " + " AND ".join(where)) if where else ""
+        rows = self._c.execute(
+            f"{self._EVENT_SELECT}{clause} ORDER BY e.ts DESC LIMIT ?",
+            (*params, limit),
+        ).fetchall()
+        return [UsageEvent(*r) for r in rows]
+
+    def summary(self, *, action: str | None = None,
+                user_id: str | None = None) -> dict[str, Any]:
+        """Aggregate counts/tokens/cost over the ledger, optionally filtered."""
+        where, params = [], []
+        if action:
+            where.append("action = ?"); params.append(action)
+        if user_id:
+            where.append("user_id = ?"); params.append(user_id)
+        clause = (" WHERE " + " AND ".join(where)) if where else ""
+        row = self._c.execute(
+            "SELECT COUNT(*), COALESCE(SUM(input_tokens), 0), "
+            "COALESCE(SUM(output_tokens), 0), COALESCE(SUM(est_cost_usd), 0) "
+            f"FROM llm_usage_events{clause}",
+            tuple(params),
+        ).fetchone()
+        events, in_tok, out_tok, cost = row
+        return {"events": events, "input_tokens": in_tok, "output_tokens": out_tok,
+                "total_tokens": in_tok + out_tok, "cost_usd": cost}

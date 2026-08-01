@@ -44,6 +44,22 @@ _PLANS = ["free", "pro"]
 _env = Environment(loader=PackageLoader("scalper.admin", "templates"),
                    autoescape=select_autoescape(["html"]))
 
+#: LLM actions surfaced on the usage page (order = filter chip order).
+_USAGE_ACTIONS = ["draft", "profile_build", "enrich"]
+
+
+def _fmt_duration(seconds: float | None) -> str:
+    if seconds is None:
+        return "—"
+    if seconds < 1:
+        return f"{int(seconds * 1000)}ms"
+    return f"{seconds:.1f}s"
+
+
+_env.filters["usd"] = lambda v: "—" if v is None else f"${v:,.4f}"
+_env.filters["commas"] = lambda v: f"{int(v or 0):,}"
+_env.filters["dur"] = _fmt_duration
+
 
 def _base_url(ctx: AdminContext, request: Request) -> str:
     override = ctx.admin.service.environ.get("SCALPER_ADMIN_BASE_URL")
@@ -298,6 +314,24 @@ def create_admin_app(admin_container: AdminContainer | None = None) -> FastAPI:
         _audit(ctx, admin, "job.retry", target_type="job", target_id=jid,
                before={"of": job_id})
         return _flash_redirect("/jobs", "Job re-enqueued.")
+
+    # -- LLM usage / activity (per-draft metrics: tokens, cost, duration) --
+
+    @app.get("/usage", response_class=HTMLResponse)
+    def usage_page(request: Request, action: str | None = None,
+                   ctx: AdminContext = Depends(get_admin_ctx),
+                   admin: User = Depends(current_admin)):
+        repo = LLMUsageRepo(ctx.conn)
+        action = action if action in _USAGE_ACTIONS else None
+        events = repo.list_recent(limit=100, action=action)
+        summary = repo.summary(action=action)
+        durations = [e.duration_seconds for e in events
+                     if e.duration_seconds is not None]
+        summary["avg_duration"] = (sum(durations) / len(durations)
+                                   if durations else None)
+        return _render(request, "usage.html", admin=admin, active="usage",
+                       events=events, summary=summary, action=action or "",
+                       actions=_USAGE_ACTIONS)
 
     # -- postings (browse the scraped job pool) --
 

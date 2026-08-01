@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}LLM Usage{% endblock %}
+{% set labels = {'draft': 'Drafts', 'profile_build': 'Profile builds', 'enrich': 'Enrichments'} %}
+{% block body %}
+<h1>LLM Usage</h1>
+<p class="muted" style="margin-top:-8px">
+  Every user LLM call — drafts, profile builds, enrichments — with the tokens it
+  used, an estimated cost, and how long the job took. Costs are estimates
+  (tune per-model rates via the <code>llm.model_prices</code> setting).
+</p>
+
+<p style="margin:14px 0 4px">
+  <a class="btn {{ 'primary' if not action }}" href="/usage">All</a>
+  {% for a in actions %}
+  <a class="btn {{ 'primary' if action==a }}" href="/usage?action={{ a }}">{{ labels[a] }}</a>
+  {% endfor %}
+</p>
+
+<div class="cards">
+  <div class="card">
+    <div class="n">{{ summary.events | commas }}</div>
+    <div class="l">{{ labels.get(action, 'LLM calls') if action else 'LLM calls' }}</div>
+  </div>
+  <div class="card">
+    <div class="n">{{ summary.total_tokens | commas }}</div>
+    <div class="l">tokens ({{ summary.input_tokens | commas }} in / {{ summary.output_tokens | commas }} out)</div>
+  </div>
+  <div class="card">
+    <div class="n">{{ summary.cost_usd | usd }}</div>
+    <div class="l">estimated cost</div>
+  </div>
+  <div class="card">
+    <div class="n">{{ summary.avg_duration | dur }}</div>
+    <div class="l">avg duration (recent)</div>
+  </div>
+</div>
+
+<h2>Recent activity</h2>
+<table>
+  <tr>
+    <th>When</th><th>User</th><th>Action</th><th>Model</th><th>Key</th>
+    <th>Tokens (in / out)</th><th>Cost</th><th>Duration</th><th>Status</th>
+  </tr>
+  {% for e in events %}
+  <tr>
+    <td class="muted">{{ e.ts[:19] }}</td>
+    <td>{% if e.user_id %}<a href="/users/{{ e.user_id }}">{{ e.user_email or e.user_id[:8] }}</a>{% else %}—{% endif %}</td>
+    <td>{{ labels.get(e.action, e.action) }}</td>
+    <td class="muted"><code>{{ e.model }}</code></td>
+    <td>{{ e.key_source }}</td>
+    <td>{{ e.total_tokens | commas }} <span class="muted">({{ e.input_tokens | commas }} / {{ e.output_tokens | commas }})</span></td>
+    <td>{{ e.est_cost_usd | usd }}</td>
+    <td>{{ e.duration_seconds | dur }}</td>
+    <td>{% if e.job_status %}<span class="pill {{ e.job_status }}">{{ e.job_status }}</span>{% else %}—{% endif %}</td>
+  </tr>
+  {% else %}
+  <tr><td colspan="9" class="muted">No LLM usage recorded yet.</td></tr>
+  {% endfor %}
+</table>
+{% endblock %}

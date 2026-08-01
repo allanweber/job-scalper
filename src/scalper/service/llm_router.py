@@ -23,6 +23,7 @@ from scalper.llm import build_provider
 from scalper.llm.base import LLMProvider
 from scalper.service.content_repos import LLMUsageRepo
 from scalper.service.crypto import KeyVault
+from scalper.service.pricing import estimate_cost_usd
 from scalper.service.repositories import LLMCredentialRepo
 from scalper.service.settings import Settings
 
@@ -140,8 +141,12 @@ class LLMRouter:
     def record_usage(self, user_id: str, *, action: str, decision: LLMDecision,
                      input_tokens: int, output_tokens: int,
                      job_id: str | None = None) -> None:
+        est_cost = estimate_cost_usd(
+            decision.model, input_tokens, output_tokens,
+            overrides=self._settings.get("llm.model_prices", {}) or {})
         LLMUsageRepo(self._conn).record(
             user_id, action=action, provider=decision.provider_name,
             model=decision.model, key_source=decision.key_source,
-            input_tokens=input_tokens, output_tokens=output_tokens, job_id=job_id,
+            input_tokens=input_tokens, output_tokens=output_tokens,
+            est_cost_usd=est_cost, job_id=job_id,
         )
