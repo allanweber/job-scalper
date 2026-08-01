@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -130,6 +132,46 @@ void main() {
     await tester.pump(const Duration(seconds: 3));
     await tester.pumpAndSettle();
     expect(container.read(sessionProvider).onboardingComplete, isTrue);
+  });
+
+  testWidgets('successful resume build pre-fills the review step',
+      (tester) async {
+    final (container, _) = await _container(OnboardingStep.resume);
+    await _pump(tester, container);
+
+    // Drive the build directly, bypassing the native file picker.
+    unawaited(container
+        .read(onboardingControllerProvider.notifier)
+        .submitResume(bytes: [1], filename: 'cv.pdf', contentType: 'application/pdf'));
+    await tester.pump(); // enter buildingProfile
+    await tester.pump(const Duration(seconds: 3)); // staged loader settles
+    await tester.pumpAndSettle();
+
+    final st = container.read(onboardingControllerProvider);
+    expect(st.step, OnboardingStep.reviewProfile);
+    expect(st.error, isNull);
+    expect(st.profile.titles, contains('Backend Engineer'));
+  });
+
+  testWidgets('failed resume build surfaces the job error on review',
+      (tester) async {
+    final fake = FakeAccountRepository(jobFails: true);
+    final (container, _) = await _container(OnboardingStep.resume, repo: fake);
+    await _pump(tester, container);
+
+    unawaited(container
+        .read(onboardingControllerProvider.notifier)
+        .submitResume(bytes: [1], filename: 'cv.pdf', contentType: 'application/pdf'));
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 3));
+    await tester.pumpAndSettle();
+
+    final st = container.read(onboardingControllerProvider);
+    expect(st.step, OnboardingStep.reviewProfile);
+    expect(st.buildPhase, AsyncPhase.failed);
+    // The backend job's own error message is surfaced (not a silent empty form).
+    expect(st.error, contains('unreadable resume'));
+    expect(find.text(st.error!), findsOneWidget);
   });
 
   testWidgets('back from review skips the build loader and lands on resume',

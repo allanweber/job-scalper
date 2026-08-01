@@ -154,11 +154,11 @@ class JobRecord {
 
   final String id;
   final String kind;
-  final String status; // queued | started | finished | failed
+  final String status; // queued | running | succeeded | failed
   final Map<String, dynamic>? result;
   final String? error;
 
-  bool get isDone => status == 'finished' || status == 'failed';
+  bool get isDone => status == 'succeeded' || status == 'failed';
   bool get isFailed => status == 'failed';
 
   factory JobRecord.fromJson(Map<String, dynamic> j) => JobRecord(

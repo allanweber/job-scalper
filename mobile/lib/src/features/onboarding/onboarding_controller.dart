@@ -145,36 +145,56 @@ class OnboardingController extends Notifier<OnboardingState> {
     state = state.copyWith(buildPhase: AsyncPhase.running, buildStepIndex: 0);
     final ticker = _startTicker(3);
     final started = DateTime.now();
+
+    // Run the async build, capturing whether it failed and why. A failed build
+    // (or a poll timeout) isn't fatal: we still drop the user on the review step
+    // so they can fill the profile in by hand — but we surface the real reason.
+    var failed = false;
+    String? reason;
     try {
       final jobId = await _account.buildProfileFromResume();
       final job = await _pollJob(jobId);
-      // Load whatever profile the build produced (empty on failure — the user
-      // can still fill it in on the review step).
-      final profile = await _account.getProfile();
-      await _settle(started);
-      ticker.cancel();
-      state = state.copyWith(
-        profile: profile,
-        buildPhase: job.isFailed ? AsyncPhase.failed : AsyncPhase.done,
-        buildStepIndex: 3,
-        error: job.isFailed
-            ? 'We couldn’t read that resume automatically — you can fill in your profile below.'
-            : null,
-      );
-      _go(OnboardingStep.reviewProfile);
+      failed = job.isFailed;
+      reason = job.error;
     } catch (e) {
-      ticker.cancel();
-      // Non-fatal: drop the user on the review step with an empty form.
-      try {
-        final profile = await _account.getProfile();
-        state = state.copyWith(profile: profile);
-      } catch (_) {/* keep the default empty profile */}
-      state = state.copyWith(
-          buildPhase: AsyncPhase.failed,
-          error:
-              'We couldn’t build your profile automatically — you can fill it in below.');
-      _go(OnboardingStep.reviewProfile);
+      failed = true;
+      reason = _humanize(e);
     }
+
+    // Load whatever profile exists. On failure the backend created none, so
+    // GET /me/profile 404s (repo returns null) — keep the empty default.
+    var profile = const Profile();
+    try {
+      profile = await _account.getProfile();
+    } catch (_) {/* no profile built; keep the empty default */}
+
+    await _settle(started);
+    ticker.cancel();
+    // Advance to review and set the error in one update: _go() clears error, so
+    // navigating separately would wipe the failure message before it's seen.
+    state = state.copyWith(
+      step: OnboardingStep.reviewProfile,
+      profile: profile,
+      buildPhase: failed ? AsyncPhase.failed : AsyncPhase.done,
+      buildStepIndex: 3,
+      error: failed ? _profileBuildError(reason) : null,
+    );
+  }
+
+  /// A human-facing message for a failed resume-driven profile build, folding in
+  /// the backend job's own error so it's obvious what went wrong.
+  String _profileBuildError(String? raw) {
+    final e = (raw ?? '').trim();
+    if (e.startsWith('quota_exceeded')) {
+      return 'You’ve used all your automatic profile builds for this period. '
+          'Fill in your profile below — you can always edit it later.';
+    }
+    if (e.isEmpty) {
+      return 'We couldn’t build your profile automatically. '
+          'Fill it in below — you can edit it anytime.';
+    }
+    return 'We couldn’t read your resume automatically ($e). '
+        'Fill in your profile below.';
   }
 
   // -- review profile -------------------------------------------------------

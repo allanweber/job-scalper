@@ -131,8 +131,8 @@ class FakeAccountRepository implements AccountRepository {
     if (!jobFails) _profile = builtProfile;
     return JobRecord(
       id: jobId,
-      kind: 'profile_from_resume',
-      status: jobFails ? 'failed' : 'finished',
+      kind: 'profile',
+      status: jobFails ? 'failed' : 'succeeded',
       error: jobFails ? 'unreadable resume' : null,
     );
   }
