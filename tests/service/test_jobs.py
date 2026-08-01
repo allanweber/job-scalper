@@ -64,6 +64,27 @@ def test_profile_job_fails_without_resume(container, conn, user):
     assert rec.status == "failed" and "resume" in rec.error
 
 
+def test_profile_job_refunds_quota_when_llm_fails(container, conn, settings, user):
+    ResumeRepo(conn).upsert(user.id, filename="cv.txt", content_type="text/plain",
+                            blob=b"Jane Python", extracted_text="Jane Python")
+
+    class _BoomProvider:
+        name = "fake"
+
+        def complete(self, *args, **kwargs):
+            raise RuntimeError("LLM API timeout")
+
+    from _helpers import make_container
+    c2 = make_container(container.vault, provider=_BoomProvider())
+    quota = QuotaService(conn=conn, settings=settings)
+    before = quota.status(user, "profile_build").used
+
+    rec = _run(c2, conn, KIND_PROFILE, user.id, {})
+    assert rec.status == "failed" and "timeout" in rec.error.lower()
+    # A failed LLM call must not cost the user a credit (reserved then refunded).
+    assert quota.status(user, "profile_build").used == before
+
+
 def test_draft_job_creates_draft_and_marks_overlay(container, conn,
                                                    with_resume_and_profile, pool_posting):
     rec = _run(container, conn, KIND_DRAFT, with_resume_and_profile.id,

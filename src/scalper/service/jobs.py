@@ -15,7 +15,8 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import TYPE_CHECKING, Any, Callable
+from contextlib import contextmanager
+from typing import TYPE_CHECKING, Any, Callable, Iterator
 
 from scalper.app_draft import draft_application, split_draft
 from scalper.enrich import Enrichment, build_prompt as build_enrich_prompt, profile_hash
@@ -57,6 +58,26 @@ class JobError(Exception):
     """A job failed for a business reason (message stored on the job record)."""
 
 
+@contextmanager
+def _reserved(quota: QuotaService, user: Any, metric: str, *,
+              unlimited: bool) -> Iterator[None]:
+    """Reserve one quota unit for an LLM job, refunding it if the body fails.
+
+    Quota is consumed up-front to reserve capacity before the (slow, costly) LLM
+    call, but a failed call — provider error, timeout — must not cost the user a
+    credit. On any exception the unit is refunded and the error re-raised.
+    """
+    try:
+        quota.consume(user, metric, unlimited=unlimited)
+    except QuotaExceeded as e:
+        raise JobError(f"quota_exceeded:{e.status.metric}") from e
+    try:
+        yield
+    except Exception:
+        quota.refund(user, metric)
+        raise
+
+
 def _has_byo(container: "Container", conn: Any, user_id: str) -> bool:
     return container.vault is not None and LLMCredentialRepo(conn).has_valid(user_id)
 
@@ -88,28 +109,24 @@ def run_profile(container: "Container", conn: Any, job_id: str, user_id: str,
     quota = QuotaService(conn=conn, settings=settings)
     user = UserRepo(conn).get(user_id)
     unlimited = _has_byo(container, conn, user_id)
-    try:
-        quota.consume(user, "profile_build", unlimited=unlimited)
-    except QuotaExceeded as e:
-        raise JobError(f"quota_exceeded:{e.status.metric}") from e
+    with _reserved(quota, user, "profile_build", unlimited=unlimited):
+        decision = router.resolve(user_id, "profile_build")
+        draft, comp = draft_profile(decision.provider, decision.model, resume_text)
+        router.record_usage(user_id, action="profile_build", decision=decision,
+                            input_tokens=comp.input_tokens,
+                            output_tokens=comp.output_tokens, job_id=job_id)
 
-    decision = router.resolve(user_id, "profile_build")
-    draft, comp = draft_profile(decision.provider, decision.model, resume_text)
-    router.record_usage(user_id, action="profile_build", decision=decision,
-                        input_tokens=comp.input_tokens, output_tokens=comp.output_tokens,
-                        job_id=job_id)
-
-    profiles = ProfileRepo(conn)
-    existing = profiles.primary_for(user_id)
-    name = params.get("name") or (existing.name if existing else "default")
-    stored = profiles.upsert(user_id, name, profile_fields(draft), origin="resume",
-                             profile_id=existing.id if existing else None)
-    return {
-        "profile_id": stored.id,
-        "titles": stored.titles,
-        "required_skills": stored.required_skills,
-        "key_source": decision.key_source,
-    }
+        profiles = ProfileRepo(conn)
+        existing = profiles.primary_for(user_id)
+        name = params.get("name") or (existing.name if existing else "default")
+        stored = profiles.upsert(user_id, name, profile_fields(draft), origin="resume",
+                                 profile_id=existing.id if existing else None)
+        return {
+            "profile_id": stored.id,
+            "titles": stored.titles,
+            "required_skills": stored.required_skills,
+            "key_source": decision.key_source,
+        }
 
 
 def run_draft(container: "Container", conn: Any, job_id: str, user_id: str,
@@ -137,28 +154,24 @@ def run_draft(container: "Container", conn: Any, job_id: str, user_id: str,
     quota = QuotaService(conn=conn, settings=settings)
     user = UserRepo(conn).get(user_id)
     unlimited = _has_byo(container, conn, user_id)
-    try:
-        quota.consume(user, "draft", unlimited=unlimited)
-    except QuotaExceeded as e:
-        raise JobError(f"quota_exceeded:{e.status.metric}") from e
+    with _reserved(quota, user, "draft", unlimited=unlimited):
+        scored = score_posting(profile.criteria(), pool.to_job_posting())
+        decision = router.resolve(user_id, "draft")
+        text, comp = draft_application(decision.provider, decision.model, profile.name,
+                                       resume_text, scored)
+        parts = split_draft(text)
+        router.record_usage(user_id, action="draft", decision=decision,
+                            input_tokens=comp.input_tokens,
+                            output_tokens=comp.output_tokens, job_id=job_id)
 
-    scored = score_posting(profile.criteria(), pool.to_job_posting())
-    decision = router.resolve(user_id, "draft")
-    text, comp = draft_application(decision.provider, decision.model, profile.name,
-                                   resume_text, scored)
-    parts = split_draft(text)
-    router.record_usage(user_id, action="draft", decision=decision,
-                        input_tokens=comp.input_tokens, output_tokens=comp.output_tokens,
-                        job_id=job_id)
-
-    draft_id = DraftRepo(conn).create(
-        user_id, profile_id=profile.id, posting_id=posting_id, job_source="pool",
-        source_url=None, resume_md=parts.resume, cover_letter_md=parts.cover_letter,
-        stretch_claims_md=parts.stretch_claims, provider=decision.provider_name,
-        model=decision.model, key_source=decision.key_source,
-    )
-    OverlayRepo(conn).mark_drafted(user_id, posting_id)
-    return {"draft_id": draft_id, "key_source": decision.key_source}
+        draft_id = DraftRepo(conn).create(
+            user_id, profile_id=profile.id, posting_id=posting_id, job_source="pool",
+            source_url=None, resume_md=parts.resume, cover_letter_md=parts.cover_letter,
+            stretch_claims_md=parts.stretch_claims, provider=decision.provider_name,
+            model=decision.model, key_source=decision.key_source,
+        )
+        OverlayRepo(conn).mark_drafted(user_id, posting_id)
+        return {"draft_id": draft_id, "key_source": decision.key_source}
 
 
 def run_enrich(container: "Container", conn: Any, job_id: str, user_id: str,
@@ -190,21 +203,18 @@ def run_enrich(container: "Container", conn: Any, job_id: str, user_id: str,
     quota = QuotaService(conn=conn, settings=settings)
     user = UserRepo(conn).get(user_id)
     unlimited = _has_byo(container, conn, user_id)
-    try:
-        quota.consume(user, "enrich", unlimited=unlimited)
-    except QuotaExceeded as e:
-        raise JobError(f"quota_exceeded:{e.status.metric}") from e
-
-    scored = score_posting(profile.criteria(), pool.to_job_posting())
-    comp = decision.provider.complete(build_enrich_prompt(profile.criteria(), scored),
-                                      model=decision.model, system=ENRICH_SYSTEM)
-    enrichment = _parse_enrichment(comp.text)
-    cache.put(posting_id, ph, decision.model, enrichment.model_dump_json())
-    router.record_usage(user_id, action="enrich", decision=decision,
-                        input_tokens=comp.input_tokens, output_tokens=comp.output_tokens,
-                        job_id=job_id)
-    return {"enrichment": enrichment.model_dump(), "cached": False,
-            "key_source": decision.key_source}
+    with _reserved(quota, user, "enrich", unlimited=unlimited):
+        scored = score_posting(profile.criteria(), pool.to_job_posting())
+        comp = decision.provider.complete(
+            build_enrich_prompt(profile.criteria(), scored),
+            model=decision.model, system=ENRICH_SYSTEM)
+        enrichment = _parse_enrichment(comp.text)
+        cache.put(posting_id, ph, decision.model, enrichment.model_dump_json())
+        router.record_usage(user_id, action="enrich", decision=decision,
+                            input_tokens=comp.input_tokens,
+                            output_tokens=comp.output_tokens, job_id=job_id)
+        return {"enrichment": enrichment.model_dump(), "cached": False,
+                "key_source": decision.key_source}
 
 
 def run_scrape(container: "Container", conn: Any, job_id: str,
