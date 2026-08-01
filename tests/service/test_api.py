@@ -219,7 +219,11 @@ def test_feed_and_draft_flow(client, auth_headers, conn):
     draft_id = job["result"]["draft_id"]
     d = client.get(f"/drafts/{draft_id}", headers=auth_headers).json()
     assert d["resume_md"].startswith("# Jane")
-    assert len(client.get("/drafts", headers=auth_headers).json()) == 1
+    listing = client.get("/drafts", headers=auth_headers).json()
+    assert len(listing) == 1
+    # The Applications list is joined to the pool posting for a readable row.
+    assert listing[0]["title"] == "Senior Python Engineer"
+    assert listing[0]["company"] == "Acme"
 
 
 def test_draft_blocked_when_quota_exhausted(client, auth_headers, conn, settings):

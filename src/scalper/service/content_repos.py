@@ -648,6 +648,19 @@ class Draft:
     updated_at: str
 
 
+@dataclass
+class DraftListItem:
+    """A draft summary joined to its pool posting (Applications-tab list row)."""
+
+    id: str
+    posting_id: str | None
+    job_source: str
+    key_source: str | None
+    created_at: str
+    title: str | None
+    company: str | None
+
+
 _DRAFT_COLS = (
     "id, user_id, profile_id, posting_id, job_source, source_url, resume_md, "
     "cover_letter_md, stretch_claims_md, provider, model, key_source, "
@@ -707,6 +720,22 @@ class DraftRepo:
             "ORDER BY created_at DESC LIMIT ?", (user_id, limit),
         ).fetchall()
         return [_to_draft(r) for r in rows]
+
+    def list_summaries(self, user_id: str, *, limit: int = 50) -> list[DraftListItem]:
+        """Draft list rows for the Applications tab, joined to the pool posting.
+
+        `title`/`company` come from the shared pool via `posting_id`; they're
+        ``None`` when the posting has since been purged (the draft itself is
+        still the user's and remains readable).
+        """
+        rows = self._c.execute(
+            "SELECT d.id, d.posting_id, d.job_source, d.key_source, d.created_at, "
+            "p.title, p.company "
+            "FROM drafts d LEFT JOIN postings p ON p.id = d.posting_id "
+            "WHERE d.user_id=? ORDER BY d.created_at DESC LIMIT ?",
+            (user_id, limit),
+        ).fetchall()
+        return [DraftListItem(*r) for r in rows]
 
     def update_content(self, draft_id: str, user_id: str, *,
                        resume_md: str | None = None,

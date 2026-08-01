@@ -4,6 +4,7 @@ import '../config/env.dart';
 import '../state/session.dart';
 import 'account_repository.dart';
 import 'api_client.dart';
+import 'drafts_repository.dart';
 import 'feed_repository.dart';
 import 'google_authenticator.dart';
 
@@ -20,6 +21,11 @@ final accountRepositoryProvider = Provider<AccountRepository>(
 /// tests and the screenshot harness.
 final feedRepositoryProvider = Provider<FeedRepository>(
     (ref) => HttpFeedRepository(ref.watch(apiClientProvider)));
+
+/// The drafts/applications repository. Overridden with an in-memory fake in
+/// widget tests and the screenshot harness.
+final draftsRepositoryProvider = Provider<DraftsRepository>(
+    (ref) => HttpDraftsRepository(ref.watch(apiClientProvider)));
 
 /// Source of Google ID tokens: native Google Sign-In in normal builds, or the
 /// dev stand-in when `DEV_LOGIN=true` (web verification / screenshots).

@@ -2,7 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../data/models/draft_models.dart';
 import '../data/models/feed_models.dart';
+import '../features/applications/applications_screen.dart';
+import '../features/applications/draft_detail_screen.dart';
 import '../features/detail/job_detail_screen.dart';
 import '../features/feed/feed_screen.dart';
 import '../features/launch/launch_screen.dart';
@@ -51,8 +54,18 @@ final routerProvider = Provider<GoRouter>((ref) {
           ]),
           StatefulShellBranch(routes: [
             GoRoute(
-                path: '/applications',
-                builder: (_, _) => const PlaceholderTab(title: 'Applications')),
+              path: '/applications',
+              builder: (_, _) => const ApplicationsScreen(),
+              routes: [
+                GoRoute(
+                  path: 'draft/:id',
+                  builder: (_, state) => DraftDetailScreen(
+                    draftId: state.pathParameters['id']!,
+                    initial: state.extra as DraftSummary?,
+                  ),
+                ),
+              ],
+            ),
           ]),
           StatefulShellBranch(routes: [
             GoRoute(

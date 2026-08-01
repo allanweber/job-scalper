@@ -82,8 +82,9 @@ def enrich(body: EnrichRequest, ctx: RequestContext = Depends(get_ctx),
 def list_drafts(ctx: RequestContext = Depends(get_ctx), user: User = Depends(current_user)):
     return [
         DraftSummary(id=d.id, posting_id=d.posting_id, job_source=d.job_source,
-                     key_source=d.key_source, created_at=d.created_at)
-        for d in DraftRepo(ctx.conn).list_for(user.id)
+                     key_source=d.key_source, created_at=d.created_at,
+                     title=d.title, company=d.company)
+        for d in DraftRepo(ctx.conn).list_summaries(user.id)
     ]
 
 

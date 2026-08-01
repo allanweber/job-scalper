@@ -223,6 +223,8 @@ class DraftSummary(BaseModel):
     job_source: str
     key_source: str | None
     created_at: str
+    title: str | None = None
+    company: str | None = None
 
 
 # --- quota ---
