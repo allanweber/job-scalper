@@ -5,7 +5,7 @@ from conftest import ADMIN_EMAIL, FakeOAuth, _do_login
 from scalper.admin.container import AdminContainer
 from scalper.admin.sessions import MemorySessionStore
 from scalper.models import JobPosting
-from scalper.service.content_repos import AuditRepo, PostingRepo
+from scalper.service.content_repos import AuditRepo, JobRepo, LLMUsageRepo, PostingRepo
 from scalper.service.models import GoogleIdentity
 from scalper.service.quota import QuotaService
 from scalper.service.repositories import QuotaOverrideRepo, UserRepo
@@ -185,3 +185,38 @@ def test_sources_page_shows_counts_by_source(logged_in, conn):
     page = logged_in.get("/sources").text
     assert "Jobs by source" in page
     assert "remotive" in page and "remoteok" in page
+
+
+# --- LLM usage / draft metrics ---
+
+def test_usage_page_shows_draft_metrics(logged_in, conn):
+    u = _make_user(conn)
+    jobs = JobRepo(conn)
+    jid = jobs.create("draft", user_id=u.id, params={"posting_id": "p"})
+    conn.execute("UPDATE jobs SET started_at=?, finished_at=?, status='succeeded' "
+                 "WHERE id=?",
+                 ("2026-08-01T10:00:00+00:00", "2026-08-01T10:00:02+00:00", jid))
+    conn.commit()
+    LLMUsageRepo(conn).record(u.id, action="draft", provider="anthropic",
+                              model="claude-haiku-4-5", key_source="platform",
+                              input_tokens=1000, output_tokens=2000,
+                              est_cost_usd=0.011, job_id=jid)
+
+    page = logged_in.get("/usage").text
+    assert "LLM Usage" in page
+    assert "jane@example.com" in page      # joined user email
+    assert "claude-haiku-4-5" in page      # model
+    assert "$0.0110" in page               # estimated cost
+    assert "2.0s" in page                  # job duration
+
+
+def test_usage_page_filters_to_drafts(logged_in, conn):
+    u = _make_user(conn)
+    repo = LLMUsageRepo(conn)
+    repo.record(u.id, action="draft", provider="anthropic", model="m",
+                key_source="platform", input_tokens=10, output_tokens=20)
+    repo.record(u.id, action="enrich", provider="anthropic", model="m2-enrich-only",
+                key_source="platform", input_tokens=5, output_tokens=5)
+
+    page = logged_in.get("/usage?action=draft").text
+    assert "m2-enrich-only" not in page    # enrich row filtered out
