@@ -12,6 +12,7 @@ class DraftSummary {
     required this.createdAt,
     this.title,
     this.company,
+    this.url,
   });
 
   final String id;
@@ -21,6 +22,7 @@ class DraftSummary {
   final String createdAt;
   final String? title;
   final String? company;
+  final String? url;
 
   /// A human label for the application even when the posting metadata is gone.
   String get displayTitle => title ?? 'Application';
@@ -33,6 +35,7 @@ class DraftSummary {
         createdAt: (j['created_at'] as String?) ?? '',
         title: j['title'] as String?,
         company: j['company'] as String?,
+        url: j['url'] as String?,
       );
 }
 

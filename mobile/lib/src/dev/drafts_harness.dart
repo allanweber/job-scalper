@@ -14,6 +14,7 @@ final demoDraftSummaries = <DraftSummary>[
     createdAt: DateTime.now().subtract(const Duration(hours: 2)).toIso8601String(),
     title: 'Senior Backend Engineer',
     company: 'Linear',
+    url: 'https://example.com/jobs/j1',
   ),
   DraftSummary(
     id: 'd2',
@@ -23,6 +24,7 @@ final demoDraftSummaries = <DraftSummary>[
     createdAt: DateTime.now().subtract(const Duration(days: 1)).toIso8601String(),
     title: 'Platform Engineer, Payments',
     company: 'Stripe',
+    url: 'https://example.com/jobs/j2',
   ),
   DraftSummary(
     id: 'd3',
@@ -32,6 +34,7 @@ final demoDraftSummaries = <DraftSummary>[
     createdAt: DateTime.now().subtract(const Duration(days: 4)).toIso8601String(),
     title: 'Backend Developer (Django)',
     company: 'Arbeitnow GmbH',
+    url: 'https://example.com/jobs/j3',
   ),
 ];
 

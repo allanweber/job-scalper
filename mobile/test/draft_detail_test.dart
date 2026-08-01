@@ -42,6 +42,12 @@ void main() {
     expect(find.textContaining('Backend engineer with 6+ years'),
         findsOneWidget); // resume body
 
+    // Header carries the job link + both PDF exports; the model line is gone.
+    expect(find.text('View job posting'), findsOneWidget);
+    expect(find.text('Resume PDF'), findsOneWidget);
+    expect(find.text('Cover letter PDF'), findsOneWidget);
+    expect(find.textContaining('claude-haiku'), findsNothing);
+
     await tester.tap(find.text('Cover letter'));
     await tester.pumpAndSettle();
     expect(find.textContaining('excited to apply'), findsOneWidget);
@@ -55,7 +61,7 @@ void main() {
     await tester.pumpAndSettle(); // full-screen editor opens
 
     await tester.enterText(find.byType(TextField), '# Edited resume');
-    await tester.tap(find.widgetWithText(TextButton, 'Save'));
+    await tester.tap(find.widgetWithText(FilledButton, 'Save changes'));
     await tester.pumpAndSettle();
 
     expect(repo.edits, hasLength(1));

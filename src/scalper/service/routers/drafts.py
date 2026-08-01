@@ -83,7 +83,7 @@ def list_drafts(ctx: RequestContext = Depends(get_ctx), user: User = Depends(cur
     return [
         DraftSummary(id=d.id, posting_id=d.posting_id, job_source=d.job_source,
                      key_source=d.key_source, created_at=d.created_at,
-                     title=d.title, company=d.company)
+                     title=d.title, company=d.company, url=d.url)
         for d in DraftRepo(ctx.conn).list_summaries(user.id)
     ]
 

@@ -225,6 +225,7 @@ class DraftSummary(BaseModel):
     created_at: str
     title: str | None = None
     company: str | None = None
+    url: str | None = None
 
 
 # --- quota ---

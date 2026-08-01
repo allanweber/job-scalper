@@ -659,6 +659,7 @@ class DraftListItem:
     created_at: str
     title: str | None
     company: str | None
+    url: str | None
 
 
 _DRAFT_COLS = (
@@ -730,7 +731,7 @@ class DraftRepo:
         """
         rows = self._c.execute(
             "SELECT d.id, d.posting_id, d.job_source, d.key_source, d.created_at, "
-            "p.title, p.company "
+            "p.title, p.company, COALESCE(d.source_url, p.url) "
             "FROM drafts d LEFT JOIN postings p ON p.id = d.posting_id "
             "WHERE d.user_id=? ORDER BY d.created_at DESC LIMIT ?",
             (user_id, limit),

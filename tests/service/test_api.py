@@ -224,6 +224,7 @@ def test_feed_and_draft_flow(client, auth_headers, conn):
     # The Applications list is joined to the pool posting for a readable row.
     assert listing[0]["title"] == "Senior Python Engineer"
     assert listing[0]["company"] == "Acme"
+    assert listing[0]["url"]  # the posting URL, for an Apply link
 
 
 def test_draft_blocked_when_quota_exhausted(client, auth_headers, conn, settings):

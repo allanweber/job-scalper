@@ -1,10 +1,39 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:printing/printing.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../data/models/draft_models.dart';
 import '../../theme/tokens.dart';
 import '../../util/format.dart';
 import 'draft_detail_controller.dart';
+import 'draft_pdf.dart';
+
+Future<void> _openUrl(String url) async {
+  final uri = Uri.tryParse(url);
+  if (uri != null) {
+    await launchUrl(uri, mode: LaunchMode.externalApplication);
+  }
+}
+
+/// Build a PDF from a document's markdown on-device and hand it to the OS
+/// share/print sheet (which is how the user "downloads" it).
+Future<void> _sharePdf(BuildContext context,
+    {required String title, required String filename, String? markdown}) async {
+  final messenger = ScaffoldMessenger.of(context);
+  final md = markdown?.trim() ?? '';
+  if (md.isEmpty) {
+    messenger.showSnackBar(const SnackBar(content: Text('Nothing to export yet')));
+    return;
+  }
+  try {
+    final bytes = await buildDraftPdf(title: title, markdown: md);
+    await Printing.sharePdf(bytes: bytes, filename: filename);
+  } catch (e) {
+    messenger.showSnackBar(
+        SnackBar(content: Text('Couldn’t export PDF ($e)')));
+  }
+}
 
 /// One generated application: switch between the tailored resume and cover
 /// letter, read them, and edit either in place. [initial] (passed via the route
@@ -108,7 +137,8 @@ class _Ready extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     final company = summary?.company;
     final when = relativeTime(draft.createdAt);
-    final byo = draft.keySource == 'byo';
+    final url = summary?.url;
+    final pdfTitle = summary?.displayTitle ?? 'Application';
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(AppTokens.screenPadding, 12,
@@ -125,6 +155,44 @@ class _Ready extends StatelessWidget {
           Text('Drafted $when',
               style: TextStyle(fontSize: 12.5, color: scheme.onSurfaceVariant)),
         ],
+        if (url != null && url.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: FilledButton.tonalIcon(
+              onPressed: () => _openUrl(url),
+              icon: const Icon(Icons.open_in_new_rounded, size: 18),
+              label: const Text('View job posting'),
+            ),
+          ),
+        ],
+        const SizedBox(height: 12),
+        Wrap(
+          spacing: 10,
+          runSpacing: 8,
+          children: [
+            OutlinedButton.icon(
+              onPressed: (draft.resumeMd?.trim().isNotEmpty ?? false)
+                  ? () => _sharePdf(context,
+                      title: '$pdfTitle — Resume',
+                      filename: 'resume.pdf',
+                      markdown: draft.resumeMd)
+                  : null,
+              icon: const Icon(Icons.picture_as_pdf_outlined, size: 18),
+              label: const Text('Resume PDF'),
+            ),
+            OutlinedButton.icon(
+              onPressed: (draft.coverLetterMd?.trim().isNotEmpty ?? false)
+                  ? () => _sharePdf(context,
+                      title: '$pdfTitle — Cover letter',
+                      filename: 'cover_letter.pdf',
+                      markdown: draft.coverLetterMd)
+                  : null,
+              icon: const Icon(Icons.picture_as_pdf_outlined, size: 18),
+              label: const Text('Cover letter PDF'),
+            ),
+          ],
+        ),
         const SizedBox(height: 14),
         SegmentedButton<DraftDoc>(
           segments: const [
@@ -147,16 +215,6 @@ class _Ready extends StatelessWidget {
         ],
         const SizedBox(height: 16),
         _Document(text: content),
-        const SizedBox(height: 20),
-        Divider(color: scheme.outlineVariant),
-        const SizedBox(height: 10),
-        Text(
-          [
-            if (draft.model != null) draft.model!,
-            byo ? 'your key' : 'platform',
-          ].join(' · '),
-          style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
-        ),
       ],
     );
   }
@@ -259,15 +317,7 @@ class _DraftEditorPageState extends State<_DraftEditorPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: Text(widget.title),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(_c.text),
-            child: const Text('Save'),
-          ),
-        ],
-      ),
+      appBar: AppBar(title: Text(widget.title)),
       body: Padding(
         padding: const EdgeInsets.all(AppTokens.screenPadding),
         child: TextField(
@@ -280,6 +330,18 @@ class _DraftEditorPageState extends State<_DraftEditorPage> {
           decoration: const InputDecoration(
             border: InputBorder.none,
             hintText: 'Write in Markdown…',
+          ),
+        ),
+      ),
+      bottomNavigationBar: SafeArea(
+        minimum: const EdgeInsets.fromLTRB(AppTokens.screenPadding, 8,
+            AppTokens.screenPadding, 12),
+        child: SizedBox(
+          width: double.infinity,
+          child: FilledButton.icon(
+            onPressed: () => Navigator.of(context).pop(_c.text),
+            icon: const Icon(Icons.check_rounded),
+            label: const Text('Save changes'),
           ),
         ),
       ),
