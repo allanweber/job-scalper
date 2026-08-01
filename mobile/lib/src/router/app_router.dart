@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../features/feed/feed_screen.dart';
 import '../features/launch/launch_screen.dart';
 import '../features/onboarding/onboarding_screen.dart';
 import '../features/shell/home_shell.dart';
@@ -24,9 +25,7 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (_, _, shell) => HomeShell(shell: shell),
         branches: [
           StatefulShellBranch(routes: [
-            GoRoute(
-                path: '/feed',
-                builder: (_, _) => const PlaceholderTab(title: 'Feed')),
+            GoRoute(path: '/feed', builder: (_, _) => const FeedScreen()),
           ]),
           StatefulShellBranch(routes: [
             GoRoute(

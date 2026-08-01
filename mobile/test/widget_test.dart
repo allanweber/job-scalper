@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:job_scalper/src/app.dart';
+import 'package:job_scalper/src/data/providers.dart';
+import 'package:job_scalper/src/dev/feed_harness.dart';
 import 'package:job_scalper/src/state/session.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -11,7 +13,12 @@ Future<void> _pumpApp(WidgetTester tester,
   final prefs = await SharedPreferences.getInstance();
   await tester.pumpWidget(
     ProviderScope(
-      overrides: [sharedPrefsProvider.overrideWithValue(prefs)],
+      overrides: [
+        sharedPrefsProvider.overrideWithValue(prefs),
+        // A restored session routes into the Feed tab, which loads on build;
+        // back it with the in-memory fake so tests never hit the network.
+        feedRepositoryProvider.overrideWithValue(FakeFeedRepository()),
+      ],
       child: const JobScalperApp(),
     ),
   );
