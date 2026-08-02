@@ -138,8 +138,8 @@ def test_draft_edit_persists(client, auth_headers, conn):
     client.get("/me", headers=auth_headers)
     _user, pid = _seed_user_content(conn)
     r = client.post("/drafts", headers=auth_headers, json={"posting_id": pid})
-    draft_id = client.get(f"/jobs/{r.json()['job_id']}",
-                          headers=auth_headers).json()["result"]["draft_id"]
+    assert r.status_code == 201
+    draft_id = r.json()["id"]
     upd = client.put(f"/drafts/{draft_id}", headers=auth_headers,
                      json={"resume_md": "# Edited Resume"})
     assert upd.status_code == 200 and upd.json()["resume_md"] == "# Edited Resume"
@@ -152,8 +152,7 @@ def test_draft_edit_requires_a_field(client, auth_headers, conn):
     client.get("/me", headers=auth_headers)
     _user, pid = _seed_user_content(conn)
     r = client.post("/drafts", headers=auth_headers, json={"posting_id": pid})
-    draft_id = client.get(f"/jobs/{r.json()['job_id']}",
-                          headers=auth_headers).json()["result"]["draft_id"]
+    draft_id = r.json()["id"]
     assert client.put(f"/drafts/{draft_id}", headers=auth_headers,
                       json={}).status_code == 422
 
@@ -211,12 +210,14 @@ def test_feed_and_draft_flow(client, auth_headers, conn):
     client.put("/me/sources", headers=auth_headers, json={"sources": ["remotive"]})
     feed = client.get("/feed", headers=auth_headers).json()
     assert feed["count"] == 1 and feed["items"][0]["posting_id"] == pid
-    # draft (eager job)
+    # draft — the row is returned immediately; the eager job fills it inline, so
+    # by the time the request returns it's already 'ready' with content.
     r = client.post("/drafts", headers=auth_headers, json={"posting_id": pid})
-    assert r.status_code == 202
-    job = client.get(f"/jobs/{r.json()['job_id']}", headers=auth_headers).json()
-    assert job["status"] == "succeeded"
-    draft_id = job["result"]["draft_id"]
+    assert r.status_code == 201
+    created = r.json()
+    assert created["status"] == "ready"
+    draft_id = created["id"]
+    assert created["resume_md"].startswith("# Jane")
     d = client.get(f"/drafts/{draft_id}", headers=auth_headers).json()
     assert d["resume_md"].startswith("# Jane")
     listing = client.get("/drafts", headers=auth_headers).json()
@@ -225,6 +226,7 @@ def test_feed_and_draft_flow(client, auth_headers, conn):
     assert listing[0]["title"] == "Senior Python Engineer"
     assert listing[0]["company"] == "Acme"
     assert listing[0]["url"]  # the posting URL, for an Apply link
+    assert listing[0]["status"] == "ready"
 
 
 def test_mark_applied_visible_everywhere(client, auth_headers, conn):
@@ -232,8 +234,7 @@ def test_mark_applied_visible_everywhere(client, auth_headers, conn):
     _user, pid = _seed_user_content(conn)
     client.put("/me/sources", headers=auth_headers, json={"sources": ["remotive"]})
     r = client.post("/drafts", headers=auth_headers, json={"posting_id": pid})
-    draft_id = client.get(f"/jobs/{r.json()['job_id']}",
-                          headers=auth_headers).json()["result"]["draft_id"]
+    draft_id = r.json()["id"]
 
     # Not applied to begin with — on every surface.
     assert client.get(f"/drafts/{draft_id}", headers=auth_headers).json()["applied"] is False
@@ -277,6 +278,22 @@ def test_draft_blocked_when_quota_exhausted(client, auth_headers, conn, settings
 def test_draft_unknown_posting_404(client, auth_headers):
     assert client.post("/drafts", headers=auth_headers,
                        json={"posting_id": "nope"}).status_code == 404
+
+
+def test_draft_marked_failed_when_no_resume(client, auth_headers, conn):
+    """A drafting failure flips the pending row to 'failed' with the reason,
+    rather than leaving it stuck pending — so the client stops polling."""
+    client.get("/me", headers=auth_headers)  # user row, but no resume/profile
+    p = posting("remotive", "z", company="Zed", title="Backend Engineer",
+                description="python remote")
+    PostingRepo(conn).ingest([p])
+    r = client.post("/drafts", headers=auth_headers, json={"posting_id": p.dedup_key})
+    assert r.status_code == 201
+    body = r.json()
+    assert body["status"] == "failed"
+    assert "resume" in (body["error"] or "").lower()
+    # Visible as failed on the Applications list too.
+    assert client.get("/drafts", headers=auth_headers).json()[0]["status"] == "failed"
 
 
 # --- jobs isolation ---

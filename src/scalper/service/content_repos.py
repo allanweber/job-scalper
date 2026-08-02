@@ -665,6 +665,8 @@ class Draft:
     key_source: str | None
     created_at: str
     updated_at: str
+    status: str = "ready"
+    error: str | None = None
 
 
 @dataclass
@@ -680,12 +682,14 @@ class DraftListItem:
     company: str | None
     url: str | None
     applied: bool = False
+    status: str = "ready"
+    error: str | None = None
 
 
 _DRAFT_COLS = (
     "id, user_id, profile_id, posting_id, job_source, source_url, resume_md, "
     "cover_letter_md, stretch_claims_md, provider, model, key_source, "
-    "created_at, updated_at"
+    "created_at, updated_at, status, error"
 )
 
 
@@ -719,6 +723,46 @@ class DraftRepo:
         self._c.commit()
         return did
 
+    def create_pending(self, user_id: str, *, posting_id: str | None,
+                       job_source: str = "pool", source_url: str | None = None) -> str:
+        """Insert an empty draft in the 'pending' state and return its id.
+
+        The row exists immediately so the client can show it and navigate to it;
+        the worker fills the content and flips it to 'ready' (or 'failed').
+        """
+        did = _new_id()
+        ts = now_iso()
+        self._c.execute(
+            "INSERT INTO drafts (id, user_id, posting_id, job_source, source_url, "
+            "status, created_at, updated_at) VALUES (?,?,?,?,?, 'pending', ?, ?)",
+            (did, user_id, posting_id, job_source, source_url, ts, ts),
+        )
+        self._c.commit()
+        return did
+
+    def mark_ready(self, draft_id: str, user_id: str, *, profile_id: str | None,
+                   resume_md: str, cover_letter_md: str,
+                   stretch_claims_md: str | None, provider: str | None,
+                   model: str | None, key_source: str | None) -> None:
+        """Fill a pending draft with generated content and mark it ready."""
+        self._c.execute(
+            "UPDATE drafts SET status='ready', error=NULL, profile_id=?, resume_md=?, "
+            "cover_letter_md=?, stretch_claims_md=?, provider=?, model=?, "
+            "key_source=?, updated_at=? WHERE id=? AND user_id=?",
+            (profile_id, resume_md, cover_letter_md, stretch_claims_md, provider,
+             model, key_source, now_iso(), draft_id, user_id),
+        )
+        self._c.commit()
+
+    def mark_failed(self, draft_id: str, user_id: str, error: str) -> None:
+        """Mark a pending draft failed, storing the reason for the client."""
+        self._c.execute(
+            "UPDATE drafts SET status='failed', error=?, updated_at=? "
+            "WHERE id=? AND user_id=?",
+            (error, now_iso(), draft_id, user_id),
+        )
+        self._c.commit()
+
     def get(self, draft_id: str, user_id: str) -> Draft | None:
         row = self._c.execute(
             f"SELECT {_DRAFT_COLS} FROM drafts WHERE id=? AND user_id=?",
@@ -751,7 +795,8 @@ class DraftRepo:
         """
         rows = self._c.execute(
             "SELECT d.id, d.posting_id, d.job_source, d.key_source, d.created_at, "
-            "p.title, p.company, COALESCE(d.source_url, p.url), o.applied_at "
+            "p.title, p.company, COALESCE(d.source_url, p.url), o.applied_at, "
+            "d.status, d.error "
             "FROM drafts d LEFT JOIN postings p ON p.id = d.posting_id "
             "LEFT JOIN user_posting_overlay o "
             "  ON o.posting_id = d.posting_id AND o.user_id = d.user_id "
@@ -760,7 +805,7 @@ class DraftRepo:
         ).fetchall()
         return [
             DraftListItem(r[0], r[1], r[2], r[3], r[4], r[5], r[6], r[7],
-                          applied=bool(r[8]))
+                          applied=bool(r[8]), status=r[9], error=r[10])
             for r in rows
         ]
 

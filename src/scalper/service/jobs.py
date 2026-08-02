@@ -131,47 +131,69 @@ def run_profile(container: "Container", conn: Any, job_id: str, user_id: str,
 
 def run_draft(container: "Container", conn: Any, job_id: str, user_id: str,
               params: dict[str, Any]) -> dict[str, Any]:
-    """Draft a tailored resume + cover letter for one pool posting."""
+    """Draft a tailored resume + cover letter for one pool posting.
+
+    The endpoint may have already created a 'pending' draft row (its id passed
+    as ``draft_id``); we fill it in and flip it to 'ready'. Any failure marks
+    that row 'failed' with the reason so the client stops polling and shows it.
+    """
     posting_id = params.get("posting_id")
-    if not posting_id:
-        raise JobError("posting_id is required")
-    resume_text = ResumeRepo(conn).get_text(user_id)
-    if not resume_text:
-        raise JobError("no resume on file — upload a resume first")
+    draft_id = params.get("draft_id")
+    try:
+        if not posting_id:
+            raise JobError("posting_id is required")
+        resume_text = ResumeRepo(conn).get_text(user_id)
+        if not resume_text:
+            raise JobError("no resume on file — upload a resume first")
 
-    profiles = ProfileRepo(conn)
-    profile = profiles.primary_for(user_id)
-    if profile is None:
-        raise JobError("no profile — build one from your resume first")
+        profiles = ProfileRepo(conn)
+        profile = profiles.primary_for(user_id)
+        if profile is None:
+            raise JobError("no profile — build one from your resume first")
 
-    pool = PostingRepo(conn).get(posting_id)
-    if pool is None:
-        raise JobError("posting not found in the pool")
+        pool = PostingRepo(conn).get(posting_id)
+        if pool is None:
+            raise JobError("posting not found in the pool")
 
-    settings = container.settings(conn)
-    router = LLMRouter(conn, settings, container.vault, environ=container.environ,
-                       provider_builder=container.provider_builder)
-    quota = QuotaService(conn=conn, settings=settings)
-    user = UserRepo(conn).get(user_id)
-    unlimited = _has_byo(container, conn, user_id)
-    with _reserved(quota, user, "draft", unlimited=unlimited):
-        scored = score_posting(profile.criteria(), pool.to_job_posting())
-        decision = router.resolve(user_id, "draft")
-        text, comp = draft_application(decision.provider, decision.model, profile.name,
-                                       resume_text, scored)
-        parts = split_draft(text)
-        router.record_usage(user_id, action="draft", decision=decision,
-                            input_tokens=comp.input_tokens,
-                            output_tokens=comp.output_tokens, job_id=job_id)
+        settings = container.settings(conn)
+        router = LLMRouter(conn, settings, container.vault, environ=container.environ,
+                           provider_builder=container.provider_builder)
+        quota = QuotaService(conn=conn, settings=settings)
+        user = UserRepo(conn).get(user_id)
+        unlimited = _has_byo(container, conn, user_id)
+        with _reserved(quota, user, "draft", unlimited=unlimited):
+            scored = score_posting(profile.criteria(), pool.to_job_posting())
+            decision = router.resolve(user_id, "draft")
+            text, comp = draft_application(decision.provider, decision.model,
+                                           profile.name, resume_text, scored)
+            parts = split_draft(text)
+            router.record_usage(user_id, action="draft", decision=decision,
+                                input_tokens=comp.input_tokens,
+                                output_tokens=comp.output_tokens, job_id=job_id)
 
-        draft_id = DraftRepo(conn).create(
-            user_id, profile_id=profile.id, posting_id=posting_id, job_source="pool",
-            source_url=None, resume_md=parts.resume, cover_letter_md=parts.cover_letter,
-            stretch_claims_md=parts.stretch_claims, provider=decision.provider_name,
-            model=decision.model, key_source=decision.key_source,
-        )
-        OverlayRepo(conn).mark_drafted(user_id, posting_id)
-        return {"draft_id": draft_id, "key_source": decision.key_source}
+            if draft_id:
+                DraftRepo(conn).mark_ready(
+                    draft_id, user_id, profile_id=profile.id,
+                    resume_md=parts.resume, cover_letter_md=parts.cover_letter,
+                    stretch_claims_md=parts.stretch_claims,
+                    provider=decision.provider_name, model=decision.model,
+                    key_source=decision.key_source,
+                )
+            else:
+                draft_id = DraftRepo(conn).create(
+                    user_id, profile_id=profile.id, posting_id=posting_id,
+                    job_source="pool", source_url=None, resume_md=parts.resume,
+                    cover_letter_md=parts.cover_letter,
+                    stretch_claims_md=parts.stretch_claims,
+                    provider=decision.provider_name, model=decision.model,
+                    key_source=decision.key_source,
+                )
+            OverlayRepo(conn).mark_drafted(user_id, posting_id)
+            return {"draft_id": draft_id, "key_source": decision.key_source}
+    except Exception as exc:  # noqa: BLE001 — surface the reason on the draft row
+        if draft_id:
+            DraftRepo(conn).mark_failed(draft_id, user_id, str(exc))
+        raise
 
 
 def run_enrich(container: "Container", conn: Any, job_id: str, user_id: str,

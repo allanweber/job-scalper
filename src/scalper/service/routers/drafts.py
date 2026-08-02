@@ -33,6 +33,7 @@ def _draft_response(d: "object", *, applied: bool = False) -> DraftResponse:
         resume_md=d.resume_md, cover_letter_md=d.cover_letter_md,
         stretch_claims_md=d.stretch_claims_md, provider=d.provider, model=d.model,
         key_source=d.key_source, created_at=d.created_at, applied=applied,
+        status=d.status, error=d.error,
     )
 
 router = APIRouter(tags=["drafts"])
@@ -61,16 +62,25 @@ def _precheck_quota(ctx: RequestContext, user: User, metric: str) -> None:
         )
 
 
-@router.post("/drafts", response_model=JobAccepted, status_code=status.HTTP_202_ACCEPTED,
+@router.post("/drafts", response_model=DraftResponse, status_code=status.HTTP_201_CREATED,
              tags=["drafts"])
 def create_draft(body: DraftRequest, ctx: RequestContext = Depends(get_ctx),
                  user: User = Depends(current_user)):
+    """Create a draft and start generating it.
+
+    A 'pending' draft row is created synchronously and returned immediately so
+    the client can show it and navigate to it; the worker fills the content and
+    flips the status to 'ready' (or 'failed'). The client polls GET /drafts/{id}.
+    """
     if PostingRepo(ctx.conn).get(body.posting_id) is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "posting not found in the pool")
     _precheck_quota(ctx, user, "draft")
-    job_id = JobQueue(ctx.container).enqueue(
-        ctx.conn, KIND_DRAFT, user_id=user.id, params={"posting_id": body.posting_id})
-    return JobAccepted(job_id=job_id, status=JobRepo(ctx.conn).get(job_id).status)
+    draft_id = DraftRepo(ctx.conn).create_pending(
+        user.id, posting_id=body.posting_id, job_source="pool")
+    JobQueue(ctx.container).enqueue(
+        ctx.conn, KIND_DRAFT, user_id=user.id,
+        params={"posting_id": body.posting_id, "draft_id": draft_id})
+    return _draft_response(DraftRepo(ctx.conn).get(draft_id, user.id), applied=False)
 
 
 @router.post("/enrich", response_model=JobAccepted, status_code=status.HTTP_202_ACCEPTED,
@@ -92,7 +102,8 @@ def list_drafts(ctx: RequestContext = Depends(get_ctx), user: User = Depends(cur
     return [
         DraftSummary(id=d.id, posting_id=d.posting_id, job_source=d.job_source,
                      key_source=d.key_source, created_at=d.created_at,
-                     title=d.title, company=d.company, url=d.url, applied=d.applied)
+                     title=d.title, company=d.company, url=d.url, applied=d.applied,
+                     status=d.status, error=d.error)
         for d in DraftRepo(ctx.conn).list_summaries(user.id)
     ]
 

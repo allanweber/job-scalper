@@ -224,6 +224,8 @@ class DraftResponse(BaseModel):
     key_source: str | None
     created_at: str
     applied: bool = False
+    status: str = "ready"  # 'pending' | 'ready' | 'failed'
+    error: str | None = None
 
 
 class DraftSummary(BaseModel):
@@ -236,6 +238,8 @@ class DraftSummary(BaseModel):
     company: str | None = None
     url: str | None = None
     applied: bool = False
+    status: str = "ready"  # 'pending' | 'ready' | 'failed'
+    error: str | None = None
 
 
 # --- quota ---
