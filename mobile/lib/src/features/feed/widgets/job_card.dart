@@ -91,6 +91,10 @@ class _Header extends StatelessWidget {
               const SizedBox(width: 8),
               const _NewBadge(),
             ],
+            if (item.drafted) ...[
+              const SizedBox(width: 8),
+              const _DraftedBadge(),
+            ],
           ],
         ),
         const SizedBox(height: 2),
@@ -125,6 +129,28 @@ class _NewBadge extends StatelessWidget {
               fontWeight: FontWeight.w800,
               letterSpacing: 0.5,
               color: scheme.onPrimary)),
+    );
+  }
+}
+
+class _DraftedBadge extends StatelessWidget {
+  const _DraftedBadge();
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+      decoration: BoxDecoration(
+        color: scheme.secondaryContainer,
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Text('DRAFTED',
+          style: TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 0.5,
+              color: scheme.onSecondaryContainer)),
     );
   }
 }

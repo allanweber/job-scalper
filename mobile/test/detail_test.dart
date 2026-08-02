@@ -59,12 +59,12 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(repo.draftCalls, contains('j1'));
-    expect(find.text('Drafted'), findsOneWidget); // button flips
+    expect(find.text('View application'), findsOneWidget); // button flips
   });
 
   testWidgets('error state renders with retry', (tester) async {
     await _pump(tester, _container(repo: FakeFeedRepository(fails: true)));
-    expect(find.text('Couldn’t load this job'), findsOneWidget);
+    expect(find.text("Couldn't load this job"), findsOneWidget);
     expect(find.widgetWithText(FilledButton, 'Retry'), findsOneWidget);
   });
 }

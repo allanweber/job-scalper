@@ -2,6 +2,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../data/models/draft_models.dart';
@@ -198,15 +199,26 @@ class _Ready extends StatelessWidget {
           Text('Drafted $when',
               style: TextStyle(fontSize: 12.5, color: scheme.onSurfaceVariant)),
         ],
-        if (url != null && url.isNotEmpty) ...[
+        if (url != null && url.isNotEmpty || summary?.postingId != null) ...[
           const SizedBox(height: 12),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: FilledButton.tonalIcon(
-              onPressed: () => _openUrl(url),
-              icon: const Icon(Icons.open_in_new_rounded, size: 18),
-              label: const Text('View job posting'),
-            ),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              if (url != null && url.isNotEmpty)
+                FilledButton.tonalIcon(
+                  onPressed: () => _openUrl(url),
+                  icon: const Icon(Icons.open_in_new_rounded, size: 18),
+                  label: const Text('View job posting'),
+                ),
+              if (summary?.postingId != null)
+                OutlinedButton.icon(
+                  onPressed: () =>
+                      context.push('job/${summary!.postingId}'),
+                  icon: const Icon(Icons.analytics_outlined, size: 18),
+                  label: const Text('Job analysis'),
+                ),
+            ],
           ),
         ],
         const SizedBox(height: 12),

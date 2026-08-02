@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../data/providers.dart';
 import '../../theme/tokens.dart';
 import 'feed_controller.dart';
 import 'widgets/job_card.dart';
@@ -52,6 +53,7 @@ class _FeedList extends StatelessWidget {
   Widget build(BuildContext context) {
     final state = ref.watch(feedControllerProvider);
     final ctrl = ref.read(feedControllerProvider.notifier);
+    final localDrafted = ref.watch(draftedPostingIdsProvider);
     final items = state.items;
     final hasBanner = state.newCount > 0;
 
@@ -64,8 +66,10 @@ class _FeedList extends StatelessWidget {
         if (hasBanner && index == 0) {
           return _NewMatchesBanner(count: state.newCount);
         }
-        final item = items[index - (hasBanner ? 1 : 0)];
-        // Building lazily ~ scrolled into view: record it as seen (deduped).
+        final raw = items[index - (hasBanner ? 1 : 0)];
+        final item = localDrafted.contains(raw.postingId)
+            ? raw.copyWith(drafted: true)
+            : raw;
         ctrl.onSeen(item.postingId);
         return JobCard(
           item: item,

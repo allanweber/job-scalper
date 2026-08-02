@@ -37,3 +37,16 @@ final googleAuthenticatorProvider = Provider<GoogleAuthenticator>((ref) =>
 /// On-device PDF cache. Singleton — one DB file for the app lifetime.
 final pdfCacheRepositoryProvider =
     Provider<PdfCacheRepository>((_) => PdfCacheRepository());
+
+/// Posting IDs that the user drafted in this session, before the feed
+/// refreshes. Used to show the "Drafted" badge on feed cards immediately
+/// after drafting from the job detail screen.
+final draftedPostingIdsProvider =
+    NotifierProvider<DraftedPostingIds, Set<String>>(DraftedPostingIds.new);
+
+class DraftedPostingIds extends Notifier<Set<String>> {
+  @override
+  Set<String> build() => const {};
+
+  void add(String postingId) => state = {...state, postingId};
+}

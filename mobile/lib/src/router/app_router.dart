@@ -63,6 +63,7 @@ final routerProvider = Provider<GoRouter>((ref) {
                     draftId: state.pathParameters['id']!,
                     initial: state.extra as DraftSummary?,
                   ),
+                  routes: [_jobRoute()],
                 ),
               ],
             ),

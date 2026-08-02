@@ -98,6 +98,7 @@ class JobDetailController extends Notifier<JobDetailState> {
     state = state.copyWith(draftPhase: DraftPhase.running, draftError: null);
     try {
       await _repo.createDraft(d.postingId);
+      ref.read(draftedPostingIdsProvider.notifier).add(d.postingId);
       state = state.copyWith(
         draftPhase: DraftPhase.done,
         detail: d.copyWith(drafted: true),

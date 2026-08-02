@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../data/models/draft_models.dart';
 import '../../data/models/feed_models.dart';
+import '../../data/providers.dart';
 import '../../theme/tokens.dart';
 import '../../util/format.dart';
 import '../feed/widgets/score_ring.dart';
@@ -37,6 +40,7 @@ class _JobDetailScreenState extends ConsumerState<JobDetailScreen> {
     final ctrl = ref.read(jobDetailControllerProvider.notifier);
     final detail = state.detail;
     final saved = detail?.saved ?? initial?.saved ?? false;
+    final drafted = detail?.drafted ?? initial?.drafted ?? false;
 
     return Scaffold(
       appBar: AppBar(
@@ -60,9 +64,10 @@ class _JobDetailScreenState extends ConsumerState<JobDetailScreen> {
           ? null
           : _ActionBar(
               url: detail?.url ?? initial?.url ?? '',
-              drafted: detail?.drafted ?? initial?.drafted ?? false,
+              drafted: drafted,
               draftPhase: state.draftPhase,
               onDraft: () => _draft(ctrl),
+              onViewDraft: drafted ? _viewDraft : null,
             ),
     );
   }
@@ -77,7 +82,30 @@ class _JobDetailScreenState extends ConsumerState<JobDetailScreen> {
           content: Text('Draft started — find it in Applications shortly.')));
     } else if (s.draftPhase == DraftPhase.failed) {
       messenger.showSnackBar(SnackBar(
-          content: Text(s.draftError ?? 'Couldn’t start the draft.')));
+          content: Text(s.draftError ?? 'Couldn\'t start the draft.')));
+    }
+  }
+
+  Future<void> _viewDraft() async {
+    final repo = ref.read(draftsRepositoryProvider);
+    try {
+      final list = await repo.listDrafts();
+      final DraftSummary? match =
+          list.where((d) => d.postingId == widget.postingId).firstOrNull;
+      if (!mounted) return;
+      if (match != null) {
+        context.push('/applications/draft/${match.id}', extra: match);
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text(
+              'Application is still being generated — check the Applications tab shortly.'),
+          duration: Duration(seconds: 4),
+        ));
+      }
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Couldn\'t load applications.')));
     }
   }
 }
@@ -476,36 +504,47 @@ class _ActionBar extends StatelessWidget {
     required this.drafted,
     required this.draftPhase,
     required this.onDraft,
+    this.onViewDraft,
   });
   final String url;
   final bool drafted;
   final DraftPhase draftPhase;
   final VoidCallback onDraft;
+  final VoidCallback? onViewDraft;
 
   @override
   Widget build(BuildContext context) {
     final running = draftPhase == DraftPhase.running;
+
+    final Widget draftBtn;
+    if (running) {
+      draftBtn = OutlinedButton.icon(
+        onPressed: null,
+        icon: const SizedBox(
+            width: 18,
+            height: 18,
+            child: CircularProgressIndicator(strokeWidth: 2)),
+        label: const Text('Generating application…'),
+      );
+    } else if (drafted) {
+      draftBtn = FilledButton.tonalIcon(
+        onPressed: onViewDraft,
+        icon: const Icon(Icons.article_outlined, size: 18),
+        label: const Text('View application'),
+      );
+    } else {
+      draftBtn = OutlinedButton.icon(
+        onPressed: onDraft,
+        icon: const Icon(Icons.auto_awesome_outlined),
+        label: const Text('Draft application'),
+      );
+    }
+
     return SafeArea(
       minimum: const EdgeInsets.fromLTRB(16, 8, 16, 12),
       child: Row(
         children: [
-          Expanded(
-            child: SizedBox(
-              height: 50,
-              child: OutlinedButton.icon(
-                onPressed: (running || drafted) ? null : onDraft,
-                icon: running
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2))
-                    : Icon(drafted
-                        ? Icons.check_rounded
-                        : Icons.auto_awesome_outlined),
-                label: Text(drafted ? 'Drafted' : 'Draft application'),
-              ),
-            ),
-          ),
+          Expanded(child: SizedBox(height: 50, child: draftBtn)),
           const SizedBox(width: 12),
           Expanded(
             child: SizedBox(
@@ -530,7 +569,7 @@ class _ActionBar extends StatelessWidget {
     }
     if (!ok && context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Couldn’t open the posting.')));
+          const SnackBar(content: Text("Couldn't open the posting.")));
     }
   }
 }
@@ -552,7 +591,7 @@ class _ErrorView extends StatelessWidget {
             Icon(Icons.cloud_off_rounded,
                 size: 48, color: scheme.onSurfaceVariant),
             const SizedBox(height: 16),
-            Text('Couldn’t load this job',
+            Text("Couldn't load this job",
                 style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.w700,
