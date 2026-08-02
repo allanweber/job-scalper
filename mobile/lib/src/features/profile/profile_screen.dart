@@ -85,11 +85,14 @@ class ProfileScreen extends ConsumerWidget {
             danger: true,
             onTap: () => context.push('/profile/delete'),
           ),
-          const SizedBox(height: 24),
-          Center(
-            child: Text('Signed in as ${user?.email ?? '—'}',
-                style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant)),
-          ),
+          if ((user?.email ?? '').isNotEmpty) ...[
+            const SizedBox(height: 24),
+            Center(
+              child: Text('Signed in as ${user!.email}',
+                  style:
+                      TextStyle(fontSize: 12, color: scheme.onSurfaceVariant)),
+            ),
+          ],
           const SizedBox(height: 24),
         ],
       ),

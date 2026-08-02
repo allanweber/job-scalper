@@ -93,6 +93,19 @@ class SessionController extends Notifier<SessionState> implements TokenStore {
   /// Replace the cached user (e.g. after accepting legal terms mid-onboarding).
   void updateUser(ApiUser user) => state = state.copyWith(user: user);
 
+  /// Hydrate the cached user from the server. A restored session persists only
+  /// the token pair, so [user] starts null on relaunch; call this once at launch
+  /// so the profile header and footer show real details instead of placeholders.
+  /// Best-effort: a transient failure leaves the session as-is, while a hard
+  /// auth failure is handled by the client's 401 interceptor.
+  Future<void> refreshUser() async {
+    if (!state.isSignedIn) return;
+    try {
+      final user = await _auth.me();
+      state = state.copyWith(user: user);
+    } catch (_) {/* best-effort; keep the existing session */}
+  }
+
   Future<void> completeOnboarding() async {
     await _prefs.setBool(_kOnboarding, true);
     state = state.copyWith(onboardingComplete: true);

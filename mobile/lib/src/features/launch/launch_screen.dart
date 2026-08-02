@@ -22,6 +22,13 @@ class _LaunchScreenState extends ConsumerState<LaunchScreen> {
   @override
   void initState() {
     super.initState();
+    // A restored session persists only the tokens, so hydrate the user from the
+    // server while the splash shows — the profile header/footer then have real
+    // details instead of placeholders.
+    final s = ref.read(sessionProvider);
+    if (s.isSignedIn && s.user == null) {
+      ref.read(sessionProvider.notifier).refreshUser();
+    }
     _timer = Timer(const Duration(milliseconds: 1600), _go);
   }
 
