@@ -71,7 +71,7 @@ void main() {
 
   testWidgets('error state renders with retry', (tester) async {
     await _pump(tester, _container(repo: FakeDraftsRepository(fails: true)));
-    expect(find.text('Couldn’t load this draft'), findsOneWidget);
+    expect(find.text("Couldn't load this draft"), findsOneWidget);
     expect(find.widgetWithText(FilledButton, 'Retry'), findsOneWidget);
   });
 }

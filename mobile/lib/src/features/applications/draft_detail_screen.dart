@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:printing/printing.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../data/models/draft_models.dart';
@@ -8,6 +7,8 @@ import '../../theme/tokens.dart';
 import '../../util/format.dart';
 import 'draft_detail_controller.dart';
 import 'draft_pdf.dart';
+import 'pdf_saver_stub.dart'
+    if (dart.library.io) 'pdf_saver_io.dart';
 
 Future<void> _openUrl(String url) async {
   final uri = Uri.tryParse(url);
@@ -16,9 +17,8 @@ Future<void> _openUrl(String url) async {
   }
 }
 
-/// Build a PDF from a document's markdown on-device and hand it to the OS
-/// share/print sheet (which is how the user "downloads" it).
-Future<void> _sharePdf(BuildContext context,
+/// Build a PDF on-device and save it directly to the downloads/documents folder.
+Future<void> _downloadPdf(BuildContext context,
     {required String title, required String filename, String? markdown}) async {
   final messenger = ScaffoldMessenger.of(context);
   final md = markdown?.trim() ?? '';
@@ -28,10 +28,13 @@ Future<void> _sharePdf(BuildContext context,
   }
   try {
     final bytes = await buildDraftPdf(title: title, markdown: md);
-    await Printing.sharePdf(bytes: bytes, filename: filename);
+    final path = await savePdfToDevice(filename, bytes);
+    if (!context.mounted) return;
+    messenger.showSnackBar(SnackBar(
+        content: Text(path != null ? 'Saved: $filename' : 'Download not supported here')));
   } catch (e) {
-    messenger.showSnackBar(
-        SnackBar(content: Text('Couldn’t export PDF ($e)')));
+    if (!context.mounted) return;
+    messenger.showSnackBar(SnackBar(content: Text("Couldn't save PDF ($e)")));
   }
 }
 
@@ -78,7 +81,7 @@ class _DraftDetailScreenState extends ConsumerState<DraftDetailScreen> {
     if (!mounted) return;
     final err = ref.read(draftDetailControllerProvider).saveError;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(ok ? '$label saved' : (err ?? 'Couldn’t save'))));
+        content: Text(ok ? '$label saved' : (err ?? "Couldn't save"))));
   }
 
   @override
@@ -167,28 +170,28 @@ class _Ready extends StatelessWidget {
           ),
         ],
         const SizedBox(height: 12),
-        Wrap(
-          spacing: 10,
-          runSpacing: 8,
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            OutlinedButton.icon(
+            FilledButton.tonalIcon(
               onPressed: (draft.resumeMd?.trim().isNotEmpty ?? false)
-                  ? () => _sharePdf(context,
+                  ? () => _downloadPdf(context,
                       title: '$pdfTitle — Resume',
                       filename: 'resume.pdf',
                       markdown: draft.resumeMd)
                   : null,
-              icon: const Icon(Icons.picture_as_pdf_outlined, size: 18),
+              icon: const Icon(Icons.download_rounded, size: 18),
               label: const Text('Resume PDF'),
             ),
-            OutlinedButton.icon(
+            const SizedBox(height: 8),
+            FilledButton.tonalIcon(
               onPressed: (draft.coverLetterMd?.trim().isNotEmpty ?? false)
-                  ? () => _sharePdf(context,
+                  ? () => _downloadPdf(context,
                       title: '$pdfTitle — Cover letter',
                       filename: 'cover_letter.pdf',
                       markdown: draft.coverLetterMd)
                   : null,
-              icon: const Icon(Icons.picture_as_pdf_outlined, size: 18),
+              icon: const Icon(Icons.download_rounded, size: 18),
               label: const Text('Cover letter PDF'),
             ),
           ],
@@ -366,7 +369,7 @@ class _ErrorView extends StatelessWidget {
             Icon(Icons.cloud_off_rounded,
                 size: 48, color: scheme.onSurfaceVariant),
             const SizedBox(height: 16),
-            Text('Couldn’t load this draft',
+            Text("Couldn't load this draft",
                 style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.w700,
