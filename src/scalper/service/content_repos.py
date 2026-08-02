@@ -536,10 +536,12 @@ class Overlay:
     seen_at: str | None
     saved: bool
     drafted_at: str | None
+    applied_at: str | None = None
 
 
 class OverlayRepo:
-    """Per-user overlay on the shared pool: score, "new" badge, saved, drafted."""
+    """Per-user overlay on the shared pool: score, "new" badge, saved, drafted,
+    applied."""
 
     def __init__(self, conn: Any):
         self._c = conn
@@ -549,12 +551,13 @@ class OverlayRepo:
             return {}
         placeholders = ",".join("?" for _ in posting_ids)
         rows = self._c.execute(
-            f"SELECT posting_id, score, first_matched_at, seen_at, saved, drafted_at "
+            f"SELECT posting_id, score, first_matched_at, seen_at, saved, drafted_at, "
+            f"applied_at "
             f"FROM user_posting_overlay WHERE user_id=? AND posting_id IN ({placeholders})",
             (user_id, *posting_ids),
         ).fetchall()
         return {
-            r[0]: Overlay(r[1], r[2], r[3], bool(r[4]), r[5]) for r in rows
+            r[0]: Overlay(r[1], r[2], r[3], bool(r[4]), r[5], r[6]) for r in rows
         }
 
     def upsert_score(self, user_id: str, posting_id: str, score: float,
@@ -597,6 +600,22 @@ class OverlayRepo:
             "drafted_at) VALUES (?,?,?,?) ON CONFLICT(user_id, posting_id) "
             "DO UPDATE SET drafted_at=excluded.drafted_at",
             (user_id, posting_id, ts, ts),
+        )
+        self._c.commit()
+
+    def set_applied(self, user_id: str, posting_id: str, applied: bool) -> None:
+        """Mark (or unmark) that the user has applied to this posting.
+
+        ``applied_at`` is the timestamp of the mark; clearing it (unmark) sets it
+        back to NULL. Visible everywhere the posting appears (feed/detail/saved)
+        and joined to drafts for the Applications list.
+        """
+        ts = now_iso()
+        self._c.execute(
+            "INSERT INTO user_posting_overlay (user_id, posting_id, first_matched_at, "
+            "applied_at) VALUES (?,?,?,?) ON CONFLICT(user_id, posting_id) "
+            "DO UPDATE SET applied_at=excluded.applied_at",
+            (user_id, posting_id, ts, ts if applied else None),
         )
         self._c.commit()
 
@@ -660,6 +679,7 @@ class DraftListItem:
     title: str | None
     company: str | None
     url: str | None
+    applied: bool = False
 
 
 _DRAFT_COLS = (
@@ -731,12 +751,18 @@ class DraftRepo:
         """
         rows = self._c.execute(
             "SELECT d.id, d.posting_id, d.job_source, d.key_source, d.created_at, "
-            "p.title, p.company, COALESCE(d.source_url, p.url) "
+            "p.title, p.company, COALESCE(d.source_url, p.url), o.applied_at "
             "FROM drafts d LEFT JOIN postings p ON p.id = d.posting_id "
+            "LEFT JOIN user_posting_overlay o "
+            "  ON o.posting_id = d.posting_id AND o.user_id = d.user_id "
             "WHERE d.user_id=? ORDER BY d.created_at DESC LIMIT ?",
             (user_id, limit),
         ).fetchall()
-        return [DraftListItem(*r) for r in rows]
+        return [
+            DraftListItem(r[0], r[1], r[2], r[3], r[4], r[5], r[6], r[7],
+                          applied=bool(r[8]))
+            for r in rows
+        ]
 
     def update_content(self, draft_id: str, user_id: str, *,
                        resume_md: str | None = None,

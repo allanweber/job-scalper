@@ -23,6 +23,7 @@ class FeedItem {
     this.isNew = false,
     this.saved = false,
     this.drafted = false,
+    this.applied = false,
     this.breakdown = const {},
   });
 
@@ -44,9 +45,10 @@ class FeedItem {
   final bool isNew;
   final bool saved;
   final bool drafted;
+  final bool applied;
   final Map<String, double> breakdown;
 
-  FeedItem copyWith({bool? saved, bool? drafted}) => FeedItem(
+  FeedItem copyWith({bool? saved, bool? drafted, bool? applied}) => FeedItem(
         postingId: postingId,
         company: company,
         title: title,
@@ -65,6 +67,7 @@ class FeedItem {
         isNew: isNew,
         saved: saved ?? this.saved,
         drafted: drafted ?? this.drafted,
+        applied: applied ?? this.applied,
         breakdown: breakdown,
       );
 
@@ -90,6 +93,7 @@ class FeedItem {
         isNew: (j['is_new'] as bool?) ?? false,
         saved: (j['saved'] as bool?) ?? false,
         drafted: (j['drafted'] as bool?) ?? false,
+        applied: (j['applied'] as bool?) ?? false,
         breakdown: (j['breakdown'] as Map?)?.map(
                 (k, v) => MapEntry(k.toString(), (v as num).toDouble())) ??
             const {},
@@ -120,6 +124,7 @@ class PostingDetail {
     this.isNew = false,
     this.saved = false,
     this.drafted = false,
+    this.applied = false,
     this.breakdown = const {},
   });
 
@@ -143,9 +148,11 @@ class PostingDetail {
   final bool isNew;
   final bool saved;
   final bool drafted;
+  final bool applied;
   final Map<String, double> breakdown;
 
-  PostingDetail copyWith({bool? saved, bool? drafted}) => PostingDetail(
+  PostingDetail copyWith({bool? saved, bool? drafted, bool? applied}) =>
+      PostingDetail(
         postingId: postingId,
         company: company,
         title: title,
@@ -166,6 +173,7 @@ class PostingDetail {
         isNew: isNew,
         saved: saved ?? this.saved,
         drafted: drafted ?? this.drafted,
+        applied: applied ?? this.applied,
         breakdown: breakdown,
       );
 
@@ -190,6 +198,7 @@ class PostingDetail {
         isNew: (j['is_new'] as bool?) ?? false,
         saved: (j['saved'] as bool?) ?? false,
         drafted: (j['drafted'] as bool?) ?? false,
+        applied: (j['applied'] as bool?) ?? false,
         breakdown: (j['breakdown'] as Map?)?.map(
                 (k, v) => MapEntry(k.toString(), (v as num).toDouble())) ??
             const {},

@@ -54,6 +54,7 @@ class _FeedList extends StatelessWidget {
     final state = ref.watch(feedControllerProvider);
     final ctrl = ref.read(feedControllerProvider.notifier);
     final localDrafted = ref.watch(draftedPostingIdsProvider);
+    final appliedOverrides = ref.watch(appliedOverridesProvider);
     final items = state.items;
     final hasBanner = state.newCount > 0;
 
@@ -67,9 +68,16 @@ class _FeedList extends StatelessWidget {
           return _NewMatchesBanner(count: state.newCount);
         }
         final raw = items[index - (hasBanner ? 1 : 0)];
-        final item = localDrafted.contains(raw.postingId)
-            ? raw.copyWith(drafted: true)
-            : raw;
+        var item = raw;
+        if (localDrafted.contains(raw.postingId)) {
+          item = item.copyWith(drafted: true);
+        }
+        final override = appliedOverrides[raw.postingId];
+        if (override != null) {
+          // Applied implies a draft exists, so keep the drafted flag set too.
+          item = item.copyWith(
+              applied: override, drafted: override || item.drafted);
+        }
         ctrl.onSeen(item.postingId);
         return JobCard(
           item: item,

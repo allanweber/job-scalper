@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../data/providers.dart';
 import '../../theme/tokens.dart';
 import '../feed/widgets/job_card.dart';
 import 'saved_controller.dart';
@@ -35,7 +36,14 @@ class SavedScreen extends ConsumerWidget {
                     separatorBuilder: (_, _) =>
                         const SizedBox(height: AppTokens.listGap),
                     itemBuilder: (context, i) {
-                      final item = state.items[i];
+                      final raw = state.items[i];
+                      final override =
+                          ref.watch(appliedOverridesProvider)[raw.postingId];
+                      final item = override == null
+                          ? raw
+                          : raw.copyWith(
+                              applied: override,
+                              drafted: override || raw.drafted);
                       return JobCard(
                         item: item,
                         onToggleSave: () => ctrl.unsave(item),

@@ -56,7 +56,10 @@ class JobCard extends StatelessWidget {
               ],
               if (item.sources.isNotEmpty) ...[
                 const SizedBox(height: 12),
-                _Sources(sources: item.sources, drafted: item.drafted),
+                _Sources(
+                    sources: item.sources,
+                    drafted: item.drafted,
+                    applied: item.applied),
               ],
             ],
           ),
@@ -91,7 +94,11 @@ class _Header extends StatelessWidget {
               const SizedBox(width: 8),
               const _NewBadge(),
             ],
-            if (item.drafted) ...[
+            // Applied implies a draft exists, so show the stronger status only.
+            if (item.applied) ...[
+              const SizedBox(width: 8),
+              const _AppliedBadge(),
+            ] else if (item.drafted) ...[
               const SizedBox(width: 8),
               const _DraftedBadge(),
             ],
@@ -151,6 +158,35 @@ class _DraftedBadge extends StatelessWidget {
               fontWeight: FontWeight.w800,
               letterSpacing: 0.5,
               color: scheme.onSecondaryContainer)),
+    );
+  }
+}
+
+class _AppliedBadge extends StatelessWidget {
+  const _AppliedBadge();
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+      decoration: BoxDecoration(
+        color: scheme.primary,
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.check_rounded, size: 11, color: scheme.onPrimary),
+          const SizedBox(width: 3),
+          Text('APPLIED',
+              style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 0.5,
+                  color: scheme.onPrimary)),
+        ],
+      ),
     );
   }
 }
@@ -283,9 +319,14 @@ class _SkillChip extends StatelessWidget {
 }
 
 class _Sources extends StatelessWidget {
-  const _Sources({required this.sources, required this.drafted});
+  const _Sources({
+    required this.sources,
+    required this.drafted,
+    required this.applied,
+  });
   final List<String> sources;
   final bool drafted;
+  final bool applied;
 
   @override
   Widget build(BuildContext context) {
@@ -300,7 +341,16 @@ class _Sources extends StatelessWidget {
             style: TextStyle(fontSize: 11.5, color: scheme.onSurfaceVariant),
           ),
         ),
-        if (drafted) ...[
+        if (applied) ...[
+          const SizedBox(width: 8),
+          Icon(Icons.check_circle_rounded, size: 14, color: scheme.primary),
+          const SizedBox(width: 3),
+          Text('Applied',
+              style: TextStyle(
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w600,
+                  color: scheme.primary)),
+        ] else if (drafted) ...[
           const SizedBox(width: 8),
           Icon(Icons.description_rounded, size: 14, color: scheme.primary),
           const SizedBox(width: 3),

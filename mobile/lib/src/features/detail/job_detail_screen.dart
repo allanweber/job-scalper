@@ -40,7 +40,12 @@ class _JobDetailScreenState extends ConsumerState<JobDetailScreen> {
     final ctrl = ref.read(jobDetailControllerProvider.notifier);
     final detail = state.detail;
     final saved = detail?.saved ?? initial?.saved ?? false;
-    final drafted = detail?.drafted ?? initial?.drafted ?? false;
+    final appliedOverride = ref.watch(appliedOverridesProvider)[widget.postingId];
+    final applied =
+        appliedOverride ?? (detail?.applied ?? initial?.applied ?? false);
+    // Applied implies a draft exists, so treat it as drafted for the action bar.
+    final drafted =
+        applied || (detail?.drafted ?? initial?.drafted ?? false);
 
     return Scaffold(
       appBar: AppBar(
@@ -58,7 +63,7 @@ class _JobDetailScreenState extends ConsumerState<JobDetailScreen> {
             message: state.error ?? 'Something went wrong.',
             onRetry: ctrl.refresh,
           ),
-        _ => _Body(state: state, initial: initial),
+        _ => _Body(state: state, initial: initial, applied: applied),
       },
       bottomNavigationBar: (detail ?? initial) == null
           ? null
@@ -111,9 +116,10 @@ class _JobDetailScreenState extends ConsumerState<JobDetailScreen> {
 }
 
 class _Body extends StatelessWidget {
-  const _Body({required this.state, required this.initial});
+  const _Body({required this.state, required this.initial, this.applied = false});
   final JobDetailState state;
   final FeedItem? initial;
+  final bool applied;
 
   @override
   Widget build(BuildContext context) {
@@ -128,7 +134,12 @@ class _Body extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(AppTokens.screenPadding, 16,
           AppTokens.screenPadding, 24),
       children: [
-        _Header(company: company, title: title, score: score, isNew: isNew),
+        _Header(
+            company: company,
+            title: title,
+            score: score,
+            isNew: isNew,
+            applied: applied),
         const SizedBox(height: 16),
         _Meta(detail: d, initial: initial),
         if (d == null) ...[
@@ -157,11 +168,13 @@ class _Header extends StatelessWidget {
     required this.title,
     required this.score,
     required this.isNew,
+    this.applied = false,
   });
   final String company;
   final String title;
   final int score;
   final bool isNew;
+  final bool applied;
 
   @override
   Widget build(BuildContext context) {
@@ -200,6 +213,30 @@ class _Header extends StatelessWidget {
                               fontWeight: FontWeight.w800,
                               letterSpacing: 0.5,
                               color: scheme.onPrimary)),
+                    ),
+                  ],
+                  if (applied) ...[
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 7, vertical: 2),
+                      decoration: BoxDecoration(
+                          color: scheme.primary,
+                          borderRadius: BorderRadius.circular(6)),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.check_rounded,
+                              size: 11, color: scheme.onPrimary),
+                          const SizedBox(width: 3),
+                          Text('APPLIED',
+                              style: TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w800,
+                                  letterSpacing: 0.5,
+                                  color: scheme.onPrimary)),
+                        ],
+                      ),
                     ),
                   ],
                 ],

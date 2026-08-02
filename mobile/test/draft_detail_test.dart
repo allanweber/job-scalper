@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:job_scalper/src/data/drafts_repository.dart';
+import 'package:job_scalper/src/data/models/draft_models.dart';
 import 'package:job_scalper/src/data/pdf_cache_repository.dart';
 import 'package:job_scalper/src/data/providers.dart';
 import 'package:job_scalper/src/dev/drafts_harness.dart';
@@ -86,5 +87,54 @@ void main() {
     await _pump(tester, _container(repo: FakeDraftsRepository(fails: true)));
     expect(find.text("Couldn't load this draft"), findsOneWidget);
     expect(find.widgetWithText(FilledButton, 'Retry'), findsOneWidget);
+  });
+
+  testWidgets('marking applied calls the repo and flips to applied state',
+      (tester) async {
+    tester.view.physicalSize = const Size(1170, 7000);
+    tester.view.devicePixelRatio = 3.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final repo = FakeDraftsRepository();
+    await _pump(tester, _container(repo: repo));
+
+    // Starts un-applied: the call-to-action is shown.
+    expect(find.text('Mark as applied'), findsOneWidget);
+
+    await tester.tap(find.text('Mark as applied'));
+    await tester.pumpAndSettle();
+
+    expect(repo.appliedCalls, hasLength(1));
+    expect(repo.appliedCalls.single.applied, true);
+    // Flips to the applied status banner with an undo affordance.
+    expect(find.text('You marked this job as applied'), findsOneWidget);
+    expect(find.text('Undo'), findsOneWidget);
+    expect(find.text('Marked as applied'), findsOneWidget); // snackbar
+  });
+
+  testWidgets('an already-applied draft shows the applied banner', (tester) async {
+    final applied = DraftSummary(
+      id: 'da',
+      postingId: 'ja',
+      jobSource: 'pool',
+      keySource: 'platform',
+      createdAt: DateTime.now().toIso8601String(),
+      title: 'Applied Role',
+      company: 'Acme',
+      applied: true,
+    );
+    final repo = FakeDraftsRepository(items: [applied]);
+    final container = _container(repo: repo);
+    await tester.pumpWidget(UncontrolledProviderScope(
+      container: container,
+      child: MaterialApp(
+        home: DraftDetailScreen(draftId: 'da', initial: applied),
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    expect(find.text('You marked this job as applied'), findsOneWidget);
+    expect(find.text('Mark as applied'), findsNothing);
   });
 }

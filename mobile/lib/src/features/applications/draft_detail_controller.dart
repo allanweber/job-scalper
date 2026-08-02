@@ -21,6 +21,7 @@ class DraftDetailState {
     this.error,
     this.saving = false,
     this.saveError,
+    this.applying = false,
   });
 
   final DraftDetailStatus status;
@@ -29,12 +30,16 @@ class DraftDetailState {
   final bool saving;
   final String? saveError;
 
+  /// True while the applied mark/unmark request is in flight.
+  final bool applying;
+
   DraftDetailState copyWith({
     DraftDetailStatus? status,
     Draft? draft,
     Object? error = _noChange,
     bool? saving,
     Object? saveError = _noChange,
+    bool? applying,
   }) =>
       DraftDetailState(
         status: status ?? this.status,
@@ -43,6 +48,7 @@ class DraftDetailState {
         saving: saving ?? this.saving,
         saveError:
             saveError == _noChange ? this.saveError : saveError as String?,
+        applying: applying ?? this.applying,
       );
 
   static const _noChange = Object();
@@ -94,6 +100,30 @@ class DraftDetailController extends Notifier<DraftDetailState> {
       return true;
     } catch (e) {
       state = state.copyWith(saving: false, saveError: _humanize(e));
+      return false;
+    }
+  }
+
+  /// Mark (or unmark) this draft's posting as applied. Updates optimistically
+  /// and pushes a session-local override so the feed/saved/detail reflect it
+  /// immediately. Returns true on success; rolls back on failure.
+  Future<bool> setApplied(bool applied) async {
+    final d = state.draft;
+    if (d == null || state.applying) return false;
+    final previous = d.applied;
+    state = state.copyWith(draft: d.copyWith(applied: applied), applying: true);
+    if (d.postingId != null) {
+      ref.read(appliedOverridesProvider.notifier).set(d.postingId!, applied);
+    }
+    try {
+      final updated = await _repo.setApplied(d.id, applied);
+      state = state.copyWith(draft: updated, applying: false);
+      return true;
+    } catch (_) {
+      state = state.copyWith(draft: d.copyWith(applied: previous), applying: false);
+      if (d.postingId != null) {
+        ref.read(appliedOverridesProvider.notifier).set(d.postingId!, previous);
+      }
       return false;
     }
   }

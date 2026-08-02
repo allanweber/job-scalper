@@ -10,13 +10,14 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import Response
 
-from scalper.service.content_repos import DraftRepo, JobRepo, PostingRepo
+from scalper.service.content_repos import DraftRepo, JobRepo, OverlayRepo, PostingRepo
 from scalper.service.deps import RequestContext, current_user, get_ctx
 from scalper.service.jobs import KIND_DRAFT, KIND_ENRICH, JobQueue
 from scalper.service.models import User
 from scalper.service.quota import QuotaService
 from scalper.service.repositories import LLMCredentialRepo
 from scalper.service.schemas import (
+    AppliedRequest,
     DraftRequest,
     DraftResponse,
     DraftSummary,
@@ -26,15 +27,23 @@ from scalper.service.schemas import (
 )
 
 
-def _draft_response(d: "object") -> DraftResponse:
+def _draft_response(d: "object", *, applied: bool = False) -> DraftResponse:
     return DraftResponse(
         id=d.id, posting_id=d.posting_id, job_source=d.job_source,
         resume_md=d.resume_md, cover_letter_md=d.cover_letter_md,
         stretch_claims_md=d.stretch_claims_md, provider=d.provider, model=d.model,
-        key_source=d.key_source, created_at=d.created_at,
+        key_source=d.key_source, created_at=d.created_at, applied=applied,
     )
 
 router = APIRouter(tags=["drafts"])
+
+
+def _applied_for(ctx: RequestContext, user_id: str, posting_id: str | None) -> bool:
+    """Whether the user has marked `posting_id` applied (overlay lookup)."""
+    if not posting_id:
+        return False
+    ov = OverlayRepo(ctx.conn).get_many(user_id, [posting_id]).get(posting_id)
+    return bool(ov and ov.applied_at)
 
 
 def _has_byo(ctx: RequestContext, user: User) -> bool:
@@ -83,7 +92,7 @@ def list_drafts(ctx: RequestContext = Depends(get_ctx), user: User = Depends(cur
     return [
         DraftSummary(id=d.id, posting_id=d.posting_id, job_source=d.job_source,
                      key_source=d.key_source, created_at=d.created_at,
-                     title=d.title, company=d.company, url=d.url)
+                     title=d.title, company=d.company, url=d.url, applied=d.applied)
         for d in DraftRepo(ctx.conn).list_summaries(user.id)
     ]
 
@@ -94,7 +103,26 @@ def get_draft(draft_id: str, ctx: RequestContext = Depends(get_ctx),
     d = DraftRepo(ctx.conn).get(draft_id, user.id)
     if d is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "draft not found")
-    return _draft_response(d)
+    return _draft_response(d, applied=_applied_for(ctx, user.id, d.posting_id))
+
+
+@router.put("/drafts/{draft_id}/applied", response_model=DraftResponse, tags=["drafts"])
+def set_draft_applied(draft_id: str, body: AppliedRequest,
+                      ctx: RequestContext = Depends(get_ctx),
+                      user: User = Depends(current_user)):
+    """Manually mark this draft's posting as applied (or unmark it).
+
+    "Applied" is per-posting user state on the overlay, so it shows up wherever
+    the posting appears — feed, detail, saved — and on the Applications list.
+    """
+    d = DraftRepo(ctx.conn).get(draft_id, user.id)
+    if d is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "draft not found")
+    if d.posting_id is None:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY,
+                            "this draft has no linked posting to mark applied")
+    OverlayRepo(ctx.conn).set_applied(user.id, d.posting_id, body.applied)
+    return _draft_response(d, applied=body.applied)
 
 
 @router.put("/drafts/{draft_id}", response_model=DraftResponse, tags=["drafts"])

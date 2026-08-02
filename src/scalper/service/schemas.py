@@ -126,6 +126,7 @@ class FeedItemResponse(BaseModel):
     is_new: bool
     saved: bool
     drafted: bool
+    applied: bool = False
     breakdown: dict[str, float]
 
 
@@ -157,6 +158,7 @@ class PostingDetailResponse(BaseModel):
     is_new: bool
     saved: bool
     drafted: bool
+    applied: bool = False
     breakdown: dict[str, float]
 
 
@@ -202,6 +204,12 @@ class DraftUpdateRequest(BaseModel):
         return self
 
 
+class AppliedRequest(BaseModel):
+    """Mark (or unmark) a draft's posting as applied (draft detail screen)."""
+
+    applied: bool = True
+
+
 # --- drafts ---
 
 class DraftResponse(BaseModel):
@@ -215,6 +223,7 @@ class DraftResponse(BaseModel):
     model: str | None
     key_source: str | None
     created_at: str
+    applied: bool = False
 
 
 class DraftSummary(BaseModel):
@@ -226,6 +235,7 @@ class DraftSummary(BaseModel):
     title: str | None = None
     company: str | None = None
     url: str | None = None
+    applied: bool = False
 
 
 # --- quota ---

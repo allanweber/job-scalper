@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:job_scalper/src/data/feed_repository.dart';
+import 'package:job_scalper/src/data/models/feed_models.dart';
 import 'package:job_scalper/src/data/providers.dart';
 import 'package:job_scalper/src/dev/feed_harness.dart';
 import 'package:job_scalper/src/features/feed/feed_controller.dart';
@@ -84,5 +85,24 @@ void main() {
     final repo = FakeFeedRepository();
     await _pump(tester, _container(repo: repo));
     expect(repo.seen, contains('j1'));
+  });
+
+  testWidgets('an applied posting shows the APPLIED badge', (tester) async {
+    final items = [
+      FeedItem(
+        postingId: 'j1',
+        company: 'Linear',
+        title: 'Senior Backend Engineer',
+        url: 'https://example.com/j1',
+        score: 92,
+        drafted: true,
+        applied: true,
+      ),
+    ];
+    await _pump(tester, _container(repo: FakeFeedRepository(items: items)));
+
+    // Applied wins over the drafted badge on the card header.
+    expect(find.text('APPLIED'), findsOneWidget);
+    expect(find.text('DRAFTED'), findsNothing);
   });
 }

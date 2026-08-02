@@ -20,6 +20,10 @@ abstract class DraftsRepository {
   /// Persist edited resume and/or cover-letter markdown (`PUT /drafts/{id}`).
   Future<Draft> updateDraft(String id, {String? resumeMd, String? coverLetterMd});
 
+  /// Mark (or unmark) this draft's posting as applied
+  /// (`PUT /drafts/{id}/applied`). Returns the updated draft.
+  Future<Draft> setApplied(String id, bool applied);
+
   /// Fetch a rendered PDF from the server (`GET /drafts/{id}/{which}.pdf`).
   /// [which] is `"resume"` or `"cover_letter"`.
   Future<Uint8List> getDraftPdf(String id, String which);
@@ -51,6 +55,13 @@ class HttpDraftsRepository implements DraftsRepository {
     if (resumeMd != null) body['resume_md'] = resumeMd;
     if (coverLetterMd != null) body['cover_letter_md'] = coverLetterMd;
     final r = await _api.put<Map<String, dynamic>>('/drafts/$id', data: body);
+    return Draft.fromJson(r.data!);
+  }
+
+  @override
+  Future<Draft> setApplied(String id, bool applied) async {
+    final r = await _api.put<Map<String, dynamic>>('/drafts/$id/applied',
+        data: {'applied': applied});
     return Draft.fromJson(r.data!);
   }
 

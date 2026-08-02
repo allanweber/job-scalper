@@ -227,6 +227,44 @@ def test_feed_and_draft_flow(client, auth_headers, conn):
     assert listing[0]["url"]  # the posting URL, for an Apply link
 
 
+def test_mark_applied_visible_everywhere(client, auth_headers, conn):
+    client.get("/me", headers=auth_headers)
+    _user, pid = _seed_user_content(conn)
+    client.put("/me/sources", headers=auth_headers, json={"sources": ["remotive"]})
+    r = client.post("/drafts", headers=auth_headers, json={"posting_id": pid})
+    draft_id = client.get(f"/jobs/{r.json()['job_id']}",
+                          headers=auth_headers).json()["result"]["draft_id"]
+
+    # Not applied to begin with — on every surface.
+    assert client.get(f"/drafts/{draft_id}", headers=auth_headers).json()["applied"] is False
+    assert client.get("/drafts", headers=auth_headers).json()[0]["applied"] is False
+    assert client.get(f"/postings/{pid}", headers=auth_headers).json()["applied"] is False
+    assert client.get("/feed", headers=auth_headers).json()["items"][0]["applied"] is False
+
+    # Mark applied from the draft detail screen.
+    up = client.put(f"/drafts/{draft_id}/applied", headers=auth_headers,
+                    json={"applied": True})
+    assert up.status_code == 200 and up.json()["applied"] is True
+
+    # Now visible as applied everywhere the posting shows up.
+    assert client.get(f"/drafts/{draft_id}", headers=auth_headers).json()["applied"] is True
+    assert client.get("/drafts", headers=auth_headers).json()[0]["applied"] is True
+    assert client.get(f"/postings/{pid}", headers=auth_headers).json()["applied"] is True
+    assert client.get("/feed", headers=auth_headers).json()["items"][0]["applied"] is True
+
+    # Unmark — clears back to not-applied everywhere.
+    down = client.put(f"/drafts/{draft_id}/applied", headers=auth_headers,
+                      json={"applied": False})
+    assert down.status_code == 200 and down.json()["applied"] is False
+    assert client.get(f"/postings/{pid}", headers=auth_headers).json()["applied"] is False
+    assert client.get("/feed", headers=auth_headers).json()["items"][0]["applied"] is False
+
+
+def test_mark_applied_other_user_404(client, auth_headers):
+    assert client.put("/drafts/nope/applied", headers=auth_headers,
+                      json={"applied": True}).status_code == 404
+
+
 def test_draft_blocked_when_quota_exhausted(client, auth_headers, conn, settings):
     client.get("/me", headers=auth_headers)
     _user, pid = _seed_user_content(conn)

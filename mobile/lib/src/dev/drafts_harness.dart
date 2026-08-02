@@ -54,6 +54,7 @@ Draft _demoDraft(DraftSummary s) => Draft(
       model: s.keySource == 'byo' ? 'claude-sonnet-4-6' : 'claude-haiku-4-5',
       keySource: s.keySource,
       createdAt: s.createdAt,
+      applied: s.applied,
     );
 
 /// In-memory [DraftsRepository]. Serves the demo drafts, records edits for
@@ -70,6 +71,7 @@ class FakeDraftsRepository implements DraftsRepository {
   final Duration? delay;
 
   final List<({String id, String? resumeMd, String? coverLetterMd})> edits = [];
+  final List<({String id, bool applied})> appliedCalls = [];
   final Map<String, Draft> _overrides = {};
 
   @override
@@ -99,6 +101,19 @@ class FakeDraftsRepository implements DraftsRepository {
             orElse: () => _items.first));
     final updated =
         base.copyWith(resumeMd: resumeMd, coverLetterMd: coverLetterMd);
+    _overrides[id] = updated;
+    return updated;
+  }
+
+  @override
+  Future<Draft> setApplied(String id, bool applied) async {
+    if (delay != null) await Future.delayed(delay!);
+    if (fails) throw Exception('Failed host lookup');
+    appliedCalls.add((id: id, applied: applied));
+    final base = _overrides[id] ??
+        _demoDraft(_items.firstWhere((e) => e.id == id,
+            orElse: () => _items.first));
+    final updated = base.copyWith(applied: applied);
     _overrides[id] = updated;
     return updated;
   }

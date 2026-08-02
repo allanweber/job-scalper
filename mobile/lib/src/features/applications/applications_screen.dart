@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../data/models/draft_models.dart';
+import '../../data/providers.dart';
 import '../../theme/tokens.dart';
 import '../../util/format.dart';
 import 'applications_controller.dart';
@@ -38,8 +39,12 @@ class ApplicationsScreen extends ConsumerWidget {
                         const SizedBox(height: AppTokens.listGap),
                     itemBuilder: (context, i) {
                       final d = state.items[i];
+                      final override = d.postingId == null
+                          ? null
+                          : ref.watch(appliedOverridesProvider)[d.postingId];
                       return _ApplicationCard(
                         draft: d,
+                        applied: override ?? d.applied,
                         onTap: () => context.push(
                             '/applications/draft/${d.id}',
                             extra: d),
@@ -53,8 +58,13 @@ class ApplicationsScreen extends ConsumerWidget {
 }
 
 class _ApplicationCard extends StatelessWidget {
-  const _ApplicationCard({required this.draft, required this.onTap});
+  const _ApplicationCard({
+    required this.draft,
+    required this.applied,
+    required this.onTap,
+  });
   final DraftSummary draft;
+  final bool applied;
   final VoidCallback onTap;
 
   @override
@@ -113,11 +123,43 @@ class _ApplicationCard extends StatelessWidget {
                   ],
                 ),
               ),
+              if (applied) ...[
+                const SizedBox(width: 8),
+                _AppliedPill(scheme: scheme),
+              ],
               const SizedBox(width: 8),
               Icon(Icons.chevron_right_rounded, color: scheme.onSurfaceVariant),
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _AppliedPill extends StatelessWidget {
+  const _AppliedPill({required this.scheme});
+  final ColorScheme scheme;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: scheme.primary,
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.check_rounded, size: 12, color: scheme.onPrimary),
+          const SizedBox(width: 3),
+          Text('Applied',
+              style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: scheme.onPrimary)),
+        ],
       ),
     );
   }

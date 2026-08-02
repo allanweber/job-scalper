@@ -155,9 +155,28 @@ class _DraftDetailScreenState extends ConsumerState<DraftDetailScreen> {
             doc: _doc,
             onDocChanged: (v) => setState(() => _doc = v),
             content: _content(d),
+            applying: state.applying,
+            onToggleApplied: () => _toggleApplied(d),
           ),
       },
     );
+  }
+
+  Future<void> _toggleApplied(Draft d) async {
+    final target = !d.applied;
+    final ok = await ref
+        .read(draftDetailControllerProvider.notifier)
+        .setApplied(target);
+    if (!mounted) return;
+    if (ok) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(target
+              ? 'Marked as applied'
+              : 'Removed the applied mark')));
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Couldn't update — try again.")));
+    }
   }
 }
 
@@ -168,6 +187,8 @@ class _Ready extends StatelessWidget {
     required this.doc,
     required this.onDocChanged,
     required this.content,
+    required this.applying,
+    required this.onToggleApplied,
   });
 
   final Draft draft;
@@ -175,6 +196,8 @@ class _Ready extends StatelessWidget {
   final DraftDoc doc;
   final ValueChanged<DraftDoc> onDocChanged;
   final String? content;
+  final bool applying;
+  final VoidCallback onToggleApplied;
 
   @override
   Widget build(BuildContext context) {
@@ -222,6 +245,9 @@ class _Ready extends StatelessWidget {
           ),
         ],
         const SizedBox(height: 12),
+        _AppliedToggle(
+            applied: draft.applied, busy: applying, onToggle: onToggleApplied),
+        const SizedBox(height: 12),
         _PdfButtons(draft: draft, pdfTitle: pdfTitle),
         const SizedBox(height: 14),
         SegmentedButton<DraftDoc>(
@@ -246,6 +272,64 @@ class _Ready extends StatelessWidget {
         const SizedBox(height: 16),
         _Document(text: content),
       ],
+    );
+  }
+}
+
+/// The manual "applied" control. When not applied it's a prominent call to
+/// action; once applied it becomes a status banner with an undo affordance.
+class _AppliedToggle extends StatelessWidget {
+  const _AppliedToggle({
+    required this.applied,
+    required this.busy,
+    required this.onToggle,
+  });
+  final bool applied;
+  final bool busy;
+  final VoidCallback onToggle;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    if (applied) {
+      return Container(
+        padding: const EdgeInsets.fromLTRB(14, 10, 8, 10),
+        decoration: BoxDecoration(
+          color: scheme.primaryContainer,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Row(
+          children: [
+            Icon(Icons.check_circle_rounded,
+                size: 20, color: scheme.onPrimaryContainer),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text('You marked this job as applied',
+                  style: TextStyle(
+                      fontSize: 13.5,
+                      fontWeight: FontWeight.w600,
+                      color: scheme.onPrimaryContainer)),
+            ),
+            TextButton(
+              onPressed: busy ? null : onToggle,
+              child: const Text('Undo'),
+            ),
+          ],
+        ),
+      );
+    }
+    return SizedBox(
+      width: double.infinity,
+      child: FilledButton.icon(
+        onPressed: busy ? null : onToggle,
+        icon: busy
+            ? const SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(strokeWidth: 2))
+            : const Icon(Icons.check_circle_outline_rounded, size: 20),
+        label: const Text('Mark as applied'),
+      ),
     );
   }
 }

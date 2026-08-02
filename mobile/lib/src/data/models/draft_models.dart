@@ -13,6 +13,7 @@ class DraftSummary {
     this.title,
     this.company,
     this.url,
+    this.applied = false,
   });
 
   final String id;
@@ -23,6 +24,7 @@ class DraftSummary {
   final String? title;
   final String? company;
   final String? url;
+  final bool applied;
 
   /// A human label for the application even when the posting metadata is gone.
   String get displayTitle => title ?? 'Application';
@@ -36,6 +38,7 @@ class DraftSummary {
         title: j['title'] as String?,
         company: j['company'] as String?,
         url: j['url'] as String?,
+        applied: (j['applied'] as bool?) ?? false,
       );
 }
 
@@ -53,6 +56,7 @@ class Draft {
     this.model,
     this.keySource,
     required this.createdAt,
+    this.applied = false,
   });
 
   final String id;
@@ -65,8 +69,10 @@ class Draft {
   final String? model;
   final String? keySource;
   final String createdAt;
+  final bool applied;
 
-  Draft copyWith({String? resumeMd, String? coverLetterMd}) => Draft(
+  Draft copyWith({String? resumeMd, String? coverLetterMd, bool? applied}) =>
+      Draft(
         id: id,
         postingId: postingId,
         jobSource: jobSource,
@@ -77,6 +83,7 @@ class Draft {
         model: model,
         keySource: keySource,
         createdAt: createdAt,
+        applied: applied ?? this.applied,
       );
 
   factory Draft.fromJson(Map<String, dynamic> j) => Draft(
@@ -90,5 +97,6 @@ class Draft {
         model: j['model'] as String?,
         keySource: j['key_source'] as String?,
         createdAt: (j['created_at'] as String?) ?? '',
+        applied: (j['applied'] as bool?) ?? false,
       );
 }

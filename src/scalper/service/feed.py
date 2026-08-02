@@ -44,6 +44,7 @@ class FeedItem:
     is_new: bool
     saved: bool
     drafted: bool
+    applied: bool = False
     breakdown: dict[str, float] = field(default_factory=dict)
 
 
@@ -71,6 +72,7 @@ class PostingDetail:
     is_new: bool
     saved: bool
     drafted: bool
+    applied: bool = False
     breakdown: dict[str, float] = field(default_factory=dict)
 
 
@@ -129,6 +131,7 @@ class FeedService:
                 is_new=(ov is None or ov.seen_at is None),
                 saved=bool(ov and ov.saved),
                 drafted=bool(ov and ov.drafted_at),
+                applied=bool(ov and ov.applied_at),
                 breakdown=s.breakdown.components(),
             ))
             if len(items) >= limit:
@@ -162,5 +165,6 @@ class FeedService:
             is_new=(ov is None or ov.seen_at is None),
             saved=bool(ov and ov.saved),
             drafted=bool(ov and ov.drafted_at),
+            applied=bool(ov and ov.applied_at),
             breakdown=s.breakdown.components() if s else {},
         )
