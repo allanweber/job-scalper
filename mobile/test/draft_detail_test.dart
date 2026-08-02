@@ -3,12 +3,15 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 import 'package:job_scalper/src/data/drafts_repository.dart';
 import 'package:job_scalper/src/data/models/draft_models.dart';
 import 'package:job_scalper/src/data/pdf_cache_repository.dart';
 import 'package:job_scalper/src/data/providers.dart';
 import 'package:job_scalper/src/dev/drafts_harness.dart';
+import 'package:job_scalper/src/dev/feed_harness.dart';
 import 'package:job_scalper/src/features/applications/draft_detail_screen.dart';
+import 'package:job_scalper/src/features/detail/job_detail_screen.dart';
 
 class _NoPdfCache extends PdfCacheRepository {
   @override
@@ -111,6 +114,57 @@ void main() {
     expect(find.text('You marked this job as applied'), findsOneWidget);
     expect(find.text('Undo'), findsOneWidget);
     expect(find.text('Marked as applied'), findsOneWidget); // snackbar
+  });
+
+  testWidgets('Job analysis navigates to the nested job detail route',
+      (tester) async {
+    tester.view.physicalSize = const Size(1170, 7000);
+    tester.view.devicePixelRatio = 3.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    // Mirror the real router nesting: job/:id lives under the draft route, so a
+    // push must resolve to /applications/draft/:id/job/:id (absolute), not
+    // /job/:id — the bug that produced "Page Not Found".
+    final router = GoRouter(
+      initialLocation: '/applications/draft/d1',
+      routes: [
+        GoRoute(
+          path: '/applications/draft/:id',
+          builder: (_, state) => DraftDetailScreen(
+            draftId: state.pathParameters['id']!,
+            initial: demoDraftSummaries
+                .firstWhere((d) => d.id == state.pathParameters['id']),
+          ),
+          routes: [
+            GoRoute(
+              path: 'job/:postingId',
+              builder: (_, state) => JobDetailScreen(
+                  postingId: state.pathParameters['postingId']!),
+            ),
+          ],
+        ),
+      ],
+    );
+    final container = ProviderContainer(overrides: [
+      draftsRepositoryProvider.overrideWithValue(FakeDraftsRepository()),
+      pdfCacheRepositoryProvider.overrideWithValue(_NoPdfCache()),
+      feedRepositoryProvider.overrideWithValue(FakeFeedRepository()),
+    ]);
+    addTearDown(container.dispose);
+
+    await tester.pumpWidget(UncontrolledProviderScope(
+      container: container,
+      child: MaterialApp.router(routerConfig: router),
+    ));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Job analysis'));
+    await tester.pumpAndSettle();
+
+    // Landed on the job detail (its 'Job' app bar), not the error page.
+    expect(find.widgetWithText(AppBar, 'Job'), findsOneWidget);
+    expect(find.textContaining('no routes for location'), findsNothing);
   });
 
   testWidgets('an already-applied draft shows the applied banner', (tester) async {

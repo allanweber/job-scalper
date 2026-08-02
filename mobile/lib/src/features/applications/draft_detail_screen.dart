@@ -222,7 +222,7 @@ class _Ready extends StatelessWidget {
           Text('Drafted $when',
               style: TextStyle(fontSize: 12.5, color: scheme.onSurfaceVariant)),
         ],
-        if (url != null && url.isNotEmpty || summary?.postingId != null) ...[
+        if (url != null && url.isNotEmpty || draft.postingId != null) ...[
           const SizedBox(height: 12),
           Wrap(
             spacing: 8,
@@ -234,10 +234,13 @@ class _Ready extends StatelessWidget {
                   icon: const Icon(Icons.open_in_new_rounded, size: 18),
                   label: const Text('View job posting'),
                 ),
-              if (summary?.postingId != null)
+              if (draft.postingId != null)
                 OutlinedButton.icon(
-                  onPressed: () =>
-                      context.push('job/${summary!.postingId}'),
+                  // Absolute path into this draft's nested job route — go_router
+                  // treats push() strings as absolute, so a bare 'job/…' would
+                  // resolve to /job/… and match no route.
+                  onPressed: () => context.push(
+                      '/applications/draft/${draft.id}/job/${draft.postingId}'),
                   icon: const Icon(Icons.analytics_outlined, size: 18),
                   label: const Text('Job analysis'),
                 ),

@@ -63,7 +63,18 @@ final routerProvider = Provider<GoRouter>((ref) {
                     draftId: state.pathParameters['id']!,
                     initial: state.extra as DraftSummary?,
                   ),
-                  routes: [_jobRoute()],
+                  // Distinct param name: go_router rejects a nested route that
+                  // repeats a parent's parameter name (both `:id`), so the job
+                  // detail reached from a draft uses `:postingId`.
+                  routes: [
+                    GoRoute(
+                      path: 'job/:postingId',
+                      builder: (_, state) => JobDetailScreen(
+                        postingId: state.pathParameters['postingId']!,
+                        initial: state.extra as FeedItem?,
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
