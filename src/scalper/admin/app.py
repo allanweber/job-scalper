@@ -39,6 +39,11 @@ from scalper.service.content_repos import (
     PostingRepo,
     UserSourceRepo,
 )
+from scalper.service.logging_setup import (
+    RequestLoggingMiddleware,
+    configure_logging,
+    unhandled_exception_handler,
+)
 from scalper.service.jobs import KIND_PURGE, KIND_SCRAPE, JobQueue
 from scalper.service.models import User
 from scalper.service.quota import METRICS
@@ -89,6 +94,7 @@ def _audit(ctx: AdminContext, admin: User, action: str, **kw: Any) -> None:
 
 
 def create_admin_app(admin_container: AdminContainer | None = None) -> FastAPI:
+    configure_logging()
     admin_container = admin_container or AdminContainer.from_env()
 
     conn = admin_container.service.connect()
@@ -99,6 +105,8 @@ def create_admin_app(admin_container: AdminContainer | None = None) -> FastAPI:
 
     app = FastAPI(title="Job Scalper Admin", docs_url=None, redoc_url=None, openapi_url=None)
     app.state.admin = admin_container
+    app.add_middleware(RequestLoggingMiddleware)
+    app.add_exception_handler(Exception, unhandled_exception_handler)
 
     @app.exception_handler(_Redirect)
     async def _on_redirect(_request: Request, exc: _Redirect):

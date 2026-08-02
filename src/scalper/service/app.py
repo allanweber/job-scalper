@@ -14,6 +14,11 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from scalper.db import apply_pending
 from scalper.service.container import Container
+from scalper.service.logging_setup import (
+    RequestLoggingMiddleware,
+    configure_logging,
+    unhandled_exception_handler,
+)
 from scalper.service.routers import account, auth, drafts, feed, jobs, postings, system
 
 _TITLE = "Job Scalper API"
@@ -21,6 +26,7 @@ _VERSION = "0.1.0"
 
 
 def create_app(container: Container | None = None) -> FastAPI:
+    configure_logging()
     container = container or Container.from_env()
 
     # Self-provision: apply any pending migrations against the target DB.
@@ -41,6 +47,9 @@ def create_app(container: Container | None = None) -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+    # Added last so it's the outermost middleware — it times the whole request.
+    app.add_middleware(RequestLoggingMiddleware)
+    app.add_exception_handler(Exception, unhandled_exception_handler)
 
     for module in (system, auth, account, feed, drafts, postings, jobs):
         app.include_router(module.router)
