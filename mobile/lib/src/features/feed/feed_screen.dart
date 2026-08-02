@@ -55,6 +55,7 @@ class _FeedList extends StatelessWidget {
     final ctrl = ref.read(feedControllerProvider.notifier);
     final localDrafted = ref.watch(draftedPostingIdsProvider);
     final appliedOverrides = ref.watch(appliedOverridesProvider);
+    final savedOverrides = ref.watch(savedOverridesProvider);
     final items = state.items;
     final hasBanner = state.newCount > 0;
 
@@ -69,6 +70,10 @@ class _FeedList extends StatelessWidget {
         }
         final raw = items[index - (hasBanner ? 1 : 0)];
         var item = raw;
+        final savedOverride = savedOverrides[raw.postingId];
+        if (savedOverride != null) {
+          item = item.copyWith(saved: savedOverride);
+        }
         if (localDrafted.contains(raw.postingId)) {
           item = item.copyWith(drafted: true);
         }

@@ -67,15 +67,18 @@ class SavedController extends Notifier<SavedState> {
 
   Future<void> refresh() => _load();
 
-  /// Unsave optimistically removes the card; a failure restores it.
+  /// Unsave optimistically removes the card; a failure restores it. The shared
+  /// override is set too, so the feed and detail screens drop the heart at once.
   Future<void> unsave(FeedItem item) async {
     final before = state.items;
     state = state.copyWith(
         items: [for (final i in before) if (i.postingId != item.postingId) i]);
+    ref.read(savedOverridesProvider.notifier).set(item.postingId, false);
     try {
       await _repo.unsave(item.postingId);
     } catch (e) {
       state = state.copyWith(items: before, error: _humanize(e));
+      ref.read(savedOverridesProvider.notifier).set(item.postingId, true);
     }
   }
 

@@ -84,11 +84,15 @@ class FeedController extends Notifier<FeedState> {
   Future<void> toggleSave(FeedItem item) async {
     final next = !item.saved;
     _patch(item.postingId, (i) => i.copyWith(saved: next));
+    // Publish immediately so the Saved tab (and detail) reflect it without
+    // waiting for the network.
+    ref.read(savedOverridesProvider.notifier).set(item.postingId, next);
     try {
       await (next ? _repo.save(item.postingId) : _repo.unsave(item.postingId));
       ref.read(savedRevisionProvider.notifier).bump();
     } catch (e) {
       _patch(item.postingId, (i) => i.copyWith(saved: !next)); // rollback
+      ref.read(savedOverridesProvider.notifier).set(item.postingId, !next);
       state = state.copyWith(error: _humanize(e));
     }
   }

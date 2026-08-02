@@ -66,9 +66,26 @@ class AppliedOverrides extends Notifier<Map<String, bool>> {
       state = {...state, postingId: applied};
 }
 
+/// Session-local "saved" overrides keyed by posting id. Written optimistically
+/// the instant the user taps the heart anywhere — feed, saved list, or job
+/// detail — and read by both the feed and saved lists, so a save/unsave shows
+/// on every surface immediately, before the network round-trip. Reverted if the
+/// request fails. A value here wins over the model's own `saved` flag.
+final savedOverridesProvider =
+    NotifierProvider<SavedOverrides, Map<String, bool>>(SavedOverrides.new);
+
+class SavedOverrides extends Notifier<Map<String, bool>> {
+  @override
+  Map<String, bool> build() => const {};
+
+  void set(String postingId, bool saved) =>
+      state = {...state, postingId: saved};
+}
+
 /// Bumped whenever a posting's saved state is toggled from the feed or job
 /// detail screens. The Saved tab watches this and reloads itself in the
-/// background, so saving/unsaving elsewhere shows up without a manual refresh.
+/// background, so its server-side list reconciles after the optimistic override
+/// has already updated the UI.
 final savedRevisionProvider =
     NotifierProvider<SavedRevision, int>(SavedRevision.new);
 

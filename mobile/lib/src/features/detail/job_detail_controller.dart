@@ -83,12 +83,14 @@ class JobDetailController extends Notifier<JobDetailState> {
     if (d == null) return;
     final next = !d.saved;
     state = state.copyWith(detail: d.copyWith(saved: next));
+    ref.read(savedOverridesProvider.notifier).set(d.postingId, next);
     try {
       await (next ? _repo.save(d.postingId) : _repo.unsave(d.postingId));
       ref.read(savedRevisionProvider.notifier).bump();
     } catch (e) {
       state = state.copyWith(
           detail: d.copyWith(saved: !next), error: _humanize(e));
+      ref.read(savedOverridesProvider.notifier).set(d.postingId, !next);
     }
   }
 

@@ -53,4 +53,30 @@ void main() {
     expect(find.text('Nothing saved yet'), findsOneWidget);
     expect(find.byType(JobCard), findsNothing);
   });
+
+  testWidgets('a job saved elsewhere appears immediately via the override',
+      (tester) async {
+    final container = _container();
+    await _pump(tester, container);
+    // j1 (Senior Backend Engineer) starts unsaved, so it isn't listed.
+    expect(find.text('Senior Backend Engineer'), findsNothing);
+
+    // Simulate saving j1 from the feed/detail: the shared override flips before
+    // any reload, and the Saved tab should surface it at once.
+    container.read(savedOverridesProvider.notifier).set('j1', true);
+    await tester.pumpAndSettle();
+    expect(find.text('Senior Backend Engineer'), findsOneWidget);
+  });
+
+  testWidgets('unsaving elsewhere drops it from the saved list immediately',
+      (tester) async {
+    final container = _container();
+    await _pump(tester, container);
+    expect(find.text('Platform Engineer, Payments'), findsOneWidget);
+
+    container.read(savedOverridesProvider.notifier).set('j2', false);
+    await tester.pumpAndSettle();
+    expect(find.text('Platform Engineer, Payments'), findsNothing);
+    expect(find.text('Nothing saved yet'), findsOneWidget);
+  });
 }
