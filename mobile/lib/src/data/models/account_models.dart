@@ -141,6 +141,100 @@ class SourcesInfo {
       );
 }
 
+/// A single bring-your-own LLM key's stored state (`GET /me/keys`). The key
+/// itself is write-only server-side and never returned — only whether one is on
+/// file and whether it has been validated.
+class LlmKeyInfo {
+  const LlmKeyInfo({
+    required this.provider,
+    required this.valid,
+    this.lastValidatedAt,
+  });
+
+  final String provider; // 'anthropic' | 'openai'
+  final bool valid;
+  final String? lastValidatedAt;
+
+  /// True once the backend has validated the stored key at least once.
+  bool get validated => lastValidatedAt != null;
+
+  factory LlmKeyInfo.fromJson(Map<String, dynamic> j) => LlmKeyInfo(
+        provider: j['provider'] as String,
+        valid: (j['valid'] as bool?) ?? false,
+        lastValidatedAt: j['last_validated_at'] as String?,
+      );
+}
+
+/// The set of stored BYO keys (`GET/PUT/DELETE /me/keys`).
+class LlmKeysInfo {
+  const LlmKeysInfo({this.keys = const []});
+
+  final List<LlmKeyInfo> keys;
+
+  /// The stored key for [provider], or null if none is on file.
+  LlmKeyInfo? forProvider(String provider) {
+    for (final k in keys) {
+      if (k.provider == provider) return k;
+    }
+    return null;
+  }
+
+  factory LlmKeysInfo.fromJson(Map<String, dynamic> j) => LlmKeysInfo(
+        keys: ((j['keys'] as List?) ?? const [])
+            .map((e) => LlmKeyInfo.fromJson(e as Map<String, dynamic>))
+            .toList(),
+      );
+}
+
+/// One usage metric within the quota (`GET /me/quota`).
+class QuotaMetricInfo {
+  const QuotaMetricInfo({
+    required this.metric,
+    required this.limit,
+    required this.used,
+    required this.remaining,
+    required this.unlimited,
+  });
+
+  final String metric;
+  final int limit;
+  final int used;
+  final int remaining;
+  final bool unlimited;
+
+  factory QuotaMetricInfo.fromJson(Map<String, dynamic> j) => QuotaMetricInfo(
+        metric: j['metric'] as String,
+        limit: (j['limit'] as num?)?.toInt() ?? 0,
+        used: (j['used'] as num?)?.toInt() ?? 0,
+        remaining: (j['remaining'] as num?)?.toInt() ?? 0,
+        unlimited: (j['unlimited'] as bool?) ?? false,
+      );
+}
+
+/// The user's plan usage for the current period (`GET /me/quota`).
+class QuotaInfo {
+  const QuotaInfo({
+    required this.plan,
+    required this.period,
+    required this.byoKey,
+    this.metrics = const [],
+  });
+
+  final String plan;
+  final String period;
+  final bool byoKey;
+  final List<QuotaMetricInfo> metrics;
+
+  factory QuotaInfo.fromJson(Map<String, dynamic> j) => QuotaInfo(
+        plan: (j['plan'] as String?) ?? 'free',
+        period: (j['period'] as String?) ?? '',
+        byoKey: (j['byo_key'] as bool?) ?? false,
+        metrics: ((j['metrics'] as List?) ?? const [])
+            .map((e) => QuotaMetricInfo.fromJson(e as Map<String, dynamic>))
+            .toList(),
+      );
+}
+
 /// An async job record (`GET /jobs/{id}`), polled while a resume-driven profile
 /// build runs.
 class JobRecord {

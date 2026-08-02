@@ -32,6 +32,22 @@ abstract class AccountRepository {
   Future<SourcesInfo> getSources();
   Future<SourcesInfo> saveSources(List<String> sources);
 
+  /// The user's stored BYO LLM keys (`GET /me/keys`).
+  Future<LlmKeysInfo> getKeys();
+
+  /// Store/replace the key for a provider (`PUT /me/keys`); returns the updated
+  /// set.
+  Future<LlmKeysInfo> putKey(String provider, String apiKey);
+
+  /// Remove the stored key for a provider (`DELETE /me/keys/{provider}`).
+  Future<LlmKeysInfo> deleteKey(String provider);
+
+  /// Current plan usage vs. limits (`GET /me/quota`).
+  Future<QuotaInfo> getQuota();
+
+  /// Irreversibly delete the account and all owned data (`DELETE /me`).
+  Future<void> deleteAccount();
+
   /// Poll an async job (`GET /jobs/{id}`).
   Future<JobRecord> getJob(String jobId);
 }
@@ -111,6 +127,36 @@ class HttpAccountRepository implements AccountRepository {
     final r = await _api.put<Map<String, dynamic>>('/me/sources',
         data: {'sources': sources});
     return SourcesInfo.fromJson(r.data!);
+  }
+
+  @override
+  Future<LlmKeysInfo> getKeys() async {
+    final r = await _api.get<Map<String, dynamic>>('/me/keys');
+    return LlmKeysInfo.fromJson(r.data!);
+  }
+
+  @override
+  Future<LlmKeysInfo> putKey(String provider, String apiKey) async {
+    final r = await _api.put<Map<String, dynamic>>('/me/keys',
+        data: {'provider': provider, 'api_key': apiKey});
+    return LlmKeysInfo.fromJson(r.data!);
+  }
+
+  @override
+  Future<LlmKeysInfo> deleteKey(String provider) async {
+    final r = await _api.delete<Map<String, dynamic>>('/me/keys/$provider');
+    return LlmKeysInfo.fromJson(r.data!);
+  }
+
+  @override
+  Future<QuotaInfo> getQuota() async {
+    final r = await _api.get<Map<String, dynamic>>('/me/quota');
+    return QuotaInfo.fromJson(r.data!);
+  }
+
+  @override
+  Future<void> deleteAccount() async {
+    await _api.delete<Map<String, dynamic>>('/me');
   }
 
   @override
