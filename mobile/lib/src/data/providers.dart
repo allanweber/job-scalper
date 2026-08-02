@@ -65,3 +65,16 @@ class AppliedOverrides extends Notifier<Map<String, bool>> {
   void set(String postingId, bool applied) =>
       state = {...state, postingId: applied};
 }
+
+/// Bumped whenever a posting's saved state is toggled from the feed or job
+/// detail screens. The Saved tab watches this and reloads itself in the
+/// background, so saving/unsaving elsewhere shows up without a manual refresh.
+final savedRevisionProvider =
+    NotifierProvider<SavedRevision, int>(SavedRevision.new);
+
+class SavedRevision extends Notifier<int> {
+  @override
+  int build() => 0;
+
+  void bump() => state = state + 1;
+}
