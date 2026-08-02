@@ -33,6 +33,33 @@
   <div style="margin-top:12px"><button class="primary">Save overrides</button></div>
 </form>
 
+<h2>Job sources</h2>
+<p class="muted">
+  Check the sources this user sees in their feed. Admins can override any
+  combination regardless of plan limits (free plan normally allows up to
+  {{ free_max_sources }}).
+  {% if not chosen_sources %}
+  <em>No explicit selection — user inherits the platform defaults
+  ({{ source_defaults | join(', ') or 'none' }}).</em>
+  {% endif %}
+</p>
+{% if enabled_sources %}
+<form method="post" action="/users/{{ u.id }}/sources">
+  <div style="display:flex;flex-wrap:wrap;gap:8px 20px;margin-bottom:12px">
+  {% for s in enabled_sources %}
+    <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+      <input type="checkbox" name="sources" value="{{ s }}"
+        {{ 'checked' if s in chosen_sources }}>
+      {{ s }}
+    </label>
+  {% endfor %}
+  </div>
+  <button class="primary">Save sources</button>
+</form>
+{% else %}
+<p class="muted">No sources enabled yet — add them on the <a href="/settings">Settings</a> page.</p>
+{% endif %}
+
 <h2>Account</h2>
 <p>
   {% if u.is_active %}

@@ -5,7 +5,7 @@ from conftest import ADMIN_EMAIL, FakeOAuth, _do_login
 from scalper.admin.container import AdminContainer
 from scalper.admin.sessions import MemorySessionStore
 from scalper.models import JobPosting
-from scalper.service.content_repos import AuditRepo, JobRepo, LLMUsageRepo, PostingRepo
+from scalper.service.content_repos import AuditRepo, JobRepo, LLMUsageRepo, PostingRepo, UserSourceRepo
 from scalper.service.models import GoogleIdentity
 from scalper.service.quota import QuotaService
 from scalper.service.repositories import QuotaOverrideRepo, UserRepo
@@ -220,3 +220,40 @@ def test_usage_page_filters_to_drafts(logged_in, conn):
 
     page = logged_in.get("/usage?action=draft").text
     assert "m2-enrich-only" not in page    # enrich row filtered out
+
+
+# --- user sources ---
+
+def test_user_detail_page_shows_sources_section(logged_in, conn, settings):
+    """User detail page renders the sources form when enabled sources exist."""
+    u = _make_user(conn)
+    settings.set("sources.enabled", ["remotive", "remoteok", "weworkremotely"])
+    page = logged_in.get(f"/users/{u.id}").text
+    assert "Job sources" in page
+    assert "remotive" in page
+    assert "remoteok" in page
+
+
+def test_set_user_sources_saves_and_audits(logged_in, conn, settings):
+    """POSTing to /users/{id}/sources replaces the user's chosen sources."""
+    u = _make_user(conn)
+    settings.set("sources.enabled", ["remotive", "remoteok", "weworkremotely"])
+
+    # Select two of the three enabled sources.
+    r = logged_in.post(
+        f"/users/{u.id}/sources",
+        data={"sources": ["remotive", "remoteok"]},
+        follow_redirects=False,
+    )
+    assert r.status_code == 303
+    assert UserSourceRepo(conn).list_for(u.id) == ["remotive", "remoteok"]
+    actions = {e["action"] for e in AuditRepo(conn).list_recent()}
+    assert "user.sources" in actions
+
+    # Replace with a single source; unknown sources are silently dropped.
+    logged_in.post(
+        f"/users/{u.id}/sources",
+        data={"sources": ["weworkremotely", "unknown-board"]},
+        follow_redirects=False,
+    )
+    assert UserSourceRepo(conn).list_for(u.id) == ["weworkremotely"]

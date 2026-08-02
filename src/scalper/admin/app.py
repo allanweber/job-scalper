@@ -32,7 +32,13 @@ from scalper.admin.deps import (
 )
 from scalper.admin.oauth import OAuthError
 from scalper.db import apply_pending
-from scalper.service.content_repos import AuditRepo, JobRepo, LLMUsageRepo, PostingRepo
+from scalper.service.content_repos import (
+    AuditRepo,
+    JobRepo,
+    LLMUsageRepo,
+    PostingRepo,
+    UserSourceRepo,
+)
 from scalper.service.jobs import KIND_PURGE, KIND_SCRAPE, JobQueue
 from scalper.service.models import User
 from scalper.service.quota import METRICS
@@ -40,6 +46,7 @@ from scalper.service.repositories import QuotaOverrideRepo, UserRepo
 
 _STATE_COOKIE = "scalper_admin_state"
 _PLANS = ["free", "pro"]
+_FREE_MAX_SOURCES = 3
 
 _env = Environment(loader=PackageLoader("scalper.admin", "templates"),
                    autoescape=select_autoescape(["html"]))
@@ -184,9 +191,15 @@ def create_admin_app(admin_container: AdminContainer | None = None) -> FastAPI:
             return redirect("/users?flash=" + quote("User not found."))
         overrides = {m: v for m in METRICS
                      if (v := QuotaOverrideRepo(ctx.conn).get(user_id, m)) is not None}
+        enabled_sources = list(ctx.settings.get("sources.enabled", []) or [])
+        chosen = UserSourceRepo(ctx.conn).list_for(user_id)
+        source_defaults = list(ctx.settings.get("sources.default", []) or [])
         return _render(request, "user_detail.html", admin=admin, active="users", u=u,
                        plans=_PLANS, metrics=list(METRICS), overrides=overrides,
-                       tokens_used=LLMUsageRepo(ctx.conn).total_tokens_for(user_id))
+                       tokens_used=LLMUsageRepo(ctx.conn).total_tokens_for(user_id),
+                       enabled_sources=enabled_sources, chosen_sources=chosen,
+                       source_defaults=source_defaults,
+                       free_max_sources=_FREE_MAX_SOURCES)
 
     @app.post("/users/{user_id}/plan")
     def set_plan(user_id: str, plan: str = Form(...),
@@ -219,6 +232,24 @@ def create_admin_app(admin_container: AdminContainer | None = None) -> FastAPI:
         _audit(ctx, admin, "user.quota", target_type="user", target_id=user_id,
                after=changed)
         return _flash_redirect(f"/users/{user_id}", "Quota overrides saved.")
+
+    @app.post("/users/{user_id}/sources")
+    async def set_sources(user_id: str, request: Request,
+                          ctx: AdminContext = Depends(get_admin_ctx),
+                          admin: User = Depends(current_admin)):
+        u = UserRepo(ctx.conn).get(user_id)
+        if u is None:
+            return redirect("/users")
+        form = await request.form()
+        # The form sends a checkbox per enabled source; unchecked = absent.
+        enabled_sources = set(ctx.settings.get("sources.enabled", []) or [])
+        chosen = [s for s in (form.getlist("sources") or [])
+                  if s in enabled_sources]
+        old = UserSourceRepo(ctx.conn).list_for(user_id)
+        UserSourceRepo(ctx.conn).set_for(user_id, chosen)
+        _audit(ctx, admin, "user.sources", target_type="user", target_id=user_id,
+               before={"sources": old}, after={"sources": chosen})
+        return _flash_redirect(f"/users/{user_id}", "Sources updated.")
 
     @app.post("/users/{user_id}/suspend")
     def suspend(user_id: str, ctx: AdminContext = Depends(get_admin_ctx),
