@@ -69,10 +69,29 @@ class FakeAccountRepository implements AccountRepository {
   SourcesInfo _sources = const SourcesInfo(
       selected: [], available: _availableBoards, maxAllowed: 3);
 
+  LlmKeysInfo _keys = const LlmKeysInfo();
+  final QuotaInfo _quota = const QuotaInfo(
+    plan: 'free',
+    period: 'Aug 2026',
+    byoKey: false,
+    metrics: [
+      QuotaMetricInfo(
+          metric: 'drafts', limit: 20, used: 7, remaining: 13, unlimited: false),
+      QuotaMetricInfo(
+          metric: 'profile_builds',
+          limit: 5,
+          used: 1,
+          remaining: 4,
+          unlimited: false),
+    ],
+  );
+
   Profile? savedProfile;
   List<String>? savedSources;
   bool legalAccepted = false;
   int resumeUploads = 0;
+  int accountDeletions = 0;
+  final List<(String, String)> savedKeys = [];
 
   @override
   Future<ApiUser> acceptLegal() async {
@@ -123,6 +142,38 @@ class FakeAccountRepository implements AccountRepository {
         available: _sources.available,
         maxAllowed: _sources.maxAllowed);
     return _sources;
+  }
+
+  @override
+  Future<LlmKeysInfo> getKeys() async => _keys;
+
+  @override
+  Future<LlmKeysInfo> putKey(String provider, String apiKey) async {
+    savedKeys.add((provider, apiKey));
+    final others = _keys.keys.where((k) => k.provider != provider).toList();
+    _keys = LlmKeysInfo(keys: [
+      ...others,
+      LlmKeyInfo(
+          provider: provider,
+          valid: true,
+          lastValidatedAt: DateTime(2026, 8, 1).toIso8601String()),
+    ]);
+    return _keys;
+  }
+
+  @override
+  Future<LlmKeysInfo> deleteKey(String provider) async {
+    _keys = LlmKeysInfo(
+        keys: _keys.keys.where((k) => k.provider != provider).toList());
+    return _keys;
+  }
+
+  @override
+  Future<QuotaInfo> getQuota() async => _quota;
+
+  @override
+  Future<void> deleteAccount() async {
+    accountDeletions++;
   }
 
   @override

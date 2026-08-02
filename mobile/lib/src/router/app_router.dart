@@ -10,9 +10,17 @@ import '../features/detail/job_detail_screen.dart';
 import '../features/feed/feed_screen.dart';
 import '../features/launch/launch_screen.dart';
 import '../features/onboarding/onboarding_screen.dart';
+import '../features/profile/about_screen.dart';
+import '../features/profile/appearance_screen.dart';
+import '../features/profile/boards_screen.dart';
+import '../features/profile/delete_account_screen.dart';
+import '../features/profile/llm_key_screen.dart';
+import '../features/profile/profile_edit_screen.dart';
+import '../features/profile/profile_screen.dart';
+import '../features/profile/resume_screen.dart';
+import '../features/profile/usage_screen.dart';
 import '../features/saved/saved_screen.dart';
 import '../features/shell/home_shell.dart';
-import '../features/shell/placeholder_tab.dart';
 import '../state/session.dart';
 
 /// The `job/:id` detail sub-route shared by the Feed and Saved branches. The
@@ -81,8 +89,27 @@ final routerProvider = Provider<GoRouter>((ref) {
           ]),
           StatefulShellBranch(routes: [
             GoRoute(
-                path: '/profile',
-                builder: (_, _) => const PlaceholderTab(title: 'Profile')),
+              path: '/profile',
+              builder: (_, _) => const ProfileScreen(),
+              routes: [
+                GoRoute(
+                    path: 'edit',
+                    builder: (_, _) => const ProfileEditScreen()),
+                GoRoute(
+                    path: 'resume', builder: (_, _) => const ResumeScreen()),
+                GoRoute(
+                    path: 'boards', builder: (_, _) => const BoardsScreen()),
+                GoRoute(path: 'key', builder: (_, _) => const LlmKeyScreen()),
+                GoRoute(path: 'usage', builder: (_, _) => const UsageScreen()),
+                GoRoute(
+                    path: 'appearance',
+                    builder: (_, _) => const AppearanceScreen()),
+                GoRoute(path: 'about', builder: (_, _) => const AboutScreen()),
+                GoRoute(
+                    path: 'delete',
+                    builder: (_, _) => const DeleteAccountScreen()),
+              ],
+            ),
           ]),
         ],
       ),
