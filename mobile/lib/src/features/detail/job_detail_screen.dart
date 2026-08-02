@@ -78,16 +78,16 @@ class _JobDetailScreenState extends ConsumerState<JobDetailScreen> {
   }
 
   Future<void> _draft(JobDetailController ctrl) async {
-    await ctrl.draft();
+    final draftId = await ctrl.draft();
     if (!mounted) return;
-    final s = ref.read(jobDetailControllerProvider);
-    final messenger = ScaffoldMessenger.of(context);
-    if (s.draftPhase == DraftPhase.done) {
-      messenger.showSnackBar(const SnackBar(
-          content: Text('Draft started — find it in Applications shortly.')));
-    } else if (s.draftPhase == DraftPhase.failed) {
-      messenger.showSnackBar(SnackBar(
-          content: Text(s.draftError ?? 'Couldn\'t start the draft.')));
+    if (draftId != null) {
+      // The draft row exists immediately (pending); go straight to it — the
+      // detail screen polls until the content is ready.
+      context.push('/applications/draft/$draftId');
+    } else {
+      final s = ref.read(jobDetailControllerProvider);
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(s.draftError ?? "Couldn't start the draft.")));
     }
   }
 

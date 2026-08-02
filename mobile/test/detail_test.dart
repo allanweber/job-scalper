@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 import 'package:job_scalper/src/data/feed_repository.dart';
 import 'package:job_scalper/src/data/providers.dart';
 import 'package:job_scalper/src/dev/feed_harness.dart';
@@ -16,9 +17,24 @@ ProviderContainer _container({FeedRepository? repo}) {
 
 Future<void> _pump(WidgetTester tester, ProviderContainer container,
     {String postingId = 'j1'}) async {
+  // A minimal router so "Draft application" can navigate to the draft detail;
+  // the target is a stub so this test stays focused on the job-detail screen.
+  final router = GoRouter(
+    initialLocation: '/feed/job/$postingId',
+    routes: [
+      GoRoute(
+        path: '/feed/job/:id',
+        builder: (_, s) => JobDetailScreen(postingId: s.pathParameters['id']!),
+      ),
+      GoRoute(
+        path: '/applications/draft/:id',
+        builder: (_, _) => const Scaffold(body: Text('draft detail stub')),
+      ),
+    ],
+  );
   await tester.pumpWidget(UncontrolledProviderScope(
     container: container,
-    child: MaterialApp(home: JobDetailScreen(postingId: postingId)),
+    child: MaterialApp.router(routerConfig: router),
   ));
   await tester.pumpAndSettle();
 }
@@ -50,7 +66,7 @@ void main() {
     expect(repo.savedCalls, contains('j1'));
   });
 
-  testWidgets('draft application enqueues a draft and marks drafted',
+  testWidgets('draft application creates a draft and navigates to it',
       (tester) async {
     final repo = FakeFeedRepository();
     await _pump(tester, _container(repo: repo));
@@ -58,8 +74,9 @@ void main() {
     await tester.tap(find.text('Draft application'));
     await tester.pumpAndSettle();
 
+    // The draft is requested and we navigate straight to the (pending) detail.
     expect(repo.draftCalls, contains('j1'));
-    expect(find.text('View application'), findsOneWidget); // button flips
+    expect(find.text('draft detail stub'), findsOneWidget);
   });
 
   testWidgets('error state renders with retry', (tester) async {

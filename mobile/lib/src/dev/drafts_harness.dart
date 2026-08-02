@@ -44,9 +44,10 @@ Draft _demoDraft(DraftSummary s) => Draft(
       id: s.id,
       postingId: s.postingId,
       jobSource: s.jobSource,
-      resumeMd: _demoResume,
-      coverLetterMd: _demoCoverLetter,
-      stretchClaimsMd: s.id == 'd1'
+      // Pending/failed drafts have no content yet.
+      resumeMd: s.isReady ? _demoResume : null,
+      coverLetterMd: s.isReady ? _demoCoverLetter : null,
+      stretchClaimsMd: s.id == 'd1' && s.isReady
           ? 'Framed “led a team” — you mentored two engineers; confirm the '
               'framing fits before sending.'
           : null,
@@ -55,6 +56,8 @@ Draft _demoDraft(DraftSummary s) => Draft(
       keySource: s.keySource,
       createdAt: s.createdAt,
       applied: s.applied,
+      status: s.status,
+      error: s.error,
     );
 
 /// In-memory [DraftsRepository]. Serves the demo drafts, records edits for
@@ -64,11 +67,18 @@ class FakeDraftsRepository implements DraftsRepository {
     List<DraftSummary>? items,
     this.fails = false,
     this.delay,
-  }) : _items = items ?? demoDraftSummaries;
+    Set<String>? pendingOnce,
+  })  : _items = items ?? demoDraftSummaries,
+        _pendingOnce = pendingOnce ?? const {};
 
   final List<DraftSummary> _items;
   final bool fails;
   final Duration? delay;
+
+  /// Draft ids that return a 'pending' draft on the first getDraft call and a
+  /// ready one afterwards — used to exercise the poll-until-ready flow.
+  final Set<String> _pendingOnce;
+  final Map<String, int> _getCalls = {};
 
   final List<({String id, String? resumeMd, String? coverLetterMd})> edits = [];
   final List<({String id, bool applied})> appliedCalls = [];
@@ -87,6 +97,17 @@ class FakeDraftsRepository implements DraftsRepository {
     if (fails) throw Exception('Failed host lookup');
     if (_overrides.containsKey(id)) return _overrides[id]!;
     final s = _items.firstWhere((e) => e.id == id, orElse: () => _items.first);
+    final calls = (_getCalls[id] ?? 0) + 1;
+    _getCalls[id] = calls;
+    if (_pendingOnce.contains(id) && calls < 2) {
+      return Draft(
+        id: id,
+        postingId: s.postingId,
+        jobSource: s.jobSource,
+        createdAt: s.createdAt,
+        status: 'pending',
+      );
+    }
     return _demoDraft(s);
   }
 

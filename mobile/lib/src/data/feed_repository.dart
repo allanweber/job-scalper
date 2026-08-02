@@ -57,6 +57,8 @@ class HttpFeedRepository implements FeedRepository {
   Future<String> createDraft(String postingId) async {
     final r = await _api.post<Map<String, dynamic>>('/drafts',
         data: {'posting_id': postingId});
-    return r.data!['job_id'] as String;
+    // The draft row is created immediately (status 'pending'); its id lets the
+    // caller navigate straight to the (still-drafting) application detail.
+    return r.data!['id'] as String;
   }
 }

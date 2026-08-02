@@ -59,23 +59,54 @@ class DraftDetailState {
 /// once from initState (the detail route is a pushed page), so a single
 /// autoDispose controller per visit is enough.
 class DraftDetailController extends Notifier<DraftDetailState> {
+  static const _pollEvery = Duration(milliseconds: 1500);
+  static const _pollTimeout = Duration(seconds: 120);
+
   DraftsRepository get _repo => ref.read(draftsRepositoryProvider);
   PdfCacheRepository get _pdfCache => ref.read(pdfCacheRepositoryProvider);
   String? _id;
+  bool _disposed = false;
 
   @override
-  DraftDetailState build() => const DraftDetailState();
+  DraftDetailState build() {
+    ref.onDispose(() => _disposed = true);
+    return const DraftDetailState();
+  }
 
   Future<void> load(String id) async {
     _id = id;
     state = const DraftDetailState(status: DraftDetailStatus.loading);
     try {
       final draft = await _repo.getDraft(id);
+      if (_disposed || _id != id) return;
       state = state.copyWith(
           status: DraftDetailStatus.ready, draft: draft, error: null);
+      // A freshly requested draft starts 'pending'; poll until the worker
+      // fills it in (or marks it failed), then the screen enables the actions.
+      if (draft.isPending) unawaited(_pollWhilePending(id));
     } catch (e) {
       state =
           state.copyWith(status: DraftDetailStatus.error, error: _humanize(e));
+    }
+  }
+
+  Future<void> _pollWhilePending(String id) async {
+    final deadline = DateTime.now().add(_pollTimeout);
+    while (!_disposed && _id == id && DateTime.now().isBefore(deadline)) {
+      await Future<void>.delayed(_pollEvery);
+      if (_disposed || _id != id) return;
+      try {
+        final draft = await _repo.getDraft(id);
+        if (_disposed || _id != id) return;
+        state = state.copyWith(draft: draft);
+        if (!draft.isPending) {
+          // Reached ready/failed — let the Applications list reflect it.
+          ref.read(draftsRevisionProvider.notifier).bump();
+          return;
+        }
+      } catch (_) {
+        // Transient error — keep polling until the deadline.
+      }
     }
   }
 

@@ -86,16 +86,7 @@ class _ApplicationCard extends StatelessWidget {
           padding: const EdgeInsets.all(AppTokens.cardPadding),
           child: Row(
             children: [
-              Container(
-                width: 42,
-                height: 42,
-                decoration: BoxDecoration(
-                  color: scheme.primaryContainer,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Icon(Icons.description_rounded,
-                    color: scheme.onPrimaryContainer, size: 22),
-              ),
+              _Leading(status: draft.status, scheme: scheme),
               const SizedBox(width: 14),
               Expanded(
                 child: Column(
@@ -120,10 +111,14 @@ class _ApplicationCard extends StatelessWidget {
                             fontSize: 13, color: scheme.onSurfaceVariant),
                       ),
                     ],
+                    if (draft.isPending || draft.isFailed) ...[
+                      const SizedBox(height: 6),
+                      _StatusPill(status: draft.status, scheme: scheme),
+                    ],
                   ],
                 ),
               ),
-              if (applied) ...[
+              if (draft.isReady && applied) ...[
                 const SizedBox(width: 8),
                 _AppliedPill(scheme: scheme),
               ],
@@ -133,6 +128,73 @@ class _ApplicationCard extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// The card's leading badge: a spinner while drafting, an error mark on
+/// failure, otherwise the document icon.
+class _Leading extends StatelessWidget {
+  const _Leading({required this.status, required this.scheme});
+  final String status;
+  final ColorScheme scheme;
+
+  @override
+  Widget build(BuildContext context) {
+    final (bg, child) = switch (status) {
+      'pending' => (
+          scheme.surfaceContainerHighest,
+          const SizedBox(
+              width: 20,
+              height: 20,
+              child: CircularProgressIndicator(strokeWidth: 2.4)),
+        ),
+      'failed' => (
+          scheme.errorContainer,
+          Icon(Icons.error_outline_rounded,
+              color: scheme.onErrorContainer, size: 22),
+        ),
+      _ => (
+          scheme.primaryContainer,
+          Icon(Icons.description_rounded,
+              color: scheme.onPrimaryContainer, size: 22),
+        ),
+    };
+    return Container(
+      width: 42,
+      height: 42,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: child,
+    );
+  }
+}
+
+/// A small status chip for a pending/failed draft.
+class _StatusPill extends StatelessWidget {
+  const _StatusPill({required this.status, required this.scheme});
+  final String status;
+  final ColorScheme scheme;
+
+  @override
+  Widget build(BuildContext context) {
+    final failed = status == 'failed';
+    final label = failed ? 'Failed' : 'Drafting…';
+    final fg = failed ? scheme.error : scheme.onSurfaceVariant;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: failed
+            ? scheme.errorContainer.withValues(alpha: 0.5)
+            : scheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Text(label,
+          style: TextStyle(
+              fontSize: 11, fontWeight: FontWeight.w700, color: fg)),
     );
   }
 }

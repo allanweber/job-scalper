@@ -191,4 +191,63 @@ void main() {
     expect(find.text('You marked this job as applied'), findsOneWidget);
     expect(find.text('Mark as applied'), findsNothing);
   });
+
+  testWidgets('a pending draft shows the drafting state, then the content',
+      (tester) async {
+    tester.view.physicalSize = const Size(1170, 5000);
+    tester.view.devicePixelRatio = 3.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    // 'd1' comes back pending on the first fetch, ready afterwards.
+    final container =
+        _container(repo: FakeDraftsRepository(pendingOnce: {'d1'}));
+    await tester.pumpWidget(UncontrolledProviderScope(
+      container: container,
+      child: MaterialApp(
+        home: DraftDetailScreen(
+            draftId: 'd1', initial: demoDraftSummaries.first),
+      ),
+    ));
+    // Let the initial load resolve (pending) — pump manually because the
+    // drafting spinner never settles.
+    await tester.pump();
+    await tester.pump();
+    expect(find.text('Drafting your application…'), findsOneWidget);
+    expect(find.text('Mark as applied'), findsNothing); // actions disabled
+    expect(find.byIcon(Icons.edit_outlined), findsNothing);
+
+    // Advance past the poll interval; the second fetch returns the ready draft.
+    await tester.pump(const Duration(milliseconds: 1600));
+    await tester.pump();
+    await tester.pump();
+    expect(find.text('Drafting your application…'), findsNothing);
+    expect(find.text('Mark as applied'), findsOneWidget); // actions enabled
+    expect(find.textContaining('Backend engineer with'), findsOneWidget);
+  });
+
+  testWidgets('a failed draft shows the failure and its reason', (tester) async {
+    final failed = DraftSummary(
+      id: 'df',
+      postingId: 'j1',
+      jobSource: 'pool',
+      keySource: 'platform',
+      createdAt: DateTime.now().toIso8601String(),
+      title: 'Broken Role',
+      status: 'failed',
+      error: 'no resume on file — upload a resume first',
+    );
+    final container = _container(repo: FakeDraftsRepository(items: [failed]));
+    await tester.pumpWidget(UncontrolledProviderScope(
+      container: container,
+      child: MaterialApp(
+        home: DraftDetailScreen(draftId: 'df', initial: failed),
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    expect(find.text("Couldn't finish this draft"), findsOneWidget);
+    expect(find.textContaining('upload a resume first'), findsOneWidget);
+    expect(find.text('Mark as applied'), findsNothing);
+  });
 }

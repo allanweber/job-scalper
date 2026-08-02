@@ -96,20 +96,27 @@ class JobDetailController extends Notifier<JobDetailState> {
 
   /// Kick off an application draft. The draft itself lands in the Applications
   /// tab (M5); here we just enqueue it and reflect the request.
-  Future<void> draft() async {
+  /// Start drafting an application. Returns the new draft's id (a 'pending' row
+  /// the server created synchronously) so the caller can navigate straight to
+  /// the application detail, which polls until it's ready. Null on failure.
+  Future<String?> draft() async {
     final d = state.detail;
-    if (d == null || state.draftPhase == DraftPhase.running) return;
+    if (d == null || state.draftPhase == DraftPhase.running) return null;
     state = state.copyWith(draftPhase: DraftPhase.running, draftError: null);
     try {
-      await _repo.createDraft(d.postingId);
+      final draftId = await _repo.createDraft(d.postingId);
       ref.read(draftedPostingIdsProvider.notifier).add(d.postingId);
+      // A new (pending) draft row now exists — let the Applications tab show it.
+      ref.read(draftsRevisionProvider.notifier).bump();
       state = state.copyWith(
         draftPhase: DraftPhase.done,
         detail: d.copyWith(drafted: true),
       );
+      return draftId;
     } catch (e) {
       state = state.copyWith(
           draftPhase: DraftPhase.failed, draftError: _humanize(e));
+      return null;
     }
   }
 

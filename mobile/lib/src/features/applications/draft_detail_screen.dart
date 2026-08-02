@@ -135,7 +135,10 @@ class _DraftDetailScreenState extends ConsumerState<DraftDetailScreen> {
       appBar: AppBar(
         title: Text(_title, maxLines: 1, overflow: TextOverflow.ellipsis),
         actions: [
-          if (state.status == DraftDetailStatus.ready && d != null)
+          // Editing is only available once the content is in (ready).
+          if (state.status == DraftDetailStatus.ready &&
+              d != null &&
+              d.isReady)
             IconButton(
               tooltip: 'Edit',
               onPressed: state.saving ? null : () => _edit(d),
@@ -149,6 +152,12 @@ class _DraftDetailScreenState extends ConsumerState<DraftDetailScreen> {
         DraftDetailStatus.error => _ErrorView(
             message: state.error ?? 'Something went wrong.',
             onRetry: ctrl.refresh),
+        DraftDetailStatus.ready when d!.isPending => const _Drafting(),
+        DraftDetailStatus.ready when d!.isFailed => _DraftFailed(
+            error: d.error,
+            postingId: d.postingId,
+            draftId: d.id,
+          ),
         DraftDetailStatus.ready => _Ready(
             draft: d!,
             summary: widget.initial,
@@ -497,6 +506,99 @@ class _DraftEditorPageState extends State<_DraftEditorPage> {
             icon: const Icon(Icons.check_rounded),
             label: const Text('Save changes'),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Shown while the worker is still generating the draft. All the actions live
+/// on [_Ready], so simply rendering this keeps them disabled until it's done.
+class _Drafting extends StatelessWidget {
+  const _Drafting();
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(
+                width: 34,
+                height: 34,
+                child: CircularProgressIndicator(strokeWidth: 3)),
+            const SizedBox(height: 20),
+            Text('Drafting your application…',
+                style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    color: scheme.onSurface)),
+            const SizedBox(height: 8),
+            Text(
+              'Tailoring your resume and cover letter to this role. This usually '
+              'takes a few seconds — you can leave this page and it will be '
+              'waiting in your Applications.',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                  fontSize: 13, height: 1.45, color: scheme.onSurfaceVariant),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Shown when drafting failed, with the reason and a way back to the job.
+class _DraftFailed extends StatelessWidget {
+  const _DraftFailed({
+    required this.error,
+    required this.postingId,
+    required this.draftId,
+  });
+
+  final String? error;
+  final String? postingId;
+  final String draftId;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.error_outline_rounded, size: 48, color: scheme.error),
+            const SizedBox(height: 16),
+            Text("Couldn't finish this draft",
+                style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    color: scheme.onSurface)),
+            const SizedBox(height: 8),
+            Text(
+              error?.trim().isNotEmpty == true
+                  ? error!
+                  : 'Something went wrong while drafting. Please try again.',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                  fontSize: 13, height: 1.45, color: scheme.onSurfaceVariant),
+            ),
+            if (postingId != null) ...[
+              const SizedBox(height: 20),
+              OutlinedButton.icon(
+                onPressed: () => context.push(
+                    '/applications/draft/$draftId/job/$postingId'),
+                icon: const Icon(Icons.analytics_outlined, size: 18),
+                label: const Text('View the job'),
+              ),
+            ],
+          ],
         ),
       ),
     );

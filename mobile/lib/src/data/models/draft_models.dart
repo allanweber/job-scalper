@@ -14,6 +14,8 @@ class DraftSummary {
     this.company,
     this.url,
     this.applied = false,
+    this.status = 'ready',
+    this.error,
   });
 
   final String id;
@@ -25,6 +27,14 @@ class DraftSummary {
   final String? company;
   final String? url;
   final bool applied;
+
+  /// Lifecycle: 'pending' while drafting, 'ready' when done, 'failed' on error.
+  final String status;
+  final String? error;
+
+  bool get isPending => status == 'pending';
+  bool get isReady => status == 'ready';
+  bool get isFailed => status == 'failed';
 
   /// A human label for the application even when the posting metadata is gone.
   String get displayTitle => title ?? 'Application';
@@ -39,6 +49,8 @@ class DraftSummary {
         company: j['company'] as String?,
         url: j['url'] as String?,
         applied: (j['applied'] as bool?) ?? false,
+        status: (j['status'] as String?) ?? 'ready',
+        error: j['error'] as String?,
       );
 }
 
@@ -57,6 +69,8 @@ class Draft {
     this.keySource,
     required this.createdAt,
     this.applied = false,
+    this.status = 'ready',
+    this.error,
   });
 
   final String id;
@@ -71,7 +85,20 @@ class Draft {
   final String createdAt;
   final bool applied;
 
-  Draft copyWith({String? resumeMd, String? coverLetterMd, bool? applied}) =>
+  /// Lifecycle: 'pending' while drafting, 'ready' when done, 'failed' on error.
+  final String status;
+  final String? error;
+
+  bool get isPending => status == 'pending';
+  bool get isReady => status == 'ready';
+  bool get isFailed => status == 'failed';
+
+  Draft copyWith(
+          {String? resumeMd,
+          String? coverLetterMd,
+          bool? applied,
+          String? status,
+          String? error}) =>
       Draft(
         id: id,
         postingId: postingId,
@@ -84,6 +111,8 @@ class Draft {
         keySource: keySource,
         createdAt: createdAt,
         applied: applied ?? this.applied,
+        status: status ?? this.status,
+        error: error ?? this.error,
       );
 
   factory Draft.fromJson(Map<String, dynamic> j) => Draft(
@@ -98,5 +127,7 @@ class Draft {
         keySource: j['key_source'] as String?,
         createdAt: (j['created_at'] as String?) ?? '',
         applied: (j['applied'] as bool?) ?? false,
+        status: (j['status'] as String?) ?? 'ready',
+        error: j['error'] as String?,
       );
 }

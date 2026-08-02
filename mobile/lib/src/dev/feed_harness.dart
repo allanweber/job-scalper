@@ -150,7 +150,8 @@ class FakeFeedRepository implements FeedRepository {
   @override
   Future<String> createDraft(String postingId) async {
     draftCalls.add(postingId);
-    return 'draft-job-1';
+    // The real endpoint returns the new draft's id; mirror that here.
+    return 'draft-$postingId';
   }
 }
 

@@ -95,3 +95,16 @@ class SavedRevision extends Notifier<int> {
 
   void bump() => state = state + 1;
 }
+
+/// Bumped when a draft is created or transitions (pending → ready/failed). The
+/// Applications tab watches this and reloads, so a newly requested draft shows
+/// up as 'pending' at once and updates when the worker finishes.
+final draftsRevisionProvider =
+    NotifierProvider<DraftsRevision, int>(DraftsRevision.new);
+
+class DraftsRevision extends Notifier<int> {
+  @override
+  int build() => 0;
+
+  void bump() => state = state + 1;
+}
