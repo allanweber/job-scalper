@@ -174,23 +174,19 @@ class _Ready extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             FilledButton.tonalIcon(
-              onPressed: (draft.resumeMd?.trim().isNotEmpty ?? false)
-                  ? () => _downloadPdf(context,
-                      title: '$pdfTitle — Resume',
-                      filename: 'resume.pdf',
-                      markdown: draft.resumeMd)
-                  : null,
+              onPressed: () => _downloadPdf(context,
+                  title: '$pdfTitle — Resume',
+                  filename: 'resume.pdf',
+                  markdown: draft.resumeMd),
               icon: const Icon(Icons.download_rounded, size: 18),
               label: const Text('Resume PDF'),
             ),
             const SizedBox(height: 8),
             FilledButton.tonalIcon(
-              onPressed: (draft.coverLetterMd?.trim().isNotEmpty ?? false)
-                  ? () => _downloadPdf(context,
-                      title: '$pdfTitle — Cover letter',
-                      filename: 'cover_letter.pdf',
-                      markdown: draft.coverLetterMd)
-                  : null,
+              onPressed: () => _downloadPdf(context,
+                  title: '$pdfTitle — Cover letter',
+                  filename: 'cover_letter.pdf',
+                  markdown: draft.coverLetterMd),
               icon: const Icon(Icons.download_rounded, size: 18),
               label: const Text('Cover letter PDF'),
             ),
