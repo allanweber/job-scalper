@@ -1,14 +1,27 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:job_scalper/src/data/drafts_repository.dart';
+import 'package:job_scalper/src/data/pdf_cache_repository.dart';
 import 'package:job_scalper/src/data/providers.dart';
 import 'package:job_scalper/src/dev/drafts_harness.dart';
 import 'package:job_scalper/src/features/applications/draft_detail_screen.dart';
 
+class _NoPdfCache extends PdfCacheRepository {
+  @override
+  Future<Uint8List?> get(String draftId, String docType) async => null;
+  @override
+  Future<void> put(String draftId, String docType, Uint8List bytes) async {}
+  @override
+  Future<void> invalidate(String draftId) async {}
+}
+
 ProviderContainer _container({DraftsRepository? repo}) {
   final container = ProviderContainer(overrides: [
     draftsRepositoryProvider.overrideWithValue(repo ?? FakeDraftsRepository()),
+    pdfCacheRepositoryProvider.overrideWithValue(_NoPdfCache()),
   ]);
   addTearDown(container.dispose);
   return container;

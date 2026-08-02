@@ -1,8 +1,11 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../data/models/draft_models.dart';
+import '../../data/providers.dart';
 import '../../theme/tokens.dart';
 import '../../util/format.dart';
 import 'draft_detail_controller.dart';
@@ -17,21 +20,58 @@ Future<void> _openUrl(String url) async {
   }
 }
 
-/// Build a PDF on-device and save it directly to the downloads/documents folder.
-Future<void> _downloadPdf(BuildContext context,
-    {required String title, required String filename, String? markdown}) async {
+/// Download a PDF using a 3-step priority:
+///   1. Local sqflite cache (instant, no network)
+///   2. API → pdf-service (server-rendered, saved to cache)
+///   3. On-device fallback via the `pdf` package (offline / service down)
+Future<void> _downloadPdf(
+  BuildContext context,
+  WidgetRef ref, {
+  required String draftId,
+  required String docType, // "resume" | "cover_letter"
+  required String title,
+  required String filename,
+  String? markdown,
+}) async {
   final messenger = ScaffoldMessenger.of(context);
+  final cache = ref.read(pdfCacheRepositoryProvider);
+  final repo = ref.read(draftsRepositoryProvider);
+
+  Future<void> openBytes(Uint8List bytes) async {
+    await savePdfToDevice(filename, bytes);
+  }
+
+  // 1. Cache hit
+  final cached = await cache.get(draftId, docType);
+  if (cached != null) {
+    await openBytes(cached);
+    return;
+  }
+
+  // 2. API → pdf-service
+  try {
+    final bytes = await repo.getDraftPdf(draftId, docType);
+    await cache.put(draftId, docType, bytes);
+    await openBytes(bytes);
+    return;
+  } catch (_) {
+    // fall through to on-device generation
+  }
+
+  // 3. On-device fallback
+  if (!context.mounted) return;
   final md = markdown?.trim() ?? '';
   if (md.isEmpty) {
-    messenger.showSnackBar(const SnackBar(content: Text('Nothing to export yet')));
+    messenger.showSnackBar(
+        const SnackBar(content: Text('Nothing to export yet')));
     return;
   }
   try {
     final bytes = await buildDraftPdf(title: title, markdown: md);
-    final path = await savePdfToDevice(filename, bytes);
+    await openBytes(bytes);
     if (!context.mounted) return;
-    messenger.showSnackBar(SnackBar(
-        content: Text(path != null ? 'Saved: $filename' : 'Download not supported here')));
+    messenger.showSnackBar(const SnackBar(
+        content: Text('Generated locally — PDF service unavailable')));
   } catch (e) {
     if (!context.mounted) return;
     messenger.showSnackBar(SnackBar(content: Text("Couldn't save PDF ($e)")));
@@ -170,28 +210,7 @@ class _Ready extends StatelessWidget {
           ),
         ],
         const SizedBox(height: 12),
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            FilledButton.tonalIcon(
-              onPressed: () => _downloadPdf(context,
-                  title: '$pdfTitle — Resume',
-                  filename: 'resume.pdf',
-                  markdown: draft.resumeMd),
-              icon: const Icon(Icons.download_rounded, size: 18),
-              label: const Text('Resume PDF'),
-            ),
-            const SizedBox(height: 8),
-            FilledButton.tonalIcon(
-              onPressed: () => _downloadPdf(context,
-                  title: '$pdfTitle — Cover letter',
-                  filename: 'cover_letter.pdf',
-                  markdown: draft.coverLetterMd),
-              icon: const Icon(Icons.download_rounded, size: 18),
-              label: const Text('Cover letter PDF'),
-            ),
-          ],
-        ),
+        _PdfButtons(draft: draft, pdfTitle: pdfTitle),
         const SizedBox(height: 14),
         SegmentedButton<DraftDoc>(
           segments: const [
@@ -214,6 +233,43 @@ class _Ready extends StatelessWidget {
         ],
         const SizedBox(height: 16),
         _Document(text: content),
+      ],
+    );
+  }
+}
+
+class _PdfButtons extends ConsumerWidget {
+  const _PdfButtons({required this.draft, required this.pdfTitle});
+
+  final Draft draft;
+  final String pdfTitle;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        FilledButton.tonalIcon(
+          onPressed: () => _downloadPdf(context, ref,
+              draftId: draft.id,
+              docType: 'resume',
+              title: '$pdfTitle — Resume',
+              filename: 'resume.pdf',
+              markdown: draft.resumeMd),
+          icon: const Icon(Icons.download_rounded, size: 18),
+          label: const Text('Resume PDF'),
+        ),
+        const SizedBox(height: 8),
+        FilledButton.tonalIcon(
+          onPressed: () => _downloadPdf(context, ref,
+              draftId: draft.id,
+              docType: 'cover_letter',
+              title: '$pdfTitle — Cover letter',
+              filename: 'cover_letter.pdf',
+              markdown: draft.coverLetterMd),
+          icon: const Icon(Icons.download_rounded, size: 18),
+          label: const Text('Cover letter PDF'),
+        ),
       ],
     );
   }

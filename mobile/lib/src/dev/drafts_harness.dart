@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import '../data/drafts_repository.dart';
 import '../data/models/draft_models.dart';
 
@@ -99,6 +101,14 @@ class FakeDraftsRepository implements DraftsRepository {
         base.copyWith(resumeMd: resumeMd, coverLetterMd: coverLetterMd);
     _overrides[id] = updated;
     return updated;
+  }
+
+  @override
+  Future<Uint8List> getDraftPdf(String id, String which) async {
+    if (delay != null) await Future.delayed(delay!);
+    // In tests the PDF service is not running — always throw so the screen
+    // falls through to on-device generation.
+    throw Exception('pdf service not available in tests');
   }
 }
 

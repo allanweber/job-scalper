@@ -1,0 +1,83 @@
+/* ── Page setup ──────────────────────────────────────────────────────────── */
+@page {
+  size: Letter;
+  margin: 18mm 18mm 20mm 18mm;
+}
+
+/* ── Base ────────────────────────────────────────────────────────────────── */
+html, body {
+  font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+  font-size: 10.5pt;
+  line-height: 1.5;
+  color: #1a1a1a;
+  margin: 0;
+  padding: 0;
+}
+
+/* ── Headings ────────────────────────────────────────────────────────────── */
+h1 {
+  font-size: 22pt;
+  font-weight: 700;
+  margin: 0 0 2pt 0;
+  color: #111;
+  letter-spacing: -0.3pt;
+}
+
+h2 {
+  font-size: 11.5pt;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.8pt;
+  color: #333;
+  margin: 12pt 0 3pt 0;
+  padding-bottom: 2pt;
+  border-bottom: 1pt solid #ccc;
+}
+
+h3 {
+  font-size: 10.5pt;
+  font-weight: 700;
+  margin: 7pt 0 1pt 0;
+  color: #1a1a1a;
+}
+
+/* ── Body text ───────────────────────────────────────────────────────────── */
+p {
+  margin: 0 0 5pt 0;
+}
+
+/* ── Lists ───────────────────────────────────────────────────────────────── */
+ul, ol {
+  margin: 2pt 0 5pt 0;
+  padding-left: 16pt;
+}
+
+li {
+  margin-bottom: 2pt;
+}
+
+/* ── Cover-letter specifics ──────────────────────────────────────────────── */
+body.cover_letter h1 {
+  font-size: 18pt;
+}
+
+body.cover_letter p {
+  margin-bottom: 8pt;
+}
+
+/* ── Links ───────────────────────────────────────────────────────────────── */
+a {
+  color: #1a1a1a;
+  text-decoration: none;
+}
+
+/* ── Page-break hints ────────────────────────────────────────────────────── */
+h2, h3 {
+  page-break-after: avoid;
+}
+
+li, p {
+  page-break-inside: avoid;
+  orphans: 2;
+  widows: 2;
+}

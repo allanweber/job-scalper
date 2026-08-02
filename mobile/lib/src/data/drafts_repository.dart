@@ -1,3 +1,7 @@
+import 'dart:typed_data';
+
+import 'package:dio/dio.dart';
+
 import 'api_client.dart';
 import 'models/draft_models.dart';
 
@@ -15,6 +19,10 @@ abstract class DraftsRepository {
 
   /// Persist edited resume and/or cover-letter markdown (`PUT /drafts/{id}`).
   Future<Draft> updateDraft(String id, {String? resumeMd, String? coverLetterMd});
+
+  /// Fetch a rendered PDF from the server (`GET /drafts/{id}/{which}.pdf`).
+  /// [which] is `"resume"` or `"cover_letter"`.
+  Future<Uint8List> getDraftPdf(String id, String which);
 }
 
 class HttpDraftsRepository implements DraftsRepository {
@@ -44,5 +52,14 @@ class HttpDraftsRepository implements DraftsRepository {
     if (coverLetterMd != null) body['cover_letter_md'] = coverLetterMd;
     final r = await _api.put<Map<String, dynamic>>('/drafts/$id', data: body);
     return Draft.fromJson(r.data!);
+  }
+
+  @override
+  Future<Uint8List> getDraftPdf(String id, String which) async {
+    final r = await _api.raw.get<List<int>>(
+      '/drafts/$id/$which.pdf',
+      options: Options(responseType: ResponseType.bytes),
+    );
+    return Uint8List.fromList(r.data!);
   }
 }

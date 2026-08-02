@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data/drafts_repository.dart';
 import '../../data/models/draft_models.dart';
+import '../../data/pdf_cache_repository.dart';
 import '../../data/providers.dart';
 
 enum DraftDetailStatus { loading, ready, error }
@@ -52,6 +53,7 @@ class DraftDetailState {
 /// autoDispose controller per visit is enough.
 class DraftDetailController extends Notifier<DraftDetailState> {
   DraftsRepository get _repo => ref.read(draftsRepositoryProvider);
+  PdfCacheRepository get _pdfCache => ref.read(pdfCacheRepositoryProvider);
   String? _id;
 
   @override
@@ -86,6 +88,8 @@ class DraftDetailController extends Notifier<DraftDetailState> {
         resumeMd: doc == DraftDoc.resume ? markdown : null,
         coverLetterMd: doc == DraftDoc.coverLetter ? markdown : null,
       );
+      // Edited markdown invalidates any cached PDF for this draft.
+      await _pdfCache.invalidate(d.id);
       state = state.copyWith(draft: updated, saving: false);
       return true;
     } catch (e) {

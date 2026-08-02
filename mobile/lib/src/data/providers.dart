@@ -7,6 +7,7 @@ import 'api_client.dart';
 import 'drafts_repository.dart';
 import 'feed_repository.dart';
 import 'google_authenticator.dart';
+import 'pdf_cache_repository.dart';
 
 /// The shared, token-aware HTTP client (owned by the session controller).
 final apiClientProvider =
@@ -32,3 +33,7 @@ final draftsRepositoryProvider = Provider<DraftsRepository>(
 /// Overridden with a fake in tests.
 final googleAuthenticatorProvider = Provider<GoogleAuthenticator>((ref) =>
     Env.devLogin ? DevGoogleAuthenticator() : GoogleSignInAuthenticator());
+
+/// On-device PDF cache. Singleton — one DB file for the app lifetime.
+final pdfCacheRepositoryProvider =
+    Provider<PdfCacheRepository>((_) => PdfCacheRepository());

@@ -112,9 +112,28 @@ def update_draft(draft_id: str, body: DraftUpdateRequest,
 @router.get("/drafts/{draft_id}/{which}.pdf", tags=["drafts"])
 def get_draft_pdf(draft_id: str, which: str, ctx: RequestContext = Depends(get_ctx),
                   user: User = Depends(current_user)):
+    import httpx
     if which not in {"resume", "cover_letter"}:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "unknown document")
-    pdf = DraftRepo(ctx.conn).get_pdf(draft_id, user.id, which)
-    if pdf is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "no PDF for this draft")
-    return Response(content=pdf, media_type="application/pdf")
+    d = DraftRepo(ctx.conn).get(draft_id, user.id)
+    if d is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "draft not found")
+    md = d.resume_md if which == "resume" else d.cover_letter_md
+    if not md or not md.strip():
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY,
+                            "no content to render — edit the draft first")
+    pdf_url = ctx.container.environ.get("PDF_SERVICE_URL", "http://pdf-service:8090")
+    try:
+        r = httpx.post(
+            f"{pdf_url}/render",
+            json={"markdown": md, "document_type": which, "template": "default"},
+            timeout=10.0,
+        )
+        r.raise_for_status()
+    except httpx.TimeoutException:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE,
+                            "PDF service timed out — try again shortly")
+    except Exception:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE,
+                            "PDF service unavailable — try again shortly")
+    return Response(content=r.content, media_type="application/pdf")

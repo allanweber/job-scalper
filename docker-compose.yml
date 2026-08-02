@@ -59,6 +59,15 @@ services:
     <<: *app
     command: ["scalper-scheduler"]
 
+  pdf-service:
+    build:
+      context: ./pdf-service
+    restart: unless-stopped
+    expose:
+      - "8090"
+    networks:
+      - internal
+
   cloudflared:
     image: cloudflare/cloudflared:latest
     restart: unless-stopped
