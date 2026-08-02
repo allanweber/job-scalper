@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../data/feed_repository.dart';
 import '../../data/models/feed_models.dart';
 import '../../data/providers.dart';
+import '../../util/api_error.dart';
 
 enum DetailStatus { loading, ready, error }
 
@@ -84,6 +85,7 @@ class JobDetailController extends Notifier<JobDetailState> {
     state = state.copyWith(detail: d.copyWith(saved: next));
     try {
       await (next ? _repo.save(d.postingId) : _repo.unsave(d.postingId));
+      ref.read(savedRevisionProvider.notifier).bump();
     } catch (e) {
       state = state.copyWith(
           detail: d.copyWith(saved: !next), error: _humanize(e));
@@ -109,10 +111,7 @@ class JobDetailController extends Notifier<JobDetailState> {
     }
   }
 
-  String _humanize(Object e) {
-    final s = e.toString();
-    return s.startsWith('Exception: ') ? s.substring(11) : s;
-  }
+  String _humanize(Object e) => apiErrorMessage(e);
 }
 
 /// autoDispose so each detail visit starts clean and releases when popped.

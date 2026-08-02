@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../data/drafts_repository.dart';
 import '../../data/models/draft_models.dart';
 import '../../data/providers.dart';
+import '../../util/api_error.dart';
 
 enum ApplicationsStatus { loading, ready, error }
 
@@ -62,10 +63,7 @@ class ApplicationsController extends Notifier<ApplicationsState> {
 
   Future<void> refresh() => _load();
 
-  String _humanize(Object e) {
-    final s = e.toString();
-    return s.startsWith('Exception: ') ? s.substring(11) : s;
-  }
+  String _humanize(Object e) => apiErrorMessage(e);
 }
 
 final applicationsControllerProvider =

@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../data/feed_repository.dart';
 import '../../data/models/feed_models.dart';
 import '../../data/providers.dart';
+import '../../util/api_error.dart';
 
 enum FeedStatus { loading, ready, error }
 
@@ -85,6 +86,7 @@ class FeedController extends Notifier<FeedState> {
     _patch(item.postingId, (i) => i.copyWith(saved: next));
     try {
       await (next ? _repo.save(item.postingId) : _repo.unsave(item.postingId));
+      ref.read(savedRevisionProvider.notifier).bump();
     } catch (e) {
       _patch(item.postingId, (i) => i.copyWith(saved: !next)); // rollback
       state = state.copyWith(error: _humanize(e));
@@ -104,10 +106,7 @@ class FeedController extends Notifier<FeedState> {
     ]);
   }
 
-  String _humanize(Object e) {
-    final s = e.toString();
-    return s.startsWith('Exception: ') ? s.substring(11) : s;
-  }
+  String _humanize(Object e) => apiErrorMessage(e);
 }
 
 final feedControllerProvider =

@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../data/feed_repository.dart';
 import '../../data/models/feed_models.dart';
 import '../../data/providers.dart';
+import '../../util/api_error.dart';
 
 enum SavedStatus { loading, ready, error }
 
@@ -45,6 +46,10 @@ class SavedController extends Notifier<SavedState> {
 
   @override
   SavedState build() {
+    // Reload in the background whenever a posting is saved/unsaved elsewhere
+    // (feed or job detail), so this tab stays current without a manual refresh.
+    // _load swaps items in place without a loading state, so there's no flash.
+    ref.listen(savedRevisionProvider, (_, _) => _load());
     Future.microtask(_load);
     return const SavedState();
   }
@@ -74,10 +79,7 @@ class SavedController extends Notifier<SavedState> {
     }
   }
 
-  String _humanize(Object e) {
-    final s = e.toString();
-    return s.startsWith('Exception: ') ? s.substring(11) : s;
-  }
+  String _humanize(Object e) => apiErrorMessage(e);
 }
 
 final savedControllerProvider =

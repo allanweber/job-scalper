@@ -7,6 +7,7 @@ import '../../data/account_repository.dart';
 import '../../data/models/account_models.dart';
 import '../../data/providers.dart';
 import '../../state/session.dart';
+import '../../util/api_error.dart';
 
 /// The linear onboarding steps, in order. The flow renders one at a time and
 /// advances through [OnboardingController.next] / [back].
@@ -330,10 +331,7 @@ class OnboardingController extends Notifier<OnboardingState> {
     throw TimeoutException('Profile build timed out');
   }
 
-  String _humanize(Object e) {
-    final s = e.toString();
-    return s.startsWith('Exception: ') ? s.substring(11) : s;
-  }
+  String _humanize(Object e) => apiErrorMessage(e);
 }
 
 final onboardingControllerProvider =

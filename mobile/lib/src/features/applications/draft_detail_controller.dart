@@ -7,6 +7,7 @@ import '../../data/drafts_repository.dart';
 import '../../data/models/draft_models.dart';
 import '../../data/pdf_cache_repository.dart';
 import '../../data/providers.dart';
+import '../../util/api_error.dart';
 
 enum DraftDetailStatus { loading, ready, error }
 
@@ -128,10 +129,7 @@ class DraftDetailController extends Notifier<DraftDetailState> {
     }
   }
 
-  String _humanize(Object e) {
-    final s = e.toString();
-    return s.startsWith('Exception: ') ? s.substring(11) : s;
-  }
+  String _humanize(Object e) => apiErrorMessage(e);
 }
 
 final draftDetailControllerProvider =
