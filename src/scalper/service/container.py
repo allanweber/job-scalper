@@ -23,6 +23,7 @@ from scalper.service.auth import (
     IDTokenVerifier,
 )
 from scalper.service.crypto import KeyVault
+from scalper.service.push import NullPushSender, PushSender, build_push_sender
 from scalper.service.settings import Settings
 from scalper.service.url_import import UrlFetcher, default_url_fetch
 from scalper.sources import build_adapter
@@ -42,6 +43,7 @@ class Container:
     provider_builder: Callable[..., Any] = build_provider
     adapter_builder: Callable[..., Any] = build_adapter
     url_fetcher: UrlFetcher = default_url_fetch
+    push_sender: PushSender = field(default_factory=NullPushSender)
     settings_ttl: float = 5.0
 
     # -- per-request/-job helpers --
@@ -80,4 +82,5 @@ class Container:
             environ=env,
             vault=vault,
             redis_url=env.get("SCALPER_REDIS_URL") or env.get("REDIS_URL"),
+            push_sender=build_push_sender(env),
         )

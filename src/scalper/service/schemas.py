@@ -310,3 +310,24 @@ class LegalDoc(BaseModel):
 
 class MessageResponse(BaseModel):
     message: str
+
+
+# --- push notifications ---
+
+class DeviceRegisterRequest(BaseModel):
+    """Register this device's push token so the backend can notify it."""
+
+    token: str = Field(min_length=1)
+    platform: str | None = None  # 'android' | 'ios' | 'web'
+
+
+class NotificationPrefsResponse(BaseModel):
+    match_alerts: bool
+    min_score: int
+
+
+class NotificationPrefsRequest(BaseModel):
+    """Update notification preferences (Profile → Notifications)."""
+
+    match_alerts: bool = True
+    min_score: int = Field(default=90, ge=0, le=100)

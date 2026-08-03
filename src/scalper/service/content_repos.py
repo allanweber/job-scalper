@@ -538,6 +538,7 @@ class Overlay:
     drafted_at: str | None
     applied_at: str | None = None
     application_status: str | None = None
+    notified_at: str | None = None
 
 
 class OverlayRepo:
@@ -553,12 +554,13 @@ class OverlayRepo:
         placeholders = ",".join("?" for _ in posting_ids)
         rows = self._c.execute(
             f"SELECT posting_id, score, first_matched_at, seen_at, saved, drafted_at, "
-            f"applied_at, application_status "
+            f"applied_at, application_status, notified_at "
             f"FROM user_posting_overlay WHERE user_id=? AND posting_id IN ({placeholders})",
             (user_id, *posting_ids),
         ).fetchall()
         return {
-            r[0]: Overlay(r[1], r[2], r[3], bool(r[4]), r[5], r[6], r[7]) for r in rows
+            r[0]: Overlay(r[1], r[2], r[3], bool(r[4]), r[5], r[6], r[7], r[8])
+            for r in rows
         }
 
     def upsert_score(self, user_id: str, posting_id: str, score: float,
@@ -636,6 +638,29 @@ class OverlayRepo:
             (user_id, posting_id, ts, applied_at, status),
         )
         self._c.commit()
+
+    def mark_notified(self, user_id: str, posting_id: str) -> None:
+        """Record that we've pushed this user about this posting (dedup)."""
+        ts = now_iso()
+        self._c.execute(
+            "INSERT INTO user_posting_overlay (user_id, posting_id, first_matched_at, "
+            "notified_at) VALUES (?,?,?,?) ON CONFLICT(user_id, posting_id) "
+            "DO UPDATE SET notified_at=excluded.notified_at",
+            (user_id, posting_id, ts, ts),
+        )
+        self._c.commit()
+
+    def notified_posting_ids(self, user_id: str, posting_ids: list[str]) -> set[str]:
+        """Of `posting_ids`, those this user was already notified about."""
+        if not posting_ids:
+            return set()
+        placeholders = ",".join("?" for _ in posting_ids)
+        rows = self._c.execute(
+            f"SELECT posting_id FROM user_posting_overlay WHERE user_id=? "
+            f"AND notified_at IS NOT NULL AND posting_id IN ({placeholders})",
+            (user_id, *posting_ids),
+        ).fetchall()
+        return {r[0] for r in rows}
 
 
 # --------------------------------------------------------------------------- enrichment cache
