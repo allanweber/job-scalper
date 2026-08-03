@@ -51,3 +51,69 @@ def test_delete_user_cascades(conn, vault):
     LLMCredentialRepo(conn).upsert(user.id, "openai", vault.seal("sk"))
     repo_u.delete(user.id)
     assert LLMCredentialRepo(conn).get_sealed(user.id, "openai") is None
+
+
+def test_delete_user_wipes_every_owned_table(conn, vault):
+    """Deletion leaves no row keyed to the user in any user-owned table.
+
+    Guards the explicit per-table wipe (which must not depend on FK cascade),
+    so a table added later without a cascade clause can't silently retain data.
+    """
+    from scalper.models import JobPosting
+    from scalper.service.content_repos import (
+        DraftRepo,
+        JobRepo,
+        LLMUsageRepo,
+        OverlayRepo,
+        PostingRepo,
+        ProfileRepo,
+        ResumeRepo,
+        UserSourceRepo,
+    )
+    from scalper.service.push_repos import NotificationPrefsRepo, PushDeviceRepo
+    from scalper.service.repositories import (
+        _USER_OWNED_TABLES,
+        QuotaOverrideRepo,
+        RefreshTokenRepo,
+    )
+
+    repo_u = UserRepo(conn)
+    user = repo_u.upsert_from_google(
+        GoogleIdentity(sub="d-2", email="d2@x.com"), role="user")
+
+    post = JobPosting(
+        source="remotive", source_id="p1", url="http://x/p1", company="Acme",
+        title="Dev", remote=True)
+    PostingRepo(conn).ingest([post])
+    pid = post.dedup_key
+    ProfileRepo(conn).upsert(user.id, "default", {"titles": ["Dev"]})
+    ResumeRepo(conn).upsert(user.id, filename="cv.txt", content_type="text/plain",
+                            blob=b"x", extracted_text="x")
+    UserSourceRepo(conn).set_for(user.id, ["remotive"])
+    OverlayRepo(conn).set_saved(user.id, pid, True)
+    LLMCredentialRepo(conn).upsert(user.id, "openai", vault.seal("sk"))
+    JobRepo(conn).create("draft", user_id=user.id, params={"posting_id": pid})
+    DraftRepo(conn).create_pending(user.id, posting_id=pid)
+    PushDeviceRepo(conn).register(user.id, "tok", "android")
+    NotificationPrefsRepo(conn).upsert(user.id, match_alerts=True, min_score=80)
+    RefreshTokenRepo(conn).create(user.id, "token-hash", "2999-01-01T00:00:00+00:00")
+    QuotaOverrideRepo(conn).set(user.id, "draft", 5)
+    LLMUsageRepo(conn).record(user.id, action="draft", provider="anthropic",
+                              model="m", key_source="platform",
+                              input_tokens=1, output_tokens=1)
+    conn.execute(
+        "INSERT INTO usage_counters (user_id, metric, period, count, updated_at) "
+        "VALUES (?, 'draft', '2026-08', 1, '2026-08-03T00:00:00+00:00')",
+        (user.id,))
+    conn.commit()
+
+    repo_u.delete(user.id)
+
+    assert repo_u.get(user.id) is None
+    for table in _USER_OWNED_TABLES:
+        remaining = conn.execute(
+            f"SELECT COUNT(*) FROM {table} WHERE user_id=?", (user.id,)
+        ).fetchone()[0]
+        assert remaining == 0, f"{table} still holds rows for the deleted user"
+    # The shared pool is not user data — it stays.
+    assert PostingRepo(conn).get(pid) is not None
