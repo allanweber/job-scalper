@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from pydantic import BaseModel, Field, HttpUrl, model_validator
+from pydantic import BaseModel, Field, HttpUrl, field_validator, model_validator
 
 
 # --- auth ---
@@ -210,6 +210,29 @@ class AppliedRequest(BaseModel):
     applied: bool = True
 
 
+#: The application pipeline stages, in funnel order. NULL/None means "not
+#: applied". 'rejected' is an off-ramp rather than a later stage.
+APPLICATION_STATUSES = ("applied", "interviewing", "offer", "rejected")
+
+
+class ApplicationStatusRequest(BaseModel):
+    """Set (or clear) a draft's application pipeline stage (Applications tab).
+
+    ``status`` is one of :data:`APPLICATION_STATUSES`, or ``None`` to clear it
+    back to not-applied.
+    """
+
+    status: str | None = None
+
+    @field_validator("status")
+    @classmethod
+    def _known_status(cls, v: str | None) -> str | None:
+        if v is not None and v not in APPLICATION_STATUSES:
+            raise ValueError(
+                f"status must be one of {APPLICATION_STATUSES} or null")
+        return v
+
+
 # --- drafts ---
 
 class DraftResponse(BaseModel):
@@ -224,6 +247,7 @@ class DraftResponse(BaseModel):
     key_source: str | None
     created_at: str
     applied: bool = False
+    application_status: str | None = None  # applied|interviewing|offer|rejected
     status: str = "ready"  # 'pending' | 'ready' | 'failed'
     error: str | None = None
 
@@ -238,6 +262,7 @@ class DraftSummary(BaseModel):
     company: str | None = None
     url: str | None = None
     applied: bool = False
+    application_status: str | None = None  # applied|interviewing|offer|rejected
     status: str = "ready"  # 'pending' | 'ready' | 'failed'
     error: str | None = None
 
