@@ -1,5 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:firebase_messaging/firebase_messaging.dart';
+
 import '../config/env.dart';
 import '../state/session.dart';
 import 'account_repository.dart';
@@ -8,6 +10,7 @@ import 'drafts_repository.dart';
 import 'feed_repository.dart';
 import 'google_authenticator.dart';
 import 'pdf_cache_repository.dart';
+import 'push_messaging.dart';
 
 /// The shared, token-aware HTTP client (owned by the session controller).
 final apiClientProvider =
@@ -37,6 +40,14 @@ final googleAuthenticatorProvider = Provider<GoogleAuthenticator>((ref) =>
 /// On-device PDF cache. Singleton — one DB file for the app lifetime.
 final pdfCacheRepositoryProvider =
     Provider<PdfCacheRepository>((_) => PdfCacheRepository());
+
+/// FCM messaging. Resolves to the real plugin only after `main()` has
+/// initialized Firebase; otherwise (tests, unconfigured platforms) a no-op, so
+/// nothing here ever touches the native channel unexpectedly. Overridable in
+/// tests.
+final pushMessagingProvider = Provider<PushMessaging>((ref) => firebaseAvailable
+    ? FirebasePushMessaging(FirebaseMessaging.instance)
+    : const NoopPushMessaging());
 
 /// Posting IDs that the user drafted in this session, before the feed
 /// refreshes. Used to show the "Drafted" badge on feed cards immediately

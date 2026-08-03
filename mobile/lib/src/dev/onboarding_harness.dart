@@ -187,6 +187,29 @@ class FakeAccountRepository implements AccountRepository {
       error: jobFails ? 'unreadable resume' : null,
     );
   }
+
+  NotificationPrefs _notifPrefs =
+      const NotificationPrefs(matchAlerts: true, minScore: 90);
+  final List<String> registeredDevices = [];
+
+  @override
+  Future<NotificationPrefs> getNotificationPrefs() async => _notifPrefs;
+
+  @override
+  Future<NotificationPrefs> saveNotificationPrefs(NotificationPrefs prefs) async {
+    _notifPrefs = prefs;
+    return prefs;
+  }
+
+  @override
+  Future<void> registerDevice(String token, {String? platform}) async {
+    registeredDevices.add(token);
+  }
+
+  @override
+  Future<void> unregisterDevice(String token) async {
+    registeredDevices.remove(token);
+  }
 }
 
 /// A [GoogleAuthenticator] that returns a canned token (or null to simulate a

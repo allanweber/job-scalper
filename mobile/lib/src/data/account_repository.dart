@@ -50,6 +50,14 @@ abstract class AccountRepository {
 
   /// Poll an async job (`GET /jobs/{id}`).
   Future<JobRecord> getJob(String jobId);
+
+  /// Notification preferences (`GET/PUT /me/notifications`).
+  Future<NotificationPrefs> getNotificationPrefs();
+  Future<NotificationPrefs> saveNotificationPrefs(NotificationPrefs prefs);
+
+  /// Register/unregister this device's push token (`POST/DELETE /me/devices`).
+  Future<void> registerDevice(String token, {String? platform});
+  Future<void> unregisterDevice(String token);
 }
 
 class HttpAccountRepository implements AccountRepository {
@@ -163,5 +171,30 @@ class HttpAccountRepository implements AccountRepository {
   Future<JobRecord> getJob(String jobId) async {
     final r = await _api.get<Map<String, dynamic>>('/jobs/$jobId');
     return JobRecord.fromJson(r.data!);
+  }
+
+  @override
+  Future<NotificationPrefs> getNotificationPrefs() async {
+    final r = await _api.get<Map<String, dynamic>>('/me/notifications');
+    return NotificationPrefs.fromJson(r.data!);
+  }
+
+  @override
+  Future<NotificationPrefs> saveNotificationPrefs(NotificationPrefs prefs) async {
+    final r = await _api.put<Map<String, dynamic>>('/me/notifications',
+        data: {'match_alerts': prefs.matchAlerts, 'min_score': prefs.minScore});
+    return NotificationPrefs.fromJson(r.data!);
+  }
+
+  @override
+  Future<void> registerDevice(String token, {String? platform}) async {
+    final data = <String, dynamic>{'token': token};
+    if (platform != null) data['platform'] = platform;
+    await _api.post<Map<String, dynamic>>('/me/devices', data: data);
+  }
+
+  @override
+  Future<void> unregisterDevice(String token) async {
+    await _api.delete<Map<String, dynamic>>('/me/devices/$token');
   }
 }
