@@ -20,7 +20,17 @@ class ApplicationsScreen extends ConsumerWidget {
     final ctrl = ref.read(applicationsControllerProvider.notifier);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Applications'), centerTitle: false),
+      appBar: AppBar(
+        title: const Text('Applications'),
+        centerTitle: false,
+        actions: [
+          IconButton(
+            tooltip: 'Insights',
+            onPressed: () => context.push('/applications/insights'),
+            icon: const Icon(Icons.insights_outlined),
+          ),
+        ],
+      ),
       body: switch (state.status) {
         ApplicationsStatus.loading =>
           const Center(child: CircularProgressIndicator()),

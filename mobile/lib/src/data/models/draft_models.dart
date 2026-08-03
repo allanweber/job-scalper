@@ -60,6 +60,28 @@ class DraftSummary {
       );
 }
 
+/// Aggregate application funnel (`GET /drafts/insights`) for the Insights flow
+/// chart. [total] is the number of applications; [counts] maps each pipeline
+/// stage to how many sit there now (the counts sum to [total]).
+class ApplicationInsights {
+  const ApplicationInsights({required this.total, required this.counts});
+
+  final int total;
+  final Map<String, int> counts;
+
+  int stage(String s) => counts[s] ?? 0;
+
+  factory ApplicationInsights.fromJson(Map<String, dynamic> j) =>
+      ApplicationInsights(
+        total: (j['total'] as num?)?.toInt() ?? 0,
+        counts: {
+          for (final e
+              in ((j['counts'] as Map?) ?? const {}).entries)
+            e.key as String: (e.value as num).toInt(),
+        },
+      );
+}
+
 /// A full draft (`GET /drafts/{id}`): the tailored resume + cover letter markdown
 /// plus the optional "stretch claims" note the model surfaces for review.
 class Draft {

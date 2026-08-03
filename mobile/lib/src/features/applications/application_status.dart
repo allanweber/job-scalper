@@ -3,27 +3,42 @@ import 'package:flutter/material.dart';
 import '../../theme/tokens.dart';
 
 /// The application pipeline stages in funnel order (mirrors the backend's
-/// APPLICATION_STATUSES). 'rejected' is an off-ramp rather than a later stage.
-/// A null stage means "not applied".
-const kApplicationStages = <String>['applied', 'interviewing', 'offer', 'rejected'];
+/// APPLICATION_STATUSES). 'applied' is the entry point and 'offer' the success
+/// end; 'ghosted' (no response) and 'rejected' (denied) are off-ramps. A null
+/// stage means "not applied".
+const kApplicationStages = <String>[
+  'applied',
+  'pre_screen',
+  'interviewing',
+  'offer',
+  'ghosted',
+  'rejected',
+];
 
 /// Human label for a stage string.
 String applicationStageLabel(String status) => switch (status) {
       'applied' => 'Applied',
+      'pre_screen' => 'Pre-Screen',
       'interviewing' => 'Interviewing',
       'offer' => 'Offer',
+      'ghosted' => 'Ghosted',
       'rejected' => 'Rejected',
       _ => status,
     };
 
 /// Theme-aware background + foreground colors for a stage chip/pill. Each stage
 /// gets a visually distinct, legible pair drawn from the app's chip palette:
-/// applied = blue, interviewing = amber, offer = brand green, rejected = red.
+/// applied = blue, pre-screen = purple, interviewing = amber, offer = brand
+/// green, ghosted = gray, rejected = red.
 ({Color bg, Color fg}) applicationStageColors(String status, bool dark) =>
     switch (status) {
       'applied' => (
           bg: dark ? AppTokens.chipBlueBgDark : AppTokens.chipBlueBgLight,
           fg: dark ? AppTokens.chipBlueTextDark : AppTokens.chipBlueTextLight,
+        ),
+      'pre_screen' => (
+          bg: dark ? AppTokens.chipPurpleBgDark : AppTokens.chipPurpleBgLight,
+          fg: dark ? AppTokens.chipPurpleTextDark : AppTokens.chipPurpleTextLight,
         ),
       'interviewing' => (
           bg: dark ? AppTokens.chipTanBgDark : AppTokens.chipTanBgLight,

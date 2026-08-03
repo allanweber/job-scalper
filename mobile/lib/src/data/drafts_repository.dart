@@ -32,6 +32,10 @@ abstract class DraftsRepository {
   /// Fetch a rendered PDF from the server (`GET /drafts/{id}/{which}.pdf`).
   /// [which] is `"resume"` or `"cover_letter"`.
   Future<Uint8List> getDraftPdf(String id, String which);
+
+  /// The application funnel aggregate for the Insights flow chart
+  /// (`GET /drafts/insights`).
+  Future<ApplicationInsights> getInsights();
 }
 
 class HttpDraftsRepository implements DraftsRepository {
@@ -84,5 +88,11 @@ class HttpDraftsRepository implements DraftsRepository {
       options: Options(responseType: ResponseType.bytes),
     );
     return Uint8List.fromList(r.data!);
+  }
+
+  @override
+  Future<ApplicationInsights> getInsights() async {
+    final r = await _api.get<Map<String, dynamic>>('/drafts/insights');
+    return ApplicationInsights.fromJson(r.data!);
   }
 }

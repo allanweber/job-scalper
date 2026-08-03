@@ -68,6 +68,7 @@ class FakeDraftsRepository implements DraftsRepository {
     List<DraftSummary>? items,
     this.fails = false,
     this.delay,
+    this.insights,
     Set<String>? pendingOnce,
   })  : _items = items ?? demoDraftSummaries,
         _pendingOnce = pendingOnce ?? const {};
@@ -75,6 +76,10 @@ class FakeDraftsRepository implements DraftsRepository {
   final List<DraftSummary> _items;
   final bool fails;
   final Duration? delay;
+
+  /// Optional explicit funnel for [getInsights]; when null it's computed from
+  /// the items (each item = one application, null stage folds into 'applied').
+  final ApplicationInsights? insights;
 
   /// Draft ids that return a 'pending' draft on the first getDraft call and a
   /// ready one afterwards — used to exercise the poll-until-ready flow.
@@ -162,6 +167,21 @@ class FakeDraftsRepository implements DraftsRepository {
     // In tests the PDF service is not running — always throw so the screen
     // falls through to on-device generation.
     throw Exception('pdf service not available in tests');
+  }
+
+  @override
+  Future<ApplicationInsights> getInsights() async {
+    if (delay != null) await Future.delayed(delay!);
+    if (fails) throw Exception('Failed host lookup');
+    if (insights != null) return insights!;
+    // Mirror the backend: every item is one application; a null stage folds
+    // into 'applied'.
+    final counts = <String, int>{};
+    for (final d in _items) {
+      final stage = d.applicationStatus ?? 'applied';
+      counts[stage] = (counts[stage] ?? 0) + 1;
+    }
+    return ApplicationInsights(total: _items.length, counts: counts);
   }
 }
 
