@@ -829,6 +829,29 @@ class DraftRepo:
             for r in rows
         ]
 
+    def application_status_counts(self, user_id: str) -> tuple[int, dict[str, int]]:
+        """Aggregate the user's applications by pipeline stage for the funnel.
+
+        Every draft counts as one application; a draft with no stage set is
+        folded into ``applied`` (submitted, awaiting a response). Returns
+        ``(total, counts)`` where ``counts`` sums to ``total``.
+        """
+        rows = self._c.execute(
+            "SELECT o.application_status, COUNT(*) "
+            "FROM drafts d LEFT JOIN user_posting_overlay o "
+            "  ON o.posting_id = d.posting_id AND o.user_id = d.user_id "
+            "WHERE d.user_id=? GROUP BY o.application_status",
+            (user_id,),
+        ).fetchall()
+        counts: dict[str, int] = {}
+        total = 0
+        for status, n in rows:
+            total += n
+            # NULL (never marked) reads as 'applied' — drafted and submitted,
+            # no progress signal yet.
+            counts[status or "applied"] = counts.get(status or "applied", 0) + n
+        return total, counts
+
     def update_content(self, draft_id: str, user_id: str, *,
                        resume_md: str | None = None,
                        cover_letter_md: str | None = None) -> "Draft | None":

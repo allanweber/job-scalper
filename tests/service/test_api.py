@@ -321,13 +321,58 @@ def test_application_status_rejects_unknown(client, auth_headers, conn):
     draft_id = client.post("/drafts", headers=auth_headers,
                            json={"posting_id": pid}).json()["id"]
     bad = client.put(f"/drafts/{draft_id}/status", headers=auth_headers,
-                     json={"status": "ghosted"})
+                     json={"status": "on_the_moon"})
     assert bad.status_code == 422
 
 
 def test_application_status_other_user_404(client, auth_headers):
     assert client.put("/drafts/nope/status", headers=auth_headers,
                       json={"status": "applied"}).status_code == 404
+
+
+def test_application_insights_funnel(client, auth_headers, conn):
+    client.get("/me", headers=auth_headers)
+    _user, pid = _seed_user_content(conn)
+    client.put("/me/sources", headers=auth_headers, json={"sources": ["remotive"]})
+    draft_id = client.post("/drafts", headers=auth_headers,
+                           json={"posting_id": pid}).json()["id"]
+
+    # One draft, no stage set yet — it counts as an application in 'applied'.
+    ins = client.get("/drafts/insights", headers=auth_headers).json()
+    assert ins["total"] == 1
+    # Every stage is present (zero-filled) so the client needn't post-process.
+    for stage in ("applied", "pre_screen", "interviewing", "offer",
+                  "ghosted", "rejected"):
+        assert stage in ins["counts"]
+    assert ins["counts"]["applied"] == 1
+    assert sum(ins["counts"].values()) == ins["total"]
+
+    # Move it into the pipeline; the funnel follows.
+    client.put(f"/drafts/{draft_id}/status", headers=auth_headers,
+               json={"status": "interviewing"})
+    ins = client.get("/drafts/insights", headers=auth_headers).json()
+    assert ins["counts"]["interviewing"] == 1 and ins["counts"]["applied"] == 0
+    assert sum(ins["counts"].values()) == 1
+
+
+def test_application_insights_empty(client, auth_headers):
+    client.get("/me", headers=auth_headers)
+    ins = client.get("/drafts/insights", headers=auth_headers).json()
+    assert ins["total"] == 0
+    assert sum(ins["counts"].values()) == 0
+
+
+def test_new_stages_accepted(client, auth_headers, conn):
+    """The expanded stage set (pre_screen, ghosted) is valid."""
+    client.get("/me", headers=auth_headers)
+    _user, pid = _seed_user_content(conn)
+    client.put("/me/sources", headers=auth_headers, json={"sources": ["remotive"]})
+    draft_id = client.post("/drafts", headers=auth_headers,
+                           json={"posting_id": pid}).json()["id"]
+    for stage in ("pre_screen", "ghosted"):
+        up = client.put(f"/drafts/{draft_id}/status", headers=auth_headers,
+                        json={"status": stage})
+        assert up.status_code == 200 and up.json()["application_status"] == stage
 
 
 def test_draft_blocked_when_quota_exhausted(client, auth_headers, conn, settings):

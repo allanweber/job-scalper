@@ -17,7 +17,9 @@ from scalper.service.models import User
 from scalper.service.quota import QuotaService
 from scalper.service.repositories import LLMCredentialRepo
 from scalper.service.schemas import (
+    APPLICATION_STATUSES,
     AppliedRequest,
+    ApplicationInsights,
     ApplicationStatusRequest,
     DraftRequest,
     DraftResponse,
@@ -117,6 +119,20 @@ def list_drafts(ctx: RequestContext = Depends(get_ctx), user: User = Depends(cur
                      status=d.status, error=d.error)
         for d in DraftRepo(ctx.conn).list_summaries(user.id)
     ]
+
+
+@router.get("/drafts/insights", response_model=ApplicationInsights, tags=["drafts"])
+def application_insights(ctx: RequestContext = Depends(get_ctx),
+                        user: User = Depends(current_user)):
+    """Aggregate funnel of the user's applications for the Insights flow chart.
+
+    Declared before ``/drafts/{draft_id}`` so the literal path wins over the
+    parameter. Returns the total plus a count for every pipeline stage (zero
+    when none), so the client can render the Sankey without post-processing.
+    """
+    total, counts = DraftRepo(ctx.conn).application_status_counts(user.id)
+    full = {stage: counts.get(stage, 0) for stage in APPLICATION_STATUSES}
+    return ApplicationInsights(total=total, counts=full)
 
 
 @router.get("/drafts/{draft_id}", response_model=DraftResponse, tags=["drafts"])

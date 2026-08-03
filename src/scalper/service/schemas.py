@@ -211,8 +211,10 @@ class AppliedRequest(BaseModel):
 
 
 #: The application pipeline stages, in funnel order. NULL/None means "not
-#: applied". 'rejected' is an off-ramp rather than a later stage.
-APPLICATION_STATUSES = ("applied", "interviewing", "offer", "rejected")
+#: applied". 'applied' is the entry point and 'offer' the success end; 'ghosted'
+#: (no response) and 'rejected' (denied) are off-ramps rather than later stages.
+APPLICATION_STATUSES = (
+    "applied", "pre_screen", "interviewing", "offer", "ghosted", "rejected")
 
 
 class ApplicationStatusRequest(BaseModel):
@@ -250,6 +252,20 @@ class DraftResponse(BaseModel):
     application_status: str | None = None  # applied|interviewing|offer|rejected
     status: str = "ready"  # 'pending' | 'ready' | 'failed'
     error: str | None = None
+
+
+class ApplicationInsights(BaseModel):
+    """Aggregate application funnel for the Insights flow chart.
+
+    ``total`` is the number of drafts (each is one application). ``counts`` maps
+    every stage in :data:`APPLICATION_STATUSES` to how many applications sit
+    there now, with unmarked drafts folded into ``applied`` (submitted, awaiting
+    a response). The counts sum to ``total``, so the client can lay out a Sankey
+    directly.
+    """
+
+    total: int
+    counts: dict[str, int]
 
 
 class DraftSummary(BaseModel):
