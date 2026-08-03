@@ -6,6 +6,7 @@ import '../../data/models/draft_models.dart';
 import '../../data/providers.dart';
 import '../../theme/tokens.dart';
 import '../../util/format.dart';
+import 'application_status.dart';
 import 'applications_controller.dart';
 
 /// The Applications tab: tailored resume + cover-letter drafts the user has
@@ -39,12 +40,21 @@ class ApplicationsScreen extends ConsumerWidget {
                         const SizedBox(height: AppTokens.listGap),
                     itemBuilder: (context, i) {
                       final d = state.items[i];
-                      final override = d.postingId == null
-                          ? null
-                          : ref.watch(appliedOverridesProvider)[d.postingId];
+                      // A session-local stage override (set the instant the user
+                      // changes it on the detail) wins over the loaded value;
+                      // fall back to 'applied' for a draft flagged applied
+                      // without an explicit stage (pre-pipeline data).
+                      final overrides =
+                          ref.watch(applicationStatusOverridesProvider);
+                      final base =
+                          d.applicationStatus ?? (d.applied ? 'applied' : null);
+                      final stage =
+                          d.postingId != null && overrides.containsKey(d.postingId)
+                              ? overrides[d.postingId]
+                              : base;
                       return _ApplicationCard(
                         draft: d,
-                        applied: override ?? d.applied,
+                        stage: stage,
                         onTap: () => context.push(
                             '/applications/draft/${d.id}',
                             extra: d),
@@ -60,11 +70,14 @@ class ApplicationsScreen extends ConsumerWidget {
 class _ApplicationCard extends StatelessWidget {
   const _ApplicationCard({
     required this.draft,
-    required this.applied,
+    required this.stage,
     required this.onTap,
   });
   final DraftSummary draft;
-  final bool applied;
+
+  /// The effective application pipeline stage (override-aware), or null when
+  /// not applied.
+  final String? stage;
   final VoidCallback onTap;
 
   @override
@@ -118,9 +131,9 @@ class _ApplicationCard extends StatelessWidget {
                   ],
                 ),
               ),
-              if (draft.isReady && applied) ...[
+              if (draft.isReady && stage != null) ...[
                 const SizedBox(width: 8),
-                _AppliedPill(scheme: scheme),
+                _StagePill(stage: stage!),
               ],
               const SizedBox(width: 8),
               Icon(Icons.chevron_right_rounded, color: scheme.onSurfaceVariant),
@@ -199,30 +212,25 @@ class _StatusPill extends StatelessWidget {
   }
 }
 
-class _AppliedPill extends StatelessWidget {
-  const _AppliedPill({required this.scheme});
-  final ColorScheme scheme;
+/// The card's trailing pipeline-stage badge (Applied / Interviewing / Offer /
+/// Rejected), each in its own color so the list scans like a pipeline board.
+class _StagePill extends StatelessWidget {
+  const _StagePill({required this.stage});
+  final String stage;
 
   @override
   Widget build(BuildContext context) {
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final colors = applicationStageColors(stage, dark);
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
       decoration: BoxDecoration(
-        color: scheme.primary,
+        color: colors.bg,
         borderRadius: BorderRadius.circular(6),
       ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.check_rounded, size: 12, color: scheme.onPrimary),
-          const SizedBox(width: 3),
-          Text('Applied',
-              style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
-                  color: scheme.onPrimary)),
-        ],
-      ),
+      child: Text(applicationStageLabel(stage),
+          style: TextStyle(
+              fontSize: 11, fontWeight: FontWeight.w700, color: colors.fg)),
     );
   }
 }

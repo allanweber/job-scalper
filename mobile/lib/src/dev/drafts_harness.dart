@@ -56,6 +56,7 @@ Draft _demoDraft(DraftSummary s) => Draft(
       keySource: s.keySource,
       createdAt: s.createdAt,
       applied: s.applied,
+      applicationStatus: s.applicationStatus,
       status: s.status,
       error: s.error,
     );
@@ -82,6 +83,7 @@ class FakeDraftsRepository implements DraftsRepository {
 
   final List<({String id, String? resumeMd, String? coverLetterMd})> edits = [];
   final List<({String id, bool applied})> appliedCalls = [];
+  final List<({String id, String? status})> statusCalls = [];
   final Map<String, Draft> _overrides = {};
 
   @override
@@ -134,7 +136,22 @@ class FakeDraftsRepository implements DraftsRepository {
     final base = _overrides[id] ??
         _demoDraft(_items.firstWhere((e) => e.id == id,
             orElse: () => _items.first));
-    final updated = base.copyWith(applied: applied);
+    final updated = base.copyWith(
+        applied: applied, applicationStatus: applied ? 'applied' : null);
+    _overrides[id] = updated;
+    return updated;
+  }
+
+  @override
+  Future<Draft> setApplicationStatus(String id, String? status) async {
+    if (delay != null) await Future.delayed(delay!);
+    if (fails) throw Exception('Failed host lookup');
+    statusCalls.add((id: id, status: status));
+    final base = _overrides[id] ??
+        _demoDraft(_items.firstWhere((e) => e.id == id,
+            orElse: () => _items.first));
+    final updated =
+        base.copyWith(applied: status != null, applicationStatus: status);
     _overrides[id] = updated;
     return updated;
   }

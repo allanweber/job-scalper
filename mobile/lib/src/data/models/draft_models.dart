@@ -14,6 +14,7 @@ class DraftSummary {
     this.company,
     this.url,
     this.applied = false,
+    this.applicationStatus,
     this.status = 'ready',
     this.error,
   });
@@ -27,6 +28,10 @@ class DraftSummary {
   final String? company;
   final String? url;
   final bool applied;
+
+  /// The application pipeline stage: 'applied' | 'interviewing' | 'offer' |
+  /// 'rejected', or null when not applied. `applied` is derived from this.
+  final String? applicationStatus;
 
   /// Lifecycle: 'pending' while drafting, 'ready' when done, 'failed' on error.
   final String status;
@@ -49,6 +54,7 @@ class DraftSummary {
         company: j['company'] as String?,
         url: j['url'] as String?,
         applied: (j['applied'] as bool?) ?? false,
+        applicationStatus: j['application_status'] as String?,
         status: (j['status'] as String?) ?? 'ready',
         error: j['error'] as String?,
       );
@@ -69,6 +75,7 @@ class Draft {
     this.keySource,
     required this.createdAt,
     this.applied = false,
+    this.applicationStatus,
     this.status = 'ready',
     this.error,
   });
@@ -85,6 +92,10 @@ class Draft {
   final String createdAt;
   final bool applied;
 
+  /// The application pipeline stage: 'applied' | 'interviewing' | 'offer' |
+  /// 'rejected', or null when not applied. `applied` is derived from this.
+  final String? applicationStatus;
+
   /// Lifecycle: 'pending' while drafting, 'ready' when done, 'failed' on error.
   final String status;
   final String? error;
@@ -93,12 +104,18 @@ class Draft {
   bool get isReady => status == 'ready';
   bool get isFailed => status == 'failed';
 
-  Draft copyWith(
-          {String? resumeMd,
-          String? coverLetterMd,
-          bool? applied,
-          String? status,
-          String? error}) =>
+  /// Sentinel so [copyWith] can tell "leave applicationStatus unchanged" apart
+  /// from "clear it to null" (removing the applied stage).
+  static const _unset = Object();
+
+  Draft copyWith({
+    String? resumeMd,
+    String? coverLetterMd,
+    bool? applied,
+    Object? applicationStatus = _unset,
+    String? status,
+    String? error,
+  }) =>
       Draft(
         id: id,
         postingId: postingId,
@@ -111,6 +128,9 @@ class Draft {
         keySource: keySource,
         createdAt: createdAt,
         applied: applied ?? this.applied,
+        applicationStatus: applicationStatus == _unset
+            ? this.applicationStatus
+            : applicationStatus as String?,
         status: status ?? this.status,
         error: error ?? this.error,
       );
@@ -127,6 +147,7 @@ class Draft {
         keySource: j['key_source'] as String?,
         createdAt: (j['created_at'] as String?) ?? '',
         applied: (j['applied'] as bool?) ?? false,
+        applicationStatus: j['application_status'] as String?,
         status: (j['status'] as String?) ?? 'ready',
         error: j['error'] as String?,
       );

@@ -136,25 +136,47 @@ class DraftDetailController extends Notifier<DraftDetailState> {
     }
   }
 
-  /// Mark (or unmark) this draft's posting as applied. Updates optimistically
-  /// and pushes a session-local override so the feed/saved/detail reflect it
-  /// immediately. Returns true on success; rolls back on failure.
-  Future<bool> setApplied(bool applied) async {
+  /// Mark (or unmark) this draft's posting as applied. A thin wrapper over
+  /// [setApplicationStatus]: applying enters the funnel at 'applied', unmarking
+  /// clears the stage entirely.
+  Future<bool> setApplied(bool applied) =>
+      setApplicationStatus(applied ? 'applied' : null);
+
+  /// Set (or clear) this draft's application pipeline stage. Updates
+  /// optimistically and pushes session-local overrides so the feed/saved/detail
+  /// (applied flag) and the Applications list (stage) reflect it immediately.
+  /// Returns true on success; rolls back on failure.
+  Future<bool> setApplicationStatus(String? status) async {
     final d = state.draft;
     if (d == null || state.applying) return false;
-    final previous = d.applied;
-    state = state.copyWith(draft: d.copyWith(applied: applied), applying: true);
+    final previousStatus = d.applicationStatus;
+    final previousApplied = d.applied;
+    final applied = status != null;
+    state = state.copyWith(
+        draft: d.copyWith(applied: applied, applicationStatus: status),
+        applying: true);
     if (d.postingId != null) {
       ref.read(appliedOverridesProvider.notifier).set(d.postingId!, applied);
+      ref
+          .read(applicationStatusOverridesProvider.notifier)
+          .set(d.postingId!, status);
     }
     try {
-      final updated = await _repo.setApplied(d.id, applied);
+      final updated = await _repo.setApplicationStatus(d.id, status);
       state = state.copyWith(draft: updated, applying: false);
       return true;
     } catch (_) {
-      state = state.copyWith(draft: d.copyWith(applied: previous), applying: false);
+      state = state.copyWith(
+          draft: d.copyWith(
+              applied: previousApplied, applicationStatus: previousStatus),
+          applying: false);
       if (d.postingId != null) {
-        ref.read(appliedOverridesProvider.notifier).set(d.postingId!, previous);
+        ref
+            .read(appliedOverridesProvider.notifier)
+            .set(d.postingId!, previousApplied);
+        ref
+            .read(applicationStatusOverridesProvider.notifier)
+            .set(d.postingId!, previousStatus);
       }
       return false;
     }

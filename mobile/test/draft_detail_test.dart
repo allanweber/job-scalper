@@ -92,7 +92,7 @@ void main() {
     expect(find.widgetWithText(FilledButton, 'Retry'), findsOneWidget);
   });
 
-  testWidgets('marking applied calls the repo and flips to applied state',
+  testWidgets('marking applied enters the pipeline and shows the stage control',
       (tester) async {
     tester.view.physicalSize = const Size(1170, 7000);
     tester.view.devicePixelRatio = 3.0;
@@ -108,12 +108,53 @@ void main() {
     await tester.tap(find.text('Mark as applied'));
     await tester.pumpAndSettle();
 
-    expect(repo.appliedCalls, hasLength(1));
-    expect(repo.appliedCalls.single.applied, true);
-    // Flips to the applied status banner with an undo affordance.
-    expect(find.text('You marked this job as applied'), findsOneWidget);
-    expect(find.text('Undo'), findsOneWidget);
-    expect(find.text('Marked as applied'), findsOneWidget); // snackbar
+    // Enters the funnel at 'applied' via the status endpoint.
+    expect(repo.statusCalls, hasLength(1));
+    expect(repo.statusCalls.single.status, 'applied');
+    // The CTA gives way to the stage picker.
+    expect(find.text('Mark as applied'), findsNothing);
+    expect(find.text('Application status'), findsOneWidget);
+    expect(find.text('Remove'), findsOneWidget);
+    expect(find.text('Updated to Applied'), findsOneWidget); // snackbar
+  });
+
+  testWidgets('advancing the stage and removing call the repo', (tester) async {
+    tester.view.physicalSize = const Size(1170, 7000);
+    tester.view.devicePixelRatio = 3.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final applied = DraftSummary(
+      id: 'ds',
+      postingId: 'js',
+      jobSource: 'pool',
+      keySource: 'platform',
+      createdAt: DateTime.now().toIso8601String(),
+      title: 'Staff Engineer',
+      company: 'Acme',
+      applied: true,
+      applicationStatus: 'applied',
+    );
+    final repo = FakeDraftsRepository(items: [applied]);
+    final container = _container(repo: repo);
+    await tester.pumpWidget(UncontrolledProviderScope(
+      container: container,
+      child: MaterialApp(
+        home: DraftDetailScreen(draftId: 'ds', initial: applied),
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    // Advance to a later stage.
+    await tester.tap(find.text('Offer'));
+    await tester.pumpAndSettle();
+    expect(repo.statusCalls.last.status, 'offer');
+
+    // Remove clears the stage and returns to the call-to-action.
+    await tester.tap(find.text('Remove'));
+    await tester.pumpAndSettle();
+    expect(repo.statusCalls.last.status, isNull);
+    expect(find.text('Mark as applied'), findsOneWidget);
   });
 
   testWidgets('Job analysis navigates to the nested job detail route',
@@ -167,7 +208,8 @@ void main() {
     expect(find.textContaining('no routes for location'), findsNothing);
   });
 
-  testWidgets('an already-applied draft shows the applied banner', (tester) async {
+  testWidgets('a draft in the pipeline shows the stage control, not the CTA',
+      (tester) async {
     final applied = DraftSummary(
       id: 'da',
       postingId: 'ja',
@@ -177,6 +219,7 @@ void main() {
       title: 'Applied Role',
       company: 'Acme',
       applied: true,
+      applicationStatus: 'interviewing',
     );
     final repo = FakeDraftsRepository(items: [applied]);
     final container = _container(repo: repo);
@@ -188,8 +231,10 @@ void main() {
     ));
     await tester.pumpAndSettle();
 
-    expect(find.text('You marked this job as applied'), findsOneWidget);
+    expect(find.text('Application status'), findsOneWidget);
     expect(find.text('Mark as applied'), findsNothing);
+    // The current stage is one of the selectable chips.
+    expect(find.text('Interviewing'), findsWidgets);
   });
 
   testWidgets('a pending draft shows the drafting state, then the content',
