@@ -148,8 +148,8 @@ class _DeleteAccountScreenState extends ConsumerState<DeleteAccountScreen> {
             ),
           const SizedBox(height: 16),
           Text(
-            'To prevent abuse of free usage limits, an anonymized count of your '
-            'monthly usage is kept — it contains no personal information.',
+            'To prevent abuse of free usage limits, your monthly usage totals '
+            'are kept and reapplied if you sign up again with the same email.',
             style: TextStyle(fontSize: 12.5, color: scheme.onSurfaceVariant),
           ),
           const SizedBox(height: 24),

@@ -6,28 +6,12 @@ the sqlite fallback and Postgres. Timestamps are ISO-8601 UTC strings.
 
 from __future__ import annotations
 
-import hashlib
-import hmac
 import uuid
 from dataclasses import dataclass
 from typing import Any
 
 from scalper.service.crypto import Sealed
 from scalper.service.models import GoogleIdentity, User, now_iso
-
-
-def subject_hash(google_sub: str, pepper: str = "") -> str:
-    """A stable, non-reversible id for a Google account, for the usage ledger.
-
-    Keyed by the Google subject so it's stable across account deletion/recreation,
-    and salted with a server-side ``pepper`` so the stored value is neither
-    reversible nor enumerable. Falls back to a plain SHA-256 when no pepper is
-    configured (dev/tests) — still deterministic per subject.
-    """
-    if pepper:
-        return hmac.new(pepper.encode(), google_sub.encode(),
-                        hashlib.sha256).hexdigest()
-    return hashlib.sha256(google_sub.encode()).hexdigest()
 
 _USER_COLS = (
     "id, google_sub, email, display_name, avatar_url, role, status, plan, "
@@ -335,34 +319,34 @@ class UsageRepo:
 
 
 class UsageLedgerRepo:
-    """Identity-scoped usage counters keyed by ``subject_hash``.
+    """Email-scoped usage counters that survive account deletion.
 
-    A durable mirror of :class:`UsageRepo` that survives account deletion, so
-    LLM quotas can't be reset by deleting and recreating an account within a
-    period. Same upsert semantics; keyed by the salted subject hash, not user_id.
+    A durable mirror of :class:`UsageRepo` keyed by email, not user_id, so LLM
+    quotas can't be reset by deleting and recreating an account within a period.
+    Same upsert semantics.
     """
 
     def __init__(self, conn: Any):
         self._c = conn
 
-    def get_count(self, subject: str, metric: str, period: str) -> int:
+    def get_count(self, email: str, metric: str, period: str) -> int:
         row = self._c.execute(
-            "SELECT count FROM usage_ledger WHERE subject_hash=? AND metric=? "
+            "SELECT count FROM usage_ledger WHERE email=? AND metric=? "
             "AND period=?",
-            (subject, metric, period),
+            (email, metric, period),
         ).fetchone()
         return row[0] if row else 0
 
-    def increment(self, subject: str, metric: str, period: str, n: int = 1) -> int:
+    def increment(self, email: str, metric: str, period: str, n: int = 1) -> int:
         self._c.execute(
-            "INSERT INTO usage_ledger (subject_hash, metric, period, count, "
+            "INSERT INTO usage_ledger (email, metric, period, count, "
             "updated_at) VALUES (?,?,?,?,?) "
-            "ON CONFLICT(subject_hash, metric, period) DO UPDATE SET "
+            "ON CONFLICT(email, metric, period) DO UPDATE SET "
             "count=usage_ledger.count+excluded.count, updated_at=excluded.updated_at",
-            (subject, metric, period, n, now_iso()),
+            (email, metric, period, n, now_iso()),
         )
         self._c.commit()
-        return self.get_count(subject, metric, period)
+        return self.get_count(email, metric, period)
 
     def prune_before(self, period: str) -> int:
         """Delete ledger rows for periods strictly before ``period`` (YYYY-MM).
