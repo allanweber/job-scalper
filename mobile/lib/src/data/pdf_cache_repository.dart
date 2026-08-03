@@ -57,4 +57,11 @@ class PdfCacheRepository {
     await db.delete('pdf_cache',
         where: 'draft_id = ?', whereArgs: [draftId]);
   }
+
+  /// Drop every cached PDF. Called on account deletion so no rendered resume or
+  /// cover letter is left on the device.
+  Future<void> clear() async {
+    final db = await _database;
+    await db.delete('pdf_cache');
+  }
 }

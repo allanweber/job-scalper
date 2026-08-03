@@ -51,6 +51,12 @@ class _DeleteAccountScreenState extends ConsumerState<DeleteAccountScreen> {
       try {
         await ref.read(googleAuthenticatorProvider).disconnect();
       } catch (_) {/* best-effort */}
+      // Clear on-device account data too: cached PDFs and the onboarding flag,
+      // so a fresh sign-in re-onboards and no rendered documents linger.
+      try {
+        await ref.read(pdfCacheRepositoryProvider).clear();
+      } catch (_) {/* best-effort */}
+      await ref.read(sessionProvider.notifier).resetOnboarding();
       // Confirm while still on this screen (signing out triggers the router
       // redirect to onboarding), so deletion reads as more than a logout.
       if (mounted) await _confirmDeleted();

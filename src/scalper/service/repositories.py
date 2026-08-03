@@ -19,6 +19,26 @@ _USER_COLS = (
 )
 
 
+#: Every table that stores rows owned by a user, keyed by ``user_id``, ordered
+#: child-before-parent (``drafts`` reference ``profiles``). Deleted explicitly on
+#: account deletion so it doesn't depend on the deployed schema's FK cascades.
+_USER_OWNED_TABLES = (
+    "refresh_tokens",
+    "llm_credentials",
+    "llm_usage_events",
+    "usage_counters",
+    "user_quota_overrides",
+    "user_sources",
+    "push_devices",
+    "notification_prefs",
+    "user_posting_overlay",
+    "drafts",
+    "resumes",
+    "jobs",
+    "profiles",
+)
+
+
 def _new_id() -> str:
     return uuid.uuid4().hex
 
@@ -116,7 +136,20 @@ class UserRepo:
         self._c.commit()
 
     def delete(self, user_id: str) -> None:
-        # ON DELETE CASCADE clears the user's owned rows (see schema).
+        """Hard-delete a user and every row they own.
+
+        We wipe each user-owned table explicitly rather than trusting
+        ``ON DELETE CASCADE``: a deployed database whose FK constraints predate
+        the cascade clauses (or were created without them) would otherwise leave
+        this data behind, so "delete account" wouldn't actually delete it. The
+        shared pool (postings/enrichments) and the admin audit trail are the only
+        user-adjacent data kept — the audit rows are unlinked, not removed.
+        """
+        for table in _USER_OWNED_TABLES:
+            self._c.execute(f"DELETE FROM {table} WHERE user_id=?", (user_id,))
+        self._c.execute(
+            "UPDATE admin_audit SET admin_user_id=NULL WHERE admin_user_id=?",
+            (user_id,))
         self._c.execute("DELETE FROM users WHERE id=?", (user_id,))
         self._c.commit()
 
