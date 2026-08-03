@@ -44,6 +44,16 @@ class _DeleteAccountScreenState extends ConsumerState<DeleteAccountScreen> {
     });
     try {
       await ref.read(accountRepositoryProvider).deleteAccount();
+      // Sever the Google link too. Without this the next "Sign in with Google"
+      // silently re-authenticates the same account and the backend creates a
+      // fresh one — making the deletion look like it never happened (it just
+      // logged you out). Best-effort: a failure here shouldn't block sign-out.
+      try {
+        await ref.read(googleAuthenticatorProvider).disconnect();
+      } catch (_) {/* best-effort */}
+      // Confirm while still on this screen (signing out triggers the router
+      // redirect to onboarding), so deletion reads as more than a logout.
+      if (mounted) await _confirmDeleted();
       // Signing out clears tokens; the router redirect sends us to onboarding.
       await ref.read(sessionProvider.notifier).signOut();
     } catch (e) {
@@ -56,6 +66,23 @@ class _DeleteAccountScreenState extends ConsumerState<DeleteAccountScreen> {
       }
     }
   }
+
+  Future<void> _confirmDeleted() => showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Account deleted'),
+          content: const Text(
+              'Your account and all its data have been permanently removed. '
+              'Signing in again starts a brand-new account.'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('OK'),
+            ),
+          ],
+        ),
+      );
 
   @override
   Widget build(BuildContext context) {

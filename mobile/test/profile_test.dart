@@ -15,7 +15,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// A signed-in in-memory session + the fake account repo, so profile screens
 /// render against seedable state without a server.
 Future<(ProviderContainer, FakeAccountRepository)> _container(
-    {FakeAccountRepository? repo, bool signedIn = true}) async {
+    {FakeAccountRepository? repo,
+    bool signedIn = true,
+    FakeGoogleAuthenticator? google}) async {
   SharedPreferences.setMockInitialValues({
     // Signed-in fixtures carry a token pair; the delete test omits it so
     // `signOut()` skips its (networked) logout call and stays hermetic.
@@ -28,6 +30,8 @@ Future<(ProviderContainer, FakeAccountRepository)> _container(
   final container = ProviderContainer(overrides: [
     sharedPrefsProvider.overrideWithValue(prefs),
     accountRepositoryProvider.overrideWithValue(fake),
+    googleAuthenticatorProvider
+        .overrideWithValue(google ?? FakeGoogleAuthenticator()),
   ]);
   addTearDown(container.dispose);
   return (container, fake);
@@ -129,13 +133,33 @@ void main() {
     final after = tester.widget<FilledButton>(
         find.widgetWithText(FilledButton, 'Delete my account'));
     expect(after.onPressed, isNotNull);
+  });
 
+  testWidgets('deleting the account disconnects Google and confirms',
+      (tester) async {
+    final google = FakeGoogleAuthenticator();
+    final (container, fake) =
+        await _container(signedIn: false, google: google);
+    await _pump(tester, container, const DeleteAccountScreen());
+
+    await tester.enterText(find.byType(TextField), 'DELETE');
+    await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(FilledButton, 'Delete my account'));
-    // The button shows an (indefinite) spinner while deleting, so pump a couple
-    // of frames rather than settling.
+    // The button spins indefinitely while deleting, so advance discrete frames
+    // rather than settling (which would never converge).
     await tester.pump();
-    await tester.pump(const Duration(milliseconds: 50));
+    await tester.pump(const Duration(milliseconds: 300)); // dialog animates in
+
+    // The account is deleted server-side and the Google link is severed, so a
+    // later sign-in can't silently resurrect the account.
     expect(fake.accountDeletions, 1);
+    expect(google.disconnectCount, 1);
+    // A confirmation makes deletion distinct from a plain logout.
+    expect(find.text('Account deleted'), findsOneWidget);
+
+    await tester.tap(find.widgetWithText(TextButton, 'OK'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
     expect(container.read(sessionProvider).isSignedIn, isFalse);
   });
 

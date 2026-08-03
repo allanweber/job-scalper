@@ -130,9 +130,19 @@ class FeedItemResponse(BaseModel):
     breakdown: dict[str, float]
 
 
+class FeedMetaResponse(BaseModel):
+    """Thin-feed context so the client can nudge a new user precisely."""
+
+    pool_size: int
+    sources_count: int
+    sources_max: int
+    has_profile: bool
+
+
 class FeedResponse(BaseModel):
     items: list[FeedItemResponse]
     count: int
+    meta: FeedMetaResponse
 
 
 class PostingDetailResponse(BaseModel):

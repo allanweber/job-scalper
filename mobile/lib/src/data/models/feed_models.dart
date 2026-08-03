@@ -205,12 +205,51 @@ class PostingDetail {
       );
 }
 
+/// Thin-feed context (`FeedResponse.meta`) that lets the Feed screen explain
+/// *why* a feed is empty or thin and offer the one action that widens it —
+/// lower the score filter, or add more boards.
+class FeedMeta {
+  const FeedMeta({
+    this.poolSize = 0,
+    this.sourcesCount = 0,
+    this.sourcesMax = 3,
+    this.hasProfile = true,
+  });
+
+  /// Postings visible from the user's boards, before scoring/filtering. When
+  /// this is > 0 but the feed is empty, the score filter is what's hiding them.
+  final int poolSize;
+
+  /// Boards currently feeding the user, and the free-tier cap. Room to add more
+  /// boards (`sourcesCount < sourcesMax`) is the other lever on a thin feed.
+  final int sourcesCount;
+  final int sourcesMax;
+
+  /// Whether the user has a scoring profile yet.
+  final bool hasProfile;
+
+  /// True when the user could widen results by adding another board.
+  bool get canAddBoards => sourcesCount < sourcesMax;
+
+  factory FeedMeta.fromJson(Map<String, dynamic> j) => FeedMeta(
+        poolSize: (j['pool_size'] as num?)?.toInt() ?? 0,
+        sourcesCount: (j['sources_count'] as num?)?.toInt() ?? 0,
+        sourcesMax: (j['sources_max'] as num?)?.toInt() ?? 3,
+        hasProfile: (j['has_profile'] as bool?) ?? true,
+      );
+}
+
 /// A page of ranked feed items (`GET /feed`).
 class Feed {
-  const Feed({required this.items, required this.count});
+  const Feed({
+    required this.items,
+    required this.count,
+    this.meta = const FeedMeta(),
+  });
 
   final List<FeedItem> items;
   final int count;
+  final FeedMeta meta;
 
   int get newCount => items.where((i) => i.isNew).length;
 
@@ -219,5 +258,8 @@ class Feed {
             .map((e) => FeedItem.fromJson(e as Map<String, dynamic>))
             .toList(),
         count: (j['count'] as num?)?.toInt() ?? 0,
+        meta: j['meta'] is Map<String, dynamic>
+            ? FeedMeta.fromJson(j['meta'] as Map<String, dynamic>)
+            : const FeedMeta(),
       );
 }

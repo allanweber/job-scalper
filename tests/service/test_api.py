@@ -134,6 +134,21 @@ def test_posting_detail_unknown_404(client, auth_headers):
     assert client.get("/postings/nope", headers=auth_headers).status_code == 404
 
 
+def test_delete_account_removes_user_and_cascades(client, auth_headers, conn):
+    client.get("/me", headers=auth_headers)  # ensure the user row exists
+    user, _pid = _seed_user_content(conn)
+    assert ProfileRepo(conn).primary_for(user.id) is not None
+
+    r = client.request("DELETE", "/me", headers=auth_headers)
+    assert r.status_code == 200, r.text
+
+    # The user and their owned rows are gone (ON DELETE CASCADE), and the old
+    # access token no longer resolves to a user.
+    assert UserRepo(conn).get(user.id) is None
+    assert ProfileRepo(conn).primary_for(user.id) is None
+    assert client.get("/me", headers=auth_headers).status_code == 401
+
+
 def test_draft_edit_persists(client, auth_headers, conn):
     client.get("/me", headers=auth_headers)
     _user, pid = _seed_user_content(conn)
@@ -210,6 +225,11 @@ def test_feed_and_draft_flow(client, auth_headers, conn):
     client.put("/me/sources", headers=auth_headers, json={"sources": ["remotive"]})
     feed = client.get("/feed", headers=auth_headers).json()
     assert feed["count"] == 1 and feed["items"][0]["posting_id"] == pid
+    # Thin-feed meta rides along for the client's first-run nudges.
+    assert feed["meta"]["sources_count"] == 1
+    assert feed["meta"]["sources_max"] == 3
+    assert feed["meta"]["has_profile"] is True
+    assert feed["meta"]["pool_size"] >= 1
     # draft — the row is returned immediately; the eager job fills it inline, so
     # by the time the request returns it's already 'ready' with content.
     r = client.post("/drafts", headers=auth_headers, json={"posting_id": pid})

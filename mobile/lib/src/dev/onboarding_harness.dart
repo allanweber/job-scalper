@@ -218,8 +218,13 @@ class FakeGoogleAuthenticator implements GoogleAuthenticator {
   FakeGoogleAuthenticator({this.token = 'fake-id-token'});
   final String? token;
 
+  int disconnectCount = 0;
+
   @override
   Future<String?> obtainIdToken() async => token;
+
+  @override
+  Future<void> disconnect() async => disconnectCount++;
 }
 
 /// An [OnboardingController] pre-positioned on a given step with seeded data —

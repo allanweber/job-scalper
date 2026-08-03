@@ -16,6 +16,7 @@ class FeedState {
     this.status = FeedStatus.loading,
     this.items = const [],
     this.minScore = 1,
+    this.meta = const FeedMeta(),
     this.error,
   });
 
@@ -24,6 +25,9 @@ class FeedState {
 
   /// The active minimum-score filter (`min_score` query param).
   final int minScore;
+
+  /// Thin-feed context from the last load, powering the first-run nudges.
+  final FeedMeta meta;
   final String? error;
 
   int get newCount => items.where((i) => i.isNew).length;
@@ -33,12 +37,14 @@ class FeedState {
     FeedStatus? status,
     List<FeedItem>? items,
     int? minScore,
+    FeedMeta? meta,
     Object? error = _noChange,
   }) =>
       FeedState(
         status: status ?? this.status,
         items: items ?? this.items,
         minScore: minScore ?? this.minScore,
+        meta: meta ?? this.meta,
         error: error == _noChange ? this.error : error as String?,
       );
 
@@ -64,7 +70,8 @@ class FeedController extends Notifier<FeedState> {
     try {
       final feed = await _repo.getFeed(minScore: state.minScore);
       state = state.copyWith(
-          status: FeedStatus.ready, items: feed.items, error: null);
+          status: FeedStatus.ready, items: feed.items, meta: feed.meta,
+          error: null);
     } catch (e) {
       state = state.copyWith(status: FeedStatus.error, error: _humanize(e));
     }
