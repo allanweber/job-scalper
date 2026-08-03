@@ -44,6 +44,9 @@ class UserResponse(BaseModel):
     plan: str
     tos_accepted: bool
     privacy_accepted: bool
+    #: Whether the user has a saved search profile — the client's source of truth
+    #: for "has this account finished onboarding" (independent of device state).
+    has_profile: bool = False
 
 
 class SignInResponse(BaseModel):

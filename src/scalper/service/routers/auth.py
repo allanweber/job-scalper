@@ -5,6 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from scalper.service.auth import AccountInactive, AuthError, InvalidToken
+from scalper.service.content_repos import ProfileRepo
 from scalper.service.deps import RequestContext, get_ctx
 from scalper.service.routers._helpers import token_response, user_response
 from scalper.service.schemas import (
@@ -28,7 +29,9 @@ def sign_in_google(body: GoogleSignInRequest, ctx: RequestContext = Depends(get_
         raise HTTPException(status.HTTP_403_FORBIDDEN, str(e)) from e
     except (InvalidToken, AuthError) as e:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, str(e)) from e
-    return SignInResponse(user=user_response(user), tokens=token_response(tokens))
+    has_profile = ProfileRepo(ctx.conn).primary_for(user.id) is not None
+    return SignInResponse(user=user_response(user, has_profile=has_profile),
+                          tokens=token_response(tokens))
 
 
 @router.post("/refresh", response_model=TokenResponse)

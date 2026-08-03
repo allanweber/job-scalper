@@ -134,6 +134,18 @@ def test_posting_detail_unknown_404(client, auth_headers):
     assert client.get("/postings/nope", headers=auth_headers).status_code == 404
 
 
+def test_user_payload_reports_profile_presence(client, auth_headers, conn):
+    # A freshly signed-in account has no profile yet — the client uses this to
+    # decide onboarding is needed, independent of any device-local flag.
+    signin = client.post("/auth/google", json={"id_token": "good"}).json()
+    assert signin["user"]["has_profile"] is False
+    assert client.get("/me", headers=auth_headers).json()["has_profile"] is False
+
+    user = UserRepo(conn).get_by_email("user@example.com")
+    ProfileRepo(conn).upsert(user.id, "default", {"titles": ["Dev"]})
+    assert client.get("/me", headers=auth_headers).json()["has_profile"] is True
+
+
 def test_delete_account_removes_user_and_cascades(client, auth_headers, conn):
     client.get("/me", headers=auth_headers)  # ensure the user row exists
     user, _pid = _seed_user_content(conn)

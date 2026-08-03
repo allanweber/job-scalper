@@ -35,6 +35,7 @@ class ApiUser {
     required this.plan,
     required this.tosAccepted,
     required this.privacyAccepted,
+    this.hasProfile = false,
   });
 
   final String id;
@@ -44,6 +45,11 @@ class ApiUser {
   final String plan;
   final bool tosAccepted;
   final bool privacyAccepted;
+
+  /// Whether the account has a saved search profile — the server's answer to
+  /// "has this account finished onboarding", used to gate the onboarding flow
+  /// independent of any device-local flag.
+  final bool hasProfile;
 
   bool get legalAccepted => tosAccepted && privacyAccepted;
 
@@ -55,5 +61,6 @@ class ApiUser {
         plan: (j['plan'] as String?) ?? 'free',
         tosAccepted: (j['tos_accepted'] as bool?) ?? false,
         privacyAccepted: (j['privacy_accepted'] as bool?) ?? false,
+        hasProfile: (j['has_profile'] as bool?) ?? false,
       );
 }

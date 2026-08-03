@@ -12,12 +12,13 @@ from scalper.service.schemas import (
 )
 
 
-def user_response(user: User) -> UserResponse:
+def user_response(user: User, *, has_profile: bool = False) -> UserResponse:
     return UserResponse(
         id=user.id, email=user.email, display_name=user.display_name,
         avatar_url=user.avatar_url, role=user.role, plan=user.plan,
         tos_accepted=user.tos_accepted_at is not None,
         privacy_accepted=user.privacy_accepted_at is not None,
+        has_profile=has_profile,
     )
 
 

@@ -44,15 +44,20 @@ _FREE_MAX_SOURCES = 3
 _DEFAULT_MAX_UPLOAD = 5_000_000
 
 
+def _has_profile(ctx: RequestContext, user_id: str) -> bool:
+    return ProfileRepo(ctx.conn).primary_for(user_id) is not None
+
+
 @router.get("", response_model=UserResponse)
-def me(user: User = Depends(current_user)):
-    return user_response(user)
+def me(ctx: RequestContext = Depends(get_ctx), user: User = Depends(current_user)):
+    return user_response(user, has_profile=_has_profile(ctx, user.id))
 
 
 @router.post("/legal/accept", response_model=UserResponse)
 def accept_legal(ctx: RequestContext = Depends(get_ctx), user: User = Depends(current_user)):
     UserRepo(ctx.conn).accept_legal(user.id)
-    return user_response(UserRepo(ctx.conn).get(user.id))
+    return user_response(UserRepo(ctx.conn).get(user.id),
+                         has_profile=_has_profile(ctx, user.id))
 
 
 # --- profile ---
