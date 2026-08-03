@@ -146,6 +146,12 @@ class _DeleteAccountScreenState extends ConsumerState<DeleteAccountScreen> {
                 ],
               ),
             ),
+          const SizedBox(height: 16),
+          Text(
+            'To prevent abuse of free usage limits, an anonymized count of your '
+            'monthly usage is kept — it contains no personal information.',
+            style: TextStyle(fontSize: 12.5, color: scheme.onSurfaceVariant),
+          ),
           const SizedBox(height: 24),
           Text('Type $_confirmWord to confirm',
               style:

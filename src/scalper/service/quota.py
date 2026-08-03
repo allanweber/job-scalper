@@ -9,12 +9,18 @@ records usage for admin visibility.
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Callable
 
 from scalper.service.models import QuotaStatus, User, now
-from scalper.service.repositories import QuotaOverrideRepo, UsageRepo
+from scalper.service.repositories import (
+    QuotaOverrideRepo,
+    UsageLedgerRepo,
+    UsageRepo,
+    subject_hash,
+)
 from scalper.service.settings import Settings
 
 #: metric -> the key inside the `quota.<plan>` settings object.
@@ -40,10 +46,29 @@ class QuotaService:
     conn: Any
     settings: Settings
     clock: Callable[[], datetime] = now
+    #: Salt for the identity ledger's subject hash. Defaults to the server's
+    #: usage pepper (or the JWT secret) from the environment; only stability per
+    #: deployment matters, so an empty fallback is fine for dev/tests.
+    pepper: str | None = None
 
     def __post_init__(self) -> None:
         self._usage = UsageRepo(self.conn)
+        self._ledger = UsageLedgerRepo(self.conn)
         self._overrides = QuotaOverrideRepo(self.conn)
+        if self.pepper is None:
+            self.pepper = (os.environ.get("SCALPER_USAGE_PEPPER")
+                           or os.environ.get("SCALPER_JWT_SECRET") or "")
+
+    def _subject(self, user: User) -> str:
+        return subject_hash(user.google_sub, self.pepper or "")
+
+    def _used(self, user: User, metric: str, period: str) -> int:
+        """Effective usage: the higher of the per-account counter and the durable
+        identity ledger. The ledger survives account deletion, so a
+        delete-and-recreate can't drop this below what was already consumed this
+        period; the counter covers usage recorded before the ledger existed."""
+        return max(self._usage.get_count(user.id, metric, period),
+                   self._ledger.get_count(self._subject(user), metric, period))
 
     def period(self) -> str:
         """Current monthly period key, e.g. '2026-07'."""
@@ -65,7 +90,7 @@ class QuotaService:
 
     def status(self, user: User, metric: str, *, unlimited: bool = False) -> QuotaStatus:
         limit = -1 if unlimited else self.limit_for(user, metric)
-        used = self._usage.get_count(user.id, metric, self.period())
+        used = self._used(user, metric, self.period())
         return QuotaStatus(metric=metric, limit=limit, used=used, period=self.period())
 
     def check(self, user: User, metric: str, *, unlimited: bool = False) -> QuotaStatus:
@@ -82,8 +107,13 @@ class QuotaService:
         current = self.status(user, metric, unlimited=unlimited)
         if not unlimited and current.used + n > current.limit:
             raise QuotaExceeded(current)
-        new_used = self._usage.increment(user.id, metric, self.period(), n)
-        return QuotaStatus(metric=metric, limit=current.limit, used=new_used,
+        # Record on both counters: the per-account one (admin display) and the
+        # durable identity ledger (survives deletion, so it's what actually gates
+        # a delete-and-recreate).
+        self._usage.increment(user.id, metric, self.period(), n)
+        self._ledger.increment(self._subject(user), metric, self.period(), n)
+        return QuotaStatus(metric=metric, limit=current.limit,
+                           used=self._used(user, metric, self.period()),
                            period=self.period())
 
     def refund(self, user: User, metric: str, n: int = 1) -> None:
@@ -95,7 +125,12 @@ class QuotaService:
         """
         if metric not in _METRIC_SETTING_KEY:
             raise ValueError(f"unknown quota metric: {metric!r}")
-        current = self._usage.get_count(user.id, metric, self.period())
-        if current <= 0:
-            return
-        self._usage.increment(user.id, metric, self.period(), -min(n, current))
+        period = self.period()
+        # Release from both counters, each clamped so neither goes below zero.
+        counter = self._usage.get_count(user.id, metric, period)
+        if counter > 0:
+            self._usage.increment(user.id, metric, period, -min(n, counter))
+        subject = self._subject(user)
+        ledger = self._ledger.get_count(subject, metric, period)
+        if ledger > 0:
+            self._ledger.increment(subject, metric, period, -min(n, ledger))

@@ -312,13 +312,29 @@ def run_notify(container: "Container", conn: Any, job_id: str,
     return {"users_notified": users_notified, "pushes": pushes}
 
 
+def _period_months_ago(dt: Any, months: int) -> str:
+    """The ``YYYY-MM`` period key ``months`` before ``dt``."""
+    y, m = dt.year, dt.month - months
+    while m <= 0:
+        m += 12
+        y -= 1
+    return f"{y:04d}-{m:02d}"
+
+
 def run_purge(container: "Container", conn: Any, job_id: str,
               params: dict[str, Any]) -> dict[str, Any]:
-    """System job: retention auto-purge of stale pool postings."""
+    """System job: retention auto-purge of stale pool postings + old ledger rows."""
     from scalper.service.ingest import Ingestor
+    from scalper.service.models import now
+    from scalper.service.repositories import UsageLedgerRepo
 
     settings = container.settings(conn)
-    return Ingestor(conn, settings).purge()
+    result = Ingestor(conn, settings).purge()
+    # Quota enforcement only ever reads the current period, so keep just the last
+    # couple of months of the identity ledger (abuse-data minimization).
+    cutoff = _period_months_ago(now(), 1)
+    result["ledger_pruned"] = UsageLedgerRepo(conn).prune_before(cutoff)
+    return result
 
 
 _DISPATCH: dict[str, Callable[..., dict[str, Any]]] = {
