@@ -257,3 +257,37 @@ def test_set_user_sources_saves_and_audits(logged_in, conn, settings):
         follow_redirects=False,
     )
     assert UserSourceRepo(conn).list_for(u.id) == ["weworkremotely"]
+
+
+def test_test_notification_sends_to_devices(logged_in, service_container, conn):
+    """The admin 'Send test notification' button pushes to the user's devices."""
+    from scalper.service.push import SendResult
+    from scalper.service.push_repos import PushDeviceRepo
+
+    class _Sender:
+        def __init__(self):
+            self.calls = []
+
+        def send(self, tokens, *, title, body, data):
+            self.calls.append({"tokens": list(tokens), "data": data})
+            return SendResult(sent=len(tokens))
+
+    sender = _Sender()
+    service_container.push_sender = sender  # shared with the admin app
+    u = _make_user(conn)
+    PushDeviceRepo(conn).register(u.id, "tok-a", "android")
+
+    r = logged_in.post(f"/users/{u.id}/test-notification", follow_redirects=False)
+    assert r.status_code == 303
+    assert r.headers["location"].startswith(f"/users/{u.id}")
+    assert sender.calls == [
+        {"tokens": ["tok-a"], "data": {"type": "test"}}
+    ]
+    assert "user.test_notification" in {e["action"] for e in AuditRepo(conn).list_recent()}
+
+
+def test_test_notification_no_devices(logged_in, conn):
+    u = _make_user(conn)
+    r = logged_in.post(f"/users/{u.id}/test-notification", follow_redirects=False)
+    assert r.status_code == 303
+    assert "No" in r.headers["location"]  # "No registered devices…" flash

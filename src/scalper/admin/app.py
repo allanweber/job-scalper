@@ -46,6 +46,7 @@ from scalper.service.logging_setup import (
 )
 from scalper.service.jobs import KIND_PURGE, KIND_SCRAPE, JobQueue
 from scalper.service.models import User
+from scalper.service.push_repos import PushDeviceRepo
 from scalper.service.quota import METRICS
 from scalper.service.repositories import QuotaOverrideRepo, UserRepo
 
@@ -207,7 +208,8 @@ def create_admin_app(admin_container: AdminContainer | None = None) -> FastAPI:
                        tokens_used=LLMUsageRepo(ctx.conn).total_tokens_for(user_id),
                        enabled_sources=enabled_sources, chosen_sources=chosen,
                        source_defaults=source_defaults,
-                       free_max_sources=_FREE_MAX_SOURCES)
+                       free_max_sources=_FREE_MAX_SOURCES,
+                       device_count=len(PushDeviceRepo(ctx.conn).tokens_for(user_id)))
 
     @app.post("/users/{user_id}/plan")
     def set_plan(user_id: str, plan: str = Form(...),
@@ -258,6 +260,34 @@ def create_admin_app(admin_container: AdminContainer | None = None) -> FastAPI:
         _audit(ctx, admin, "user.sources", target_type="user", target_id=user_id,
                before={"sources": old}, after={"sources": chosen})
         return _flash_redirect(f"/users/{user_id}", "Sources updated.")
+
+    @app.post("/users/{user_id}/test-notification")
+    def test_notification(user_id: str, ctx: AdminContext = Depends(get_admin_ctx),
+                          admin: User = Depends(current_admin)):
+        """Send a test push to all of this user's registered devices, to verify
+        the FCM chain end to end."""
+        u = UserRepo(ctx.conn).get(user_id)
+        if u is None:
+            return redirect("/users")
+        devices = PushDeviceRepo(ctx.conn)
+        tokens = devices.tokens_for(user_id)
+        if not tokens:
+            return _flash_redirect(f"/users/{user_id}",
+                                   "No registered devices for this user.")
+        result = ctx.admin.service.push_sender.send(
+            tokens, title="Job Scalper",
+            body="🔔 Test notification from the admin console.",
+            data={"type": "test"})
+        for tok in result.invalid_tokens:
+            devices.delete_token(tok)
+        _audit(ctx, admin, "user.test_notification", target_type="user",
+               target_id=user_id,
+               after={"devices": len(tokens), "sent": result.sent})
+        msg = (f"Test push sent to {result.sent} device(s)."
+               if result.sent
+               else "No push delivered — sender not configured or all tokens "
+                    "were invalid.")
+        return _flash_redirect(f"/users/{user_id}", msg)
 
     @app.post("/users/{user_id}/suspend")
     def suspend(user_id: str, ctx: AdminContext = Depends(get_admin_ctx),
