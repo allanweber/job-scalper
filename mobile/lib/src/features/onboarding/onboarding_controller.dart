@@ -307,17 +307,24 @@ class OnboardingController extends Notifier<OnboardingState> {
     }
   }
 
-  /// Advances the visible step index of a staged loader on a timer (cosmetic).
-  Timer _startTicker(int steps) => Timer.periodic(
-        Duration(milliseconds: (_minBuild.inMilliseconds / (steps + 1)).round()),
-        (t) {
-          if (state.buildStepIndex >= steps) {
-            t.cancel();
-            return;
-          }
-          state = state.copyWith(buildStepIndex: state.buildStepIndex + 1);
-        },
-      );
+  /// Advances the visible step index of a staged loader on a timer, revealing
+  /// all rows *except the last* over the minimum dwell. The caller marks the
+  /// final step done only when the real work actually completes, so the loader
+  /// shows a live spinner on the last row instead of sitting "all done" while
+  /// the app is still waiting.
+  Timer _startTicker(int steps) {
+    final reveal = steps - 1;
+    return Timer.periodic(
+      Duration(milliseconds: (_minBuild.inMilliseconds / steps).round()),
+      (t) {
+        if (state.buildStepIndex >= reveal) {
+          t.cancel();
+          return;
+        }
+        state = state.copyWith(buildStepIndex: state.buildStepIndex + 1);
+      },
+    );
+  }
 
   Future<void> _settle(DateTime started) async {
     final elapsed = DateTime.now().difference(started);
