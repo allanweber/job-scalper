@@ -70,3 +70,22 @@ def test_min_score_filters(conn, settings, seeded):
     UserSourceRepo(conn).set_for(seeded.id, ["remotive"])
     high = FeedService(conn, settings).build(seeded.id, min_score=90)
     assert all(i.score >= 90 for i in high)
+
+
+def test_meta_reports_pool_and_sources(conn, settings, seeded):
+    UserSourceRepo(conn).set_for(seeded.id, ["remotive"])
+    meta = FeedService(conn, settings).meta(seeded.id)
+    assert meta.sources_count == 1          # one board chosen
+    assert meta.sources_max == 3            # free-tier cap
+    assert meta.has_profile is True
+    assert meta.pool_size == 2              # two remotive postings in the pool
+
+
+def test_meta_without_profile_or_boards(conn, settings):
+    user = UserRepo(conn).upsert_from_google(
+        GoogleIdentity(sub="bare", email="bare@example.com"), role="user")
+    settings.set("sources.default", [])
+    meta = FeedService(conn, settings).meta(user.id)
+    assert meta.has_profile is False
+    assert meta.pool_size == 0
+    assert meta.sources_count == 0

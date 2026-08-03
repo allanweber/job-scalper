@@ -48,6 +48,25 @@ class FeedItem:
     breakdown: dict[str, float] = field(default_factory=dict)
 
 
+#: Free-tier board cap — the "3 boards" limit that gates feed visibility (ADR 0011).
+FREE_MAX_SOURCES = 3
+
+
+@dataclass
+class FeedMeta:
+    """First-run / thin-feed context for the client's nudges.
+
+    Lets the Feed screen explain *why* a feed is thin and offer the one action
+    that widens it — lower the score filter, or add more boards — without a
+    second round-trip. All fields are cheap counts (no scoring).
+    """
+
+    pool_size: int      # postings visible from the user's boards (pre-scoring)
+    sources_count: int  # boards currently feeding the user
+    sources_max: int    # the free-tier board cap
+    has_profile: bool   # whether the user has a scoring profile yet
+
+
 @dataclass
 class PostingDetail:
     """A single posting with its full text and the user's match breakdown."""
@@ -91,6 +110,22 @@ class FeedService:
         if chosen:
             return chosen
         return list(self._settings.get("sources.default", []) or [])
+
+    def meta(self, user_id: str, *, candidate_limit: int = 500) -> FeedMeta:
+        """Cheap thin-feed diagnostics for the Feed screen's first-run nudges.
+
+        Counts the user's visible pool and boards without scoring, so it's a
+        light add-on to a feed request.
+        """
+        sources = self.allowed_sources(user_id)
+        candidates = self._postings.candidates_for_sources(
+            sources, limit=candidate_limit)
+        return FeedMeta(
+            pool_size=len(candidates),
+            sources_count=len(sources),
+            sources_max=FREE_MAX_SOURCES,
+            has_profile=self._profiles.primary_for(user_id) is not None,
+        )
 
     def build(self, user_id: str, *, profile: StoredProfile | None = None,
               limit: int = 100, min_score: int = 1,

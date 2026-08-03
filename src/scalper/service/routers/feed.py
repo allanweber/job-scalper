@@ -12,7 +12,12 @@ from scalper.service.content_repos import OverlayRepo, PostingRepo
 from scalper.service.deps import RequestContext, current_user, get_ctx
 from scalper.service.feed import FeedService
 from scalper.service.models import User
-from scalper.service.schemas import FeedItemResponse, FeedResponse, MessageResponse
+from scalper.service.schemas import (
+    FeedItemResponse,
+    FeedMetaResponse,
+    FeedResponse,
+    MessageResponse,
+)
 
 router = APIRouter(prefix="/feed", tags=["feed"])
 
@@ -21,11 +26,13 @@ router = APIRouter(prefix="/feed", tags=["feed"])
 def get_feed(ctx: RequestContext = Depends(get_ctx), user: User = Depends(current_user),
              limit: int = Query(default=100, ge=1, le=500),
              min_score: int = Query(default=1, ge=0, le=100)):
-    items = FeedService(ctx.conn, ctx.settings).build(
-        user.id, limit=limit, min_score=min_score)
+    svc = FeedService(ctx.conn, ctx.settings)
+    items = svc.build(user.id, limit=limit, min_score=min_score)
+    meta = svc.meta(user.id)
     return FeedResponse(
         items=[FeedItemResponse(**item.__dict__) for item in items],
         count=len(items),
+        meta=FeedMetaResponse(**meta.__dict__),
     )
 
 

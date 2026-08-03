@@ -72,6 +72,73 @@ void main() {
     expect(find.byType(JobCard), findsNothing);
   });
 
+  testWidgets('empty state nudges to complete profile when none exists',
+      (tester) async {
+    await _pump(
+        tester,
+        _container(
+            repo: FakeFeedRepository(
+                items: const [],
+                meta: const FeedMeta(hasProfile: false, sourcesCount: 1))));
+    expect(find.text('Complete your profile'), findsOneWidget);
+  });
+
+  testWidgets('empty state nudges to add boards when there is room',
+      (tester) async {
+    await _pump(
+        tester,
+        _container(
+            repo: FakeFeedRepository(
+                items: const [],
+                meta: const FeedMeta(sourcesCount: 1, poolSize: 0))));
+    expect(find.text('Add job boards'), findsOneWidget);
+  });
+
+  testWidgets('a filtered-out feed offers to show all matches', (tester) async {
+    final one = [
+      FeedItem(
+          postingId: 'j1',
+          company: 'Linear',
+          title: 'Senior Backend Engineer',
+          url: 'https://example.com/j1',
+          score: 60),
+    ];
+    final repo = FakeFeedRepository(
+        items: one, meta: const FeedMeta(poolSize: 8, sourcesCount: 1));
+    final container = _container(repo: repo);
+    await _pump(tester, container);
+
+    // Filter above the only posting's score -> empty, with a widening CTA.
+    await tester.tap(find.text('85+'));
+    await tester.pumpAndSettle();
+    expect(find.byType(JobCard), findsNothing);
+    expect(find.text('Show all matches'), findsOneWidget);
+
+    // Tapping it drops the filter and the posting comes back.
+    await tester.tap(find.text('Show all matches'));
+    await tester.pumpAndSettle();
+    expect(container.read(feedControllerProvider).minScore, 1);
+    expect(find.byType(JobCard), findsOneWidget);
+  });
+
+  testWidgets('a short feed shows the add-boards footer', (tester) async {
+    final one = [
+      FeedItem(
+          postingId: 'j1',
+          company: 'Linear',
+          title: 'Senior Backend Engineer',
+          url: 'https://example.com/j1',
+          score: 92),
+    ];
+    await _pump(
+        tester,
+        _container(
+            repo: FakeFeedRepository(
+                items: one, meta: const FeedMeta(sourcesCount: 1))));
+    expect(find.text('Add boards'), findsOneWidget);
+    expect(find.byType(JobCard), findsOneWidget);
+  });
+
   testWidgets('error state renders and Retry re-requests', (tester) async {
     await _pump(tester, _container(repo: FakeFeedRepository(fails: true)));
     expect(find.text('Couldn’t load your feed'), findsOneWidget);

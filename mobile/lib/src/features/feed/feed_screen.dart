@@ -37,7 +37,7 @@ class FeedScreen extends ConsumerWidget {
         FeedStatus.ready => RefreshIndicator(
             onRefresh: ctrl.refresh,
             child: state.isEmpty
-                ? const _EmptyView()
+                ? _EmptyView(state: state, ctrl: ctrl)
                 : _FeedList(ref: ref),
           ),
       },
@@ -58,17 +58,24 @@ class _FeedList extends StatelessWidget {
     final savedOverrides = ref.watch(savedOverridesProvider);
     final items = state.items;
     final hasBanner = state.newCount > 0;
+    // A gentle "add boards" nudge under a short list, so a thin first feed
+    // points at the lever that widens it.
+    final hasFooter = state.meta.canAddBoards && items.length <= 4;
 
     return ListView.separated(
       padding: const EdgeInsets.fromLTRB(AppTokens.screenPadding, 12,
           AppTokens.screenPadding, 24),
-      itemCount: items.length + (hasBanner ? 1 : 0),
+      itemCount: items.length + (hasBanner ? 1 : 0) + (hasFooter ? 1 : 0),
       separatorBuilder: (_, _) => const SizedBox(height: AppTokens.listGap),
       itemBuilder: (context, index) {
         if (hasBanner && index == 0) {
           return _NewMatchesBanner(count: state.newCount);
         }
-        final raw = items[index - (hasBanner ? 1 : 0)];
+        final base = index - (hasBanner ? 1 : 0);
+        if (hasFooter && base == items.length) {
+          return const _ThinFeedFooter();
+        }
+        final raw = items[base];
         var item = raw;
         final savedOverride = savedOverrides[raw.postingId];
         if (savedOverride != null) {
@@ -164,16 +171,23 @@ class _NewMatchesBanner extends StatelessWidget {
   }
 }
 
+/// The Feed's empty state. The heading is constant ("No matches yet"), but the
+/// body and call-to-action adapt to *why* it's empty — no profile, a score
+/// filter hiding real matches, or room to add boards — so a new user's first
+/// dead-end points straight at the one action that fixes it.
 class _EmptyView extends StatelessWidget {
-  const _EmptyView();
+  const _EmptyView({required this.state, required this.ctrl});
+  final FeedState state;
+  final FeedController ctrl;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final nudge = _nudge(context);
     // Scrollable so pull-to-refresh still works with no items.
     return ListView(
       children: [
-        SizedBox(height: MediaQuery.of(context).size.height * 0.22),
+        SizedBox(height: MediaQuery.of(context).size.height * 0.18),
         Icon(Icons.travel_explore_rounded,
             size: 56, color: scheme.onSurfaceVariant),
         const SizedBox(height: 16),
@@ -188,13 +202,90 @@ class _EmptyView extends StatelessWidget {
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 40),
           child: Text(
-            'We check your boards regularly. Lower the score filter, or pull to '
-            'refresh.',
+            nudge.body,
             textAlign: TextAlign.center,
             style: TextStyle(fontSize: 13.5, color: scheme.onSurfaceVariant),
           ),
         ),
+        if (nudge.action != null) ...[
+          const SizedBox(height: 20),
+          Center(child: nudge.action!),
+        ],
       ],
+    );
+  }
+
+  ({String body, Widget? action}) _nudge(BuildContext context) {
+    final meta = state.meta;
+    if (!meta.hasProfile) {
+      return (
+        body: 'Add your profile so we can match jobs to you.',
+        action: FilledButton.tonal(
+          onPressed: () => context.push('/profile/edit'),
+          child: const Text('Complete your profile'),
+        ),
+      );
+    }
+    if (meta.poolSize > 0 && state.minScore > 1) {
+      final n = meta.poolSize;
+      return (
+        body: '$n ${n == 1 ? 'job' : 'jobs'} on your boards scored below '
+            '${state.minScore}. Show everything to see them.',
+        action: FilledButton.tonal(
+          onPressed: () => ctrl.setMinScore(1),
+          child: const Text('Show all matches'),
+        ),
+      );
+    }
+    if (meta.canAddBoards) {
+      return (
+        body: 'We check your boards regularly. Add more job boards to widen '
+            'your search.',
+        action: FilledButton.tonal(
+          onPressed: () => context.push('/profile/boards'),
+          child: const Text('Add job boards'),
+        ),
+      );
+    }
+    return (
+      body: 'We check your boards regularly — new roles will show up here. '
+          'Pull down to refresh.',
+      action: null,
+    );
+  }
+}
+
+/// A quiet footer under a short feed, nudging the user to widen their search by
+/// adding boards.
+class _ThinFeedFooter extends StatelessWidget {
+  const _ThinFeedFooter();
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.fromLTRB(14, 10, 8, 10),
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(AppTokens.radiusCard),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.tune_rounded, size: 18, color: scheme.onSurfaceVariant),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              'Seeing only a few? Add more job boards to widen your search.',
+              style: TextStyle(fontSize: 13, color: scheme.onSurfaceVariant),
+            ),
+          ),
+          const SizedBox(width: 4),
+          TextButton(
+            onPressed: () => context.push('/profile/boards'),
+            child: const Text('Add boards'),
+          ),
+        ],
+      ),
     );
   }
 }

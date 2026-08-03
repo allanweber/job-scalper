@@ -81,11 +81,13 @@ class FakeFeedRepository implements FeedRepository {
     List<FeedItem>? items,
     this.fails = false,
     this.delay,
+    this.meta = const FeedMeta(),
   }) : _items = items ?? demoFeedItems;
 
   final List<FeedItem> _items;
   final bool fails;
   final Duration? delay;
+  final FeedMeta meta;
 
   final List<String> savedCalls = [];
   final List<String> unsavedCalls = [];
@@ -97,7 +99,7 @@ class FakeFeedRepository implements FeedRepository {
     if (delay != null) await Future.delayed(delay!);
     if (fails) throw Exception('Failed host lookup');
     final filtered = _items.where((i) => i.score >= minScore).toList();
-    return Feed(items: filtered, count: filtered.length);
+    return Feed(items: filtered, count: filtered.length, meta: meta);
   }
 
   @override
