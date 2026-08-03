@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../data/api_client.dart';
 import '../data/auth_repository.dart';
 import '../data/models/api_models.dart';
+import '../features/onboarding/onboarding_controller.dart';
 
 enum AuthStatus { unknown, signedOut, signedIn }
 
@@ -96,7 +97,13 @@ class SessionController extends Notifier<SessionState> implements TokenStore {
     }
     await _prefs.remove(_kTokens);
     state = state.copyWith(status: AuthStatus.signedOut, clearAuth: true);
+    _resetOnboardingFlow();
   }
+
+  /// Reset the onboarding wizard so a later sign-in starts at the welcome step,
+  /// not wherever a previous session left it (e.g. stranded on the
+  /// "Building your feed" loader after a delete).
+  void _resetOnboardingFlow() => ref.invalidate(onboardingControllerProvider);
 
   /// Replace the cached user (e.g. after accepting legal terms mid-onboarding).
   void updateUser(ApiUser user) => state = state.copyWith(user: user);
@@ -161,6 +168,7 @@ class SessionController extends Notifier<SessionState> implements TokenStore {
   Future<void> onAuthLost() async {
     await _prefs.remove(_kTokens);
     state = state.copyWith(status: AuthStatus.signedOut, clearAuth: true);
+    _resetOnboardingFlow();
   }
 }
 

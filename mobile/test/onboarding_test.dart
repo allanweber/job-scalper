@@ -42,6 +42,30 @@ Future<void> _pump(WidgetTester tester, ProviderContainer container) async {
 }
 
 void main() {
+  test('signing out resets the onboarding wizard to the welcome step',
+      () async {
+    SharedPreferences.setMockInitialValues({});
+    final prefs = await SharedPreferences.getInstance();
+    final container = ProviderContainer(overrides: [
+      sharedPrefsProvider.overrideWithValue(prefs),
+      accountRepositoryProvider.overrideWithValue(FakeAccountRepository()),
+      googleAuthenticatorProvider
+          .overrideWithValue(FakeGoogleAuthenticator()),
+    ]);
+    addTearDown(container.dispose);
+
+    // Move the wizard off welcome, as a previous completed onboarding would.
+    container.read(onboardingControllerProvider.notifier).startFromWelcome();
+    expect(container.read(onboardingControllerProvider).step,
+        OnboardingStep.signIn);
+
+    // Signing out (e.g. after deleting the account) resets it, so re-entering
+    // onboarding starts fresh instead of on a stale "Building your feed" loader.
+    await container.read(sessionProvider.notifier).signOut();
+    expect(container.read(onboardingControllerProvider).step,
+        OnboardingStep.welcome);
+  });
+
   testWidgets('welcome shows first value-prop slide + Skip', (tester) async {
     final (container, _) = await _container(OnboardingStep.welcome);
     await _pump(tester, container);
