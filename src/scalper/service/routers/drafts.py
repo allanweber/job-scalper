@@ -17,7 +17,10 @@ from scalper.service.models import User
 from scalper.service.quota import QuotaService
 from scalper.service.repositories import LLMCredentialRepo
 from scalper.service.schemas import (
+    APPLICATION_STATUSES,
     AppliedRequest,
+    ApplicationInsights,
+    ApplicationStatusRequest,
     DraftRequest,
     DraftResponse,
     DraftSummary,
@@ -27,24 +30,33 @@ from scalper.service.schemas import (
 )
 
 
-def _draft_response(d: "object", *, applied: bool = False) -> DraftResponse:
+def _draft_response(d: "object", *, applied: bool = False,
+                    application_status: str | None = None) -> DraftResponse:
     return DraftResponse(
         id=d.id, posting_id=d.posting_id, job_source=d.job_source,
         resume_md=d.resume_md, cover_letter_md=d.cover_letter_md,
         stretch_claims_md=d.stretch_claims_md, provider=d.provider, model=d.model,
         key_source=d.key_source, created_at=d.created_at, applied=applied,
-        status=d.status, error=d.error,
+        application_status=application_status, status=d.status, error=d.error,
     )
 
 router = APIRouter(tags=["drafts"])
 
 
-def _applied_for(ctx: RequestContext, user_id: str, posting_id: str | None) -> bool:
-    """Whether the user has marked `posting_id` applied (overlay lookup)."""
+def _overlay_state_for(
+    ctx: RequestContext, user_id: str, posting_id: str | None
+) -> tuple[bool, str | None]:
+    """The user's (applied, application_status) for `posting_id` (overlay lookup).
+
+    ``applied`` is derived from the applied timestamp; ``application_status`` is
+    the pipeline stage (or None when not applied / no overlay row).
+    """
     if not posting_id:
-        return False
+        return False, None
     ov = OverlayRepo(ctx.conn).get_many(user_id, [posting_id]).get(posting_id)
-    return bool(ov and ov.applied_at)
+    if ov is None:
+        return False, None
+    return bool(ov.applied_at), ov.application_status
 
 
 def _has_byo(ctx: RequestContext, user: User) -> bool:
@@ -103,9 +115,24 @@ def list_drafts(ctx: RequestContext = Depends(get_ctx), user: User = Depends(cur
         DraftSummary(id=d.id, posting_id=d.posting_id, job_source=d.job_source,
                      key_source=d.key_source, created_at=d.created_at,
                      title=d.title, company=d.company, url=d.url, applied=d.applied,
+                     application_status=d.application_status,
                      status=d.status, error=d.error)
         for d in DraftRepo(ctx.conn).list_summaries(user.id)
     ]
+
+
+@router.get("/drafts/insights", response_model=ApplicationInsights, tags=["drafts"])
+def application_insights(ctx: RequestContext = Depends(get_ctx),
+                        user: User = Depends(current_user)):
+    """Aggregate funnel of the user's applications for the Insights flow chart.
+
+    Declared before ``/drafts/{draft_id}`` so the literal path wins over the
+    parameter. Returns the total plus a count for every pipeline stage (zero
+    when none), so the client can render the Sankey without post-processing.
+    """
+    total, counts = DraftRepo(ctx.conn).application_status_counts(user.id)
+    full = {stage: counts.get(stage, 0) for stage in APPLICATION_STATUSES}
+    return ApplicationInsights(total=total, counts=full)
 
 
 @router.get("/drafts/{draft_id}", response_model=DraftResponse, tags=["drafts"])
@@ -114,7 +141,8 @@ def get_draft(draft_id: str, ctx: RequestContext = Depends(get_ctx),
     d = DraftRepo(ctx.conn).get(draft_id, user.id)
     if d is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "draft not found")
-    return _draft_response(d, applied=_applied_for(ctx, user.id, d.posting_id))
+    applied, app_status = _overlay_state_for(ctx, user.id, d.posting_id)
+    return _draft_response(d, applied=applied, application_status=app_status)
 
 
 @router.put("/drafts/{draft_id}/applied", response_model=DraftResponse, tags=["drafts"])
@@ -133,7 +161,30 @@ def set_draft_applied(draft_id: str, body: AppliedRequest,
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY,
                             "this draft has no linked posting to mark applied")
     OverlayRepo(ctx.conn).set_applied(user.id, d.posting_id, body.applied)
-    return _draft_response(d, applied=body.applied)
+    return _draft_response(d, applied=body.applied,
+                           application_status="applied" if body.applied else None)
+
+
+@router.put("/drafts/{draft_id}/status", response_model=DraftResponse, tags=["drafts"])
+def set_draft_status(draft_id: str, body: ApplicationStatusRequest,
+                     ctx: RequestContext = Depends(get_ctx),
+                     user: User = Depends(current_user)):
+    """Set this draft's application pipeline stage (or clear it).
+
+    Stages advance applied → interviewing → offer, with rejected as an off-ramp;
+    ``null`` clears back to not-applied. Like "applied", the stage is per-posting
+    overlay state, so it's the source of truth for the applied flag everywhere
+    the posting appears while the richer stage shows on the Applications surface.
+    """
+    d = DraftRepo(ctx.conn).get(draft_id, user.id)
+    if d is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "draft not found")
+    if d.posting_id is None:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY,
+                            "this draft has no linked posting to track")
+    OverlayRepo(ctx.conn).set_application_status(user.id, d.posting_id, body.status)
+    return _draft_response(d, applied=body.status is not None,
+                           application_status=body.status)
 
 
 @router.put("/drafts/{draft_id}", response_model=DraftResponse, tags=["drafts"])
@@ -145,7 +196,8 @@ def update_draft(draft_id: str, body: DraftUpdateRequest,
         cover_letter_md=body.cover_letter_md)
     if d is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "draft not found")
-    return _draft_response(d)
+    applied, app_status = _overlay_state_for(ctx, user.id, d.posting_id)
+    return _draft_response(d, applied=applied, application_status=app_status)
 
 
 @router.get("/drafts/{draft_id}/{which}.pdf", tags=["drafts"])

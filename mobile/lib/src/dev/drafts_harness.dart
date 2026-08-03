@@ -56,6 +56,7 @@ Draft _demoDraft(DraftSummary s) => Draft(
       keySource: s.keySource,
       createdAt: s.createdAt,
       applied: s.applied,
+      applicationStatus: s.applicationStatus,
       status: s.status,
       error: s.error,
     );
@@ -67,6 +68,7 @@ class FakeDraftsRepository implements DraftsRepository {
     List<DraftSummary>? items,
     this.fails = false,
     this.delay,
+    this.insights,
     Set<String>? pendingOnce,
   })  : _items = items ?? demoDraftSummaries,
         _pendingOnce = pendingOnce ?? const {};
@@ -75,6 +77,10 @@ class FakeDraftsRepository implements DraftsRepository {
   final bool fails;
   final Duration? delay;
 
+  /// Optional explicit funnel for [getInsights]; when null it's computed from
+  /// the items (each item = one application, null stage folds into 'applied').
+  final ApplicationInsights? insights;
+
   /// Draft ids that return a 'pending' draft on the first getDraft call and a
   /// ready one afterwards — used to exercise the poll-until-ready flow.
   final Set<String> _pendingOnce;
@@ -82,6 +88,7 @@ class FakeDraftsRepository implements DraftsRepository {
 
   final List<({String id, String? resumeMd, String? coverLetterMd})> edits = [];
   final List<({String id, bool applied})> appliedCalls = [];
+  final List<({String id, String? status})> statusCalls = [];
   final Map<String, Draft> _overrides = {};
 
   @override
@@ -134,7 +141,22 @@ class FakeDraftsRepository implements DraftsRepository {
     final base = _overrides[id] ??
         _demoDraft(_items.firstWhere((e) => e.id == id,
             orElse: () => _items.first));
-    final updated = base.copyWith(applied: applied);
+    final updated = base.copyWith(
+        applied: applied, applicationStatus: applied ? 'applied' : null);
+    _overrides[id] = updated;
+    return updated;
+  }
+
+  @override
+  Future<Draft> setApplicationStatus(String id, String? status) async {
+    if (delay != null) await Future.delayed(delay!);
+    if (fails) throw Exception('Failed host lookup');
+    statusCalls.add((id: id, status: status));
+    final base = _overrides[id] ??
+        _demoDraft(_items.firstWhere((e) => e.id == id,
+            orElse: () => _items.first));
+    final updated =
+        base.copyWith(applied: status != null, applicationStatus: status);
     _overrides[id] = updated;
     return updated;
   }
@@ -145,6 +167,21 @@ class FakeDraftsRepository implements DraftsRepository {
     // In tests the PDF service is not running — always throw so the screen
     // falls through to on-device generation.
     throw Exception('pdf service not available in tests');
+  }
+
+  @override
+  Future<ApplicationInsights> getInsights() async {
+    if (delay != null) await Future.delayed(delay!);
+    if (fails) throw Exception('Failed host lookup');
+    if (insights != null) return insights!;
+    // Mirror the backend: every item is one application; a null stage folds
+    // into 'applied'.
+    final counts = <String, int>{};
+    for (final d in _items) {
+      final stage = d.applicationStatus ?? 'applied';
+      counts[stage] = (counts[stage] ?? 0) + 1;
+    }
+    return ApplicationInsights(total: _items.length, counts: counts);
   }
 }
 

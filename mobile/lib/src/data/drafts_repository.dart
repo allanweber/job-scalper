@@ -24,9 +24,18 @@ abstract class DraftsRepository {
   /// (`PUT /drafts/{id}/applied`). Returns the updated draft.
   Future<Draft> setApplied(String id, bool applied);
 
+  /// Set (or clear) this draft's application pipeline stage
+  /// (`PUT /drafts/{id}/status`). [status] is 'applied' | 'interviewing' |
+  /// 'offer' | 'rejected', or null to clear back to not-applied.
+  Future<Draft> setApplicationStatus(String id, String? status);
+
   /// Fetch a rendered PDF from the server (`GET /drafts/{id}/{which}.pdf`).
   /// [which] is `"resume"` or `"cover_letter"`.
   Future<Uint8List> getDraftPdf(String id, String which);
+
+  /// The application funnel aggregate for the Insights flow chart
+  /// (`GET /drafts/insights`).
+  Future<ApplicationInsights> getInsights();
 }
 
 class HttpDraftsRepository implements DraftsRepository {
@@ -66,11 +75,24 @@ class HttpDraftsRepository implements DraftsRepository {
   }
 
   @override
+  Future<Draft> setApplicationStatus(String id, String? status) async {
+    final r = await _api.put<Map<String, dynamic>>('/drafts/$id/status',
+        data: {'status': status});
+    return Draft.fromJson(r.data!);
+  }
+
+  @override
   Future<Uint8List> getDraftPdf(String id, String which) async {
     final r = await _api.raw.get<List<int>>(
       '/drafts/$id/$which.pdf',
       options: Options(responseType: ResponseType.bytes),
     );
     return Uint8List.fromList(r.data!);
+  }
+
+  @override
+  Future<ApplicationInsights> getInsights() async {
+    final r = await _api.get<Map<String, dynamic>>('/drafts/insights');
+    return ApplicationInsights.fromJson(r.data!);
   }
 }

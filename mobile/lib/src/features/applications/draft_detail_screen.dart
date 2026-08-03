@@ -9,6 +9,7 @@ import '../../data/models/draft_models.dart';
 import '../../data/providers.dart';
 import '../../theme/tokens.dart';
 import '../../util/format.dart';
+import 'application_status.dart';
 import 'draft_detail_controller.dart';
 import 'draft_pdf.dart';
 import 'pdf_saver_stub.dart'
@@ -165,27 +166,28 @@ class _DraftDetailScreenState extends ConsumerState<DraftDetailScreen> {
             onDocChanged: (v) => setState(() => _doc = v),
             content: _content(d),
             applying: state.applying,
-            onToggleApplied: () => _toggleApplied(d),
+            // Fall back to 'applied' for a draft flagged applied without an
+            // explicit stage (e.g. pre-pipeline data), so it still reads as
+            // in the pipeline.
+            status: d.applicationStatus ?? (d.applied ? 'applied' : null),
+            onSetStatus: (s) => _setStatus(s),
           ),
       },
     );
   }
 
-  Future<void> _toggleApplied(Draft d) async {
-    final target = !d.applied;
+  Future<void> _setStatus(String? status) async {
     final ok = await ref
         .read(draftDetailControllerProvider.notifier)
-        .setApplied(target);
+        .setApplicationStatus(status);
     if (!mounted) return;
-    if (ok) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(target
-              ? 'Marked as applied'
-              : 'Removed the applied mark')));
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Couldn't update — try again.")));
-    }
+    final message = ok
+        ? (status == null
+            ? 'Removed from your applications'
+            : 'Updated to ${applicationStageLabel(status)}')
+        : "Couldn't update — try again.";
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(message)));
   }
 }
 
@@ -197,7 +199,8 @@ class _Ready extends StatelessWidget {
     required this.onDocChanged,
     required this.content,
     required this.applying,
-    required this.onToggleApplied,
+    required this.status,
+    required this.onSetStatus,
   });
 
   final Draft draft;
@@ -206,7 +209,8 @@ class _Ready extends StatelessWidget {
   final ValueChanged<DraftDoc> onDocChanged;
   final String? content;
   final bool applying;
-  final VoidCallback onToggleApplied;
+  final String? status;
+  final ValueChanged<String?> onSetStatus;
 
   @override
   Widget build(BuildContext context) {
@@ -257,8 +261,8 @@ class _Ready extends StatelessWidget {
           ),
         ],
         const SizedBox(height: 12),
-        _AppliedToggle(
-            applied: draft.applied, busy: applying, onToggle: onToggleApplied),
+        _ApplicationStatusControl(
+            status: status, busy: applying, onSetStatus: onSetStatus),
         const SizedBox(height: 12),
         _PdfButtons(draft: draft, pdfTitle: pdfTitle),
         const SizedBox(height: 14),
@@ -288,59 +292,129 @@ class _Ready extends StatelessWidget {
   }
 }
 
-/// The manual "applied" control. When not applied it's a prominent call to
-/// action; once applied it becomes a status banner with an undo affordance.
-class _AppliedToggle extends StatelessWidget {
-  const _AppliedToggle({
-    required this.applied,
+/// The application-tracking control. Before applying it's a single prominent
+/// call to action; once in the pipeline it becomes a stage picker (Applied →
+/// Interviewing → Offer, with Rejected as an off-ramp) plus a way to remove the
+/// job from the pipeline entirely.
+class _ApplicationStatusControl extends StatelessWidget {
+  const _ApplicationStatusControl({
+    required this.status,
     required this.busy,
-    required this.onToggle,
+    required this.onSetStatus,
   });
-  final bool applied;
+  final String? status;
   final bool busy;
-  final VoidCallback onToggle;
+  final ValueChanged<String?> onSetStatus;
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    if (applied) {
-      return Container(
-        padding: const EdgeInsets.fromLTRB(14, 10, 8, 10),
-        decoration: BoxDecoration(
-          color: scheme.primaryContainer,
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Row(
-          children: [
-            Icon(Icons.check_circle_rounded,
-                size: 20, color: scheme.onPrimaryContainer),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text('You marked this job as applied',
-                  style: TextStyle(
-                      fontSize: 13.5,
-                      fontWeight: FontWeight.w600,
-                      color: scheme.onPrimaryContainer)),
-            ),
-            TextButton(
-              onPressed: busy ? null : onToggle,
-              child: const Text('Undo'),
-            ),
-          ],
+    if (status == null) {
+      return SizedBox(
+        width: double.infinity,
+        child: FilledButton.icon(
+          onPressed: busy ? null : () => onSetStatus('applied'),
+          icon: busy
+              ? const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2))
+              : const Icon(Icons.check_circle_outline_rounded, size: 20),
+          label: const Text('Mark as applied'),
         ),
       );
     }
-    return SizedBox(
-      width: double.infinity,
-      child: FilledButton.icon(
-        onPressed: busy ? null : onToggle,
-        icon: busy
-            ? const SizedBox(
-                width: 18,
-                height: 18,
-                child: CircularProgressIndicator(strokeWidth: 2))
-            : const Icon(Icons.check_circle_outline_rounded, size: 20),
-        label: const Text('Mark as applied'),
+
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text('Application status',
+                    style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        color: scheme.onSurface)),
+              ),
+              if (busy)
+                const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2))
+              else
+                TextButton(
+                  onPressed: () => onSetStatus(null),
+                  style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      minimumSize: const Size(0, 32),
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap),
+                  child: const Text('Remove'),
+                ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final stage in kApplicationStages)
+                _StageChip(
+                  stage: stage,
+                  selected: stage == status,
+                  onSelected: busy ? null : () => onSetStatus(stage),
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// One selectable pipeline stage. Selected chips take the stage's color; the
+/// rest are quiet outlines so the current stage reads at a glance.
+class _StageChip extends StatelessWidget {
+  const _StageChip({
+    required this.stage,
+    required this.selected,
+    required this.onSelected,
+  });
+  final String stage;
+  final bool selected;
+  final VoidCallback? onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final scheme = Theme.of(context).colorScheme;
+    final colors = applicationStageColors(stage, dark);
+    return Material(
+      color: selected ? colors.bg : Colors.transparent,
+      shape: StadiumBorder(
+        side: BorderSide(
+            color: selected ? colors.bg : scheme.outlineVariant),
+      ),
+      child: InkWell(
+        customBorder: const StadiumBorder(),
+        onTap: onSelected,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+          child: Text(
+            applicationStageLabel(stage),
+            style: TextStyle(
+              fontSize: 12.5,
+              fontWeight: FontWeight.w700,
+              color: selected ? colors.fg : scheme.onSurfaceVariant,
+            ),
+          ),
+        ),
       ),
     );
   }

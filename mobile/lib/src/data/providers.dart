@@ -66,6 +66,24 @@ class AppliedOverrides extends Notifier<Map<String, bool>> {
       state = {...state, postingId: applied};
 }
 
+/// Session-local application-stage overrides keyed by posting id. Written
+/// optimistically when the user changes a stage (applied → interviewing →
+/// offer → rejected, or clears it) from the draft detail, so the Applications
+/// list reflects the new stage immediately, before the next reload. The value
+/// is the stage string, or null when cleared; a posting present in the map wins
+/// over the model's own `applicationStatus`.
+final applicationStatusOverridesProvider =
+    NotifierProvider<ApplicationStatusOverrides, Map<String, String?>>(
+        ApplicationStatusOverrides.new);
+
+class ApplicationStatusOverrides extends Notifier<Map<String, String?>> {
+  @override
+  Map<String, String?> build() => const {};
+
+  void set(String postingId, String? status) =>
+      state = {...state, postingId: status};
+}
+
 /// Session-local "saved" overrides keyed by posting id. Written optimistically
 /// the instant the user taps the heart anywhere — feed, saved list, or job
 /// detail — and read by both the feed and saved lists, so a save/unsave shows

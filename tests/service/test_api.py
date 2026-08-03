@@ -266,6 +266,115 @@ def test_mark_applied_other_user_404(client, auth_headers):
                       json={"applied": True}).status_code == 404
 
 
+def test_application_status_pipeline(client, auth_headers, conn):
+    client.get("/me", headers=auth_headers)
+    _user, pid = _seed_user_content(conn)
+    client.put("/me/sources", headers=auth_headers, json={"sources": ["remotive"]})
+    draft_id = client.post("/drafts", headers=auth_headers,
+                           json={"posting_id": pid}).json()["id"]
+
+    # A fresh draft has no stage and isn't applied.
+    d = client.get(f"/drafts/{draft_id}", headers=auth_headers).json()
+    assert d["application_status"] is None and d["applied"] is False
+
+    # Advance through the funnel; each stage implies applied=True and shows up
+    # on both the detail and the Applications list.
+    for stage in ("applied", "interviewing", "offer", "rejected"):
+        up = client.put(f"/drafts/{draft_id}/status", headers=auth_headers,
+                        json={"status": stage})
+        assert up.status_code == 200
+        assert up.json()["application_status"] == stage
+        assert up.json()["applied"] is True
+        listing = client.get("/drafts", headers=auth_headers).json()[0]
+        assert listing["application_status"] == stage and listing["applied"] is True
+        # The feed still exposes a simple applied flag for the posting.
+        assert client.get("/feed", headers=auth_headers).json()["items"][0]["applied"] is True
+
+    # Clearing the stage returns to not-applied everywhere.
+    cleared = client.put(f"/drafts/{draft_id}/status", headers=auth_headers,
+                         json={"status": None})
+    assert cleared.status_code == 200
+    assert cleared.json()["application_status"] is None
+    assert cleared.json()["applied"] is False
+    assert client.get("/drafts", headers=auth_headers).json()[0]["application_status"] is None
+    assert client.get("/feed", headers=auth_headers).json()["items"][0]["applied"] is False
+
+
+def test_mark_applied_sets_stage(client, auth_headers, conn):
+    """The legacy /applied toggle maps onto the pipeline's 'applied' stage."""
+    client.get("/me", headers=auth_headers)
+    _user, pid = _seed_user_content(conn)
+    client.put("/me/sources", headers=auth_headers, json={"sources": ["remotive"]})
+    draft_id = client.post("/drafts", headers=auth_headers,
+                           json={"posting_id": pid}).json()["id"]
+
+    client.put(f"/drafts/{draft_id}/applied", headers=auth_headers,
+               json={"applied": True})
+    assert client.get(f"/drafts/{draft_id}", headers=auth_headers) \
+        .json()["application_status"] == "applied"
+
+
+def test_application_status_rejects_unknown(client, auth_headers, conn):
+    client.get("/me", headers=auth_headers)
+    _user, pid = _seed_user_content(conn)
+    client.put("/me/sources", headers=auth_headers, json={"sources": ["remotive"]})
+    draft_id = client.post("/drafts", headers=auth_headers,
+                           json={"posting_id": pid}).json()["id"]
+    bad = client.put(f"/drafts/{draft_id}/status", headers=auth_headers,
+                     json={"status": "on_the_moon"})
+    assert bad.status_code == 422
+
+
+def test_application_status_other_user_404(client, auth_headers):
+    assert client.put("/drafts/nope/status", headers=auth_headers,
+                      json={"status": "applied"}).status_code == 404
+
+
+def test_application_insights_funnel(client, auth_headers, conn):
+    client.get("/me", headers=auth_headers)
+    _user, pid = _seed_user_content(conn)
+    client.put("/me/sources", headers=auth_headers, json={"sources": ["remotive"]})
+    draft_id = client.post("/drafts", headers=auth_headers,
+                           json={"posting_id": pid}).json()["id"]
+
+    # One draft, no stage set yet — it counts as an application in 'applied'.
+    ins = client.get("/drafts/insights", headers=auth_headers).json()
+    assert ins["total"] == 1
+    # Every stage is present (zero-filled) so the client needn't post-process.
+    for stage in ("applied", "pre_screen", "interviewing", "offer",
+                  "ghosted", "rejected"):
+        assert stage in ins["counts"]
+    assert ins["counts"]["applied"] == 1
+    assert sum(ins["counts"].values()) == ins["total"]
+
+    # Move it into the pipeline; the funnel follows.
+    client.put(f"/drafts/{draft_id}/status", headers=auth_headers,
+               json={"status": "interviewing"})
+    ins = client.get("/drafts/insights", headers=auth_headers).json()
+    assert ins["counts"]["interviewing"] == 1 and ins["counts"]["applied"] == 0
+    assert sum(ins["counts"].values()) == 1
+
+
+def test_application_insights_empty(client, auth_headers):
+    client.get("/me", headers=auth_headers)
+    ins = client.get("/drafts/insights", headers=auth_headers).json()
+    assert ins["total"] == 0
+    assert sum(ins["counts"].values()) == 0
+
+
+def test_new_stages_accepted(client, auth_headers, conn):
+    """The expanded stage set (pre_screen, ghosted) is valid."""
+    client.get("/me", headers=auth_headers)
+    _user, pid = _seed_user_content(conn)
+    client.put("/me/sources", headers=auth_headers, json={"sources": ["remotive"]})
+    draft_id = client.post("/drafts", headers=auth_headers,
+                           json={"posting_id": pid}).json()["id"]
+    for stage in ("pre_screen", "ghosted"):
+        up = client.put(f"/drafts/{draft_id}/status", headers=auth_headers,
+                        json={"status": stage})
+        assert up.status_code == 200 and up.json()["application_status"] == stage
+
+
 def test_draft_blocked_when_quota_exhausted(client, auth_headers, conn, settings):
     client.get("/me", headers=auth_headers)
     _user, pid = _seed_user_content(conn)

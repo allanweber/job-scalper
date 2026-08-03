@@ -98,4 +98,23 @@ void main() {
     expect(find.text('Broken Role'), findsOneWidget);
     expect(find.text('Failed'), findsOneWidget);
   });
+
+  testWidgets('a draft in the pipeline shows its stage pill', (tester) async {
+    final items = [
+      DraftSummary(
+        id: 's1',
+        postingId: 'j9',
+        jobSource: 'pool',
+        keySource: 'platform',
+        createdAt: DateTime.now().toIso8601String(),
+        title: 'Ranked Role',
+        company: 'Zed',
+        applied: true,
+        applicationStatus: 'interviewing',
+      ),
+    ];
+    await _pump(tester, _container(repo: FakeDraftsRepository(items: items)));
+    expect(find.text('Ranked Role'), findsOneWidget);
+    expect(find.text('Interviewing'), findsOneWidget);
+  });
 }

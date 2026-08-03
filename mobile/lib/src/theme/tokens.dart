@@ -58,6 +58,10 @@ class AppTokens {
   static const chipTanTextLight = Color(0xFF7A4D00);
   static const chipTanBgDark = Color(0xFF3A2F18);
   static const chipTanTextDark = Color(0xFFE3BD7C);
+  static const chipPurpleBgLight = Color(0xFFE9E0F6);
+  static const chipPurpleTextLight = Color(0xFF3A1D66);
+  static const chipPurpleBgDark = Color(0xFF2A2140);
+  static const chipPurpleTextDark = Color(0xFFC9B6EE);
 
   // Match-score ring bands (consistent across feed, detail, saved, drafts).
   static const scoreStrong = Color(0xFF006B5E); // >= 85

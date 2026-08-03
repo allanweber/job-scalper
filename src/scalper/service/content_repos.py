@@ -537,6 +537,7 @@ class Overlay:
     saved: bool
     drafted_at: str | None
     applied_at: str | None = None
+    application_status: str | None = None
 
 
 class OverlayRepo:
@@ -552,12 +553,12 @@ class OverlayRepo:
         placeholders = ",".join("?" for _ in posting_ids)
         rows = self._c.execute(
             f"SELECT posting_id, score, first_matched_at, seen_at, saved, drafted_at, "
-            f"applied_at "
+            f"applied_at, application_status "
             f"FROM user_posting_overlay WHERE user_id=? AND posting_id IN ({placeholders})",
             (user_id, *posting_ids),
         ).fetchall()
         return {
-            r[0]: Overlay(r[1], r[2], r[3], bool(r[4]), r[5], r[6]) for r in rows
+            r[0]: Overlay(r[1], r[2], r[3], bool(r[4]), r[5], r[6], r[7]) for r in rows
         }
 
     def upsert_score(self, user_id: str, posting_id: str, score: float,
@@ -606,16 +607,33 @@ class OverlayRepo:
     def set_applied(self, user_id: str, posting_id: str, applied: bool) -> None:
         """Mark (or unmark) that the user has applied to this posting.
 
-        ``applied_at`` is the timestamp of the mark; clearing it (unmark) sets it
-        back to NULL. Visible everywhere the posting appears (feed/detail/saved)
-        and joined to drafts for the Applications list.
+        A thin wrapper over :meth:`set_application_status`: applying sets the
+        stage to ``'applied'`` (the funnel's entry point); unmarking clears the
+        stage entirely. Kept for the simple boolean callers (the /applied
+        endpoint) while richer stages go through set_application_status.
+        """
+        self.set_application_status(user_id, posting_id, "applied" if applied else None)
+
+    def set_application_status(
+        self, user_id: str, posting_id: str, status: str | None
+    ) -> None:
+        """Set (or clear) the application pipeline stage for this posting.
+
+        ``status`` is one of the pipeline stages (applied / interviewing / offer
+        / rejected) or ``None`` to clear it (not applied). ``applied_at`` tracks
+        the mark: set to now whenever a stage is present, back to NULL when
+        cleared — so ``applied`` stays derivable from it everywhere the posting
+        appears (feed / detail / saved) and on the Applications list.
         """
         ts = now_iso()
+        applied_at = ts if status else None
         self._c.execute(
             "INSERT INTO user_posting_overlay (user_id, posting_id, first_matched_at, "
-            "applied_at) VALUES (?,?,?,?) ON CONFLICT(user_id, posting_id) "
-            "DO UPDATE SET applied_at=excluded.applied_at",
-            (user_id, posting_id, ts, ts if applied else None),
+            "applied_at, application_status) VALUES (?,?,?,?,?) "
+            "ON CONFLICT(user_id, posting_id) DO UPDATE SET "
+            "applied_at=excluded.applied_at, "
+            "application_status=excluded.application_status",
+            (user_id, posting_id, ts, applied_at, status),
         )
         self._c.commit()
 
@@ -682,6 +700,7 @@ class DraftListItem:
     company: str | None
     url: str | None
     applied: bool = False
+    application_status: str | None = None
     status: str = "ready"
     error: str | None = None
 
@@ -796,7 +815,7 @@ class DraftRepo:
         rows = self._c.execute(
             "SELECT d.id, d.posting_id, d.job_source, d.key_source, d.created_at, "
             "p.title, p.company, COALESCE(d.source_url, p.url), o.applied_at, "
-            "d.status, d.error "
+            "d.status, d.error, o.application_status "
             "FROM drafts d LEFT JOIN postings p ON p.id = d.posting_id "
             "LEFT JOIN user_posting_overlay o "
             "  ON o.posting_id = d.posting_id AND o.user_id = d.user_id "
@@ -805,9 +824,33 @@ class DraftRepo:
         ).fetchall()
         return [
             DraftListItem(r[0], r[1], r[2], r[3], r[4], r[5], r[6], r[7],
-                          applied=bool(r[8]), status=r[9], error=r[10])
+                          applied=bool(r[8]), application_status=r[11],
+                          status=r[9], error=r[10])
             for r in rows
         ]
+
+    def application_status_counts(self, user_id: str) -> tuple[int, dict[str, int]]:
+        """Aggregate the user's applications by pipeline stage for the funnel.
+
+        Every draft counts as one application; a draft with no stage set is
+        folded into ``applied`` (submitted, awaiting a response). Returns
+        ``(total, counts)`` where ``counts`` sums to ``total``.
+        """
+        rows = self._c.execute(
+            "SELECT o.application_status, COUNT(*) "
+            "FROM drafts d LEFT JOIN user_posting_overlay o "
+            "  ON o.posting_id = d.posting_id AND o.user_id = d.user_id "
+            "WHERE d.user_id=? GROUP BY o.application_status",
+            (user_id,),
+        ).fetchall()
+        counts: dict[str, int] = {}
+        total = 0
+        for status, n in rows:
+            total += n
+            # NULL (never marked) reads as 'applied' — drafted and submitted,
+            # no progress signal yet.
+            counts[status or "applied"] = counts.get(status or "applied", 0) + n
+        return total, counts
 
     def update_content(self, draft_id: str, user_id: str, *,
                        resume_md: str | None = None,
