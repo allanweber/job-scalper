@@ -50,6 +50,7 @@ def _bearer(authorization: str | None) -> str:
 
 
 def current_user(
+    request: Request,
     ctx: RequestContext = Depends(get_ctx),
     authorization: str | None = Header(default=None),
 ) -> User:
@@ -65,6 +66,10 @@ def current_user(
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "user not found")
     if not user.is_active:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "account is suspended")
+    # Surface the authenticated user on the request so the logging middleware
+    # can attribute the request line (request.state survives the middleware
+    # boundary; a contextvar set here would not).
+    request.state.user_id = user.id
     return user
 
 

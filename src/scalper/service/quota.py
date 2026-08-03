@@ -85,3 +85,17 @@ class QuotaService:
         new_used = self._usage.increment(user.id, metric, self.period(), n)
         return QuotaStatus(metric=metric, limit=current.limit, used=new_used,
                            period=self.period())
+
+    def refund(self, user: User, metric: str, n: int = 1) -> None:
+        """Return up to `n` previously-consumed units for this period.
+
+        Quota is reserved up-front (before the LLM call); when that call fails,
+        the reservation should be released so a timeout/provider error doesn't
+        cost the user a credit. Never drives the counter below zero.
+        """
+        if metric not in _METRIC_SETTING_KEY:
+            raise ValueError(f"unknown quota metric: {metric!r}")
+        current = self._usage.get_count(user.id, metric, self.period())
+        if current <= 0:
+            return
+        self._usage.increment(user.id, metric, self.period(), -min(n, current))

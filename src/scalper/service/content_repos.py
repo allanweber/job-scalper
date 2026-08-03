@@ -48,6 +48,7 @@ class PoolPosting:
     published_at: str | None
     first_seen_at: str
     last_seen_at: str
+    timezone: str | None = None
     sources: list[str] = field(default_factory=list)
 
     def to_job_posting(self) -> JobPosting:
@@ -64,6 +65,7 @@ class PoolPosting:
             salary_min=self.salary_min,
             salary_max=self.salary_max,
             salary_currency=self.salary_currency,
+            timezone=self.timezone,
             published_at=_parse_dt(self.published_at),
         )
 
@@ -78,9 +80,17 @@ def _parse_dt(value: str | None) -> datetime | None:
         return None
 
 
+def _duration_seconds(started: str | None, finished: str | None) -> float | None:
+    """Wall-clock seconds between two ISO timestamps, or None if not both present."""
+    a, b = _parse_dt(started), _parse_dt(finished)
+    if a is None or b is None:
+        return None
+    return max(0.0, (b - a).total_seconds())
+
+
 _POSTING_COLS = (
     "id, company, title, description, location, remote, url, salary_min, "
-    "salary_max, salary_currency, published_at, first_seen_at, last_seen_at"
+    "salary_max, salary_currency, published_at, first_seen_at, last_seen_at, timezone"
 )
 
 
@@ -90,6 +100,7 @@ def _to_pool_posting(row: Any) -> PoolPosting:
         location=row[4], remote=bool(row[5]), url=row[6], salary_min=row[7],
         salary_max=row[8], salary_currency=row[9], published_at=row[10],
         first_seen_at=row[11], last_seen_at=row[12],
+        timezone=row[13] if len(row) > 13 else None,
     )
 
 
@@ -177,7 +188,7 @@ class PostingRepo:
         rows = self._c.execute(
             f"SELECT DISTINCT p.id, p.company, p.title, p.description, p.location, "
             f"p.remote, p.url, p.salary_min, p.salary_max, p.salary_currency, "
-            f"p.published_at, p.first_seen_at, p.last_seen_at "
+            f"p.published_at, p.first_seen_at, p.last_seen_at, p.timezone "
             f"FROM postings p JOIN posting_sources ps ON ps.posting_id = p.id "
             f"WHERE ps.source IN ({placeholders}) "
             f"ORDER BY p.last_seen_at DESC LIMIT ?",
@@ -525,10 +536,12 @@ class Overlay:
     seen_at: str | None
     saved: bool
     drafted_at: str | None
+    applied_at: str | None = None
 
 
 class OverlayRepo:
-    """Per-user overlay on the shared pool: score, "new" badge, saved, drafted."""
+    """Per-user overlay on the shared pool: score, "new" badge, saved, drafted,
+    applied."""
 
     def __init__(self, conn: Any):
         self._c = conn
@@ -538,12 +551,13 @@ class OverlayRepo:
             return {}
         placeholders = ",".join("?" for _ in posting_ids)
         rows = self._c.execute(
-            f"SELECT posting_id, score, first_matched_at, seen_at, saved, drafted_at "
+            f"SELECT posting_id, score, first_matched_at, seen_at, saved, drafted_at, "
+            f"applied_at "
             f"FROM user_posting_overlay WHERE user_id=? AND posting_id IN ({placeholders})",
             (user_id, *posting_ids),
         ).fetchall()
         return {
-            r[0]: Overlay(r[1], r[2], r[3], bool(r[4]), r[5]) for r in rows
+            r[0]: Overlay(r[1], r[2], r[3], bool(r[4]), r[5], r[6]) for r in rows
         }
 
     def upsert_score(self, user_id: str, posting_id: str, score: float,
@@ -586,6 +600,22 @@ class OverlayRepo:
             "drafted_at) VALUES (?,?,?,?) ON CONFLICT(user_id, posting_id) "
             "DO UPDATE SET drafted_at=excluded.drafted_at",
             (user_id, posting_id, ts, ts),
+        )
+        self._c.commit()
+
+    def set_applied(self, user_id: str, posting_id: str, applied: bool) -> None:
+        """Mark (or unmark) that the user has applied to this posting.
+
+        ``applied_at`` is the timestamp of the mark; clearing it (unmark) sets it
+        back to NULL. Visible everywhere the posting appears (feed/detail/saved)
+        and joined to drafts for the Applications list.
+        """
+        ts = now_iso()
+        self._c.execute(
+            "INSERT INTO user_posting_overlay (user_id, posting_id, first_matched_at, "
+            "applied_at) VALUES (?,?,?,?) ON CONFLICT(user_id, posting_id) "
+            "DO UPDATE SET applied_at=excluded.applied_at",
+            (user_id, posting_id, ts, ts if applied else None),
         )
         self._c.commit()
 
@@ -635,12 +665,31 @@ class Draft:
     key_source: str | None
     created_at: str
     updated_at: str
+    status: str = "ready"
+    error: str | None = None
+
+
+@dataclass
+class DraftListItem:
+    """A draft summary joined to its pool posting (Applications-tab list row)."""
+
+    id: str
+    posting_id: str | None
+    job_source: str
+    key_source: str | None
+    created_at: str
+    title: str | None
+    company: str | None
+    url: str | None
+    applied: bool = False
+    status: str = "ready"
+    error: str | None = None
 
 
 _DRAFT_COLS = (
     "id, user_id, profile_id, posting_id, job_source, source_url, resume_md, "
     "cover_letter_md, stretch_claims_md, provider, model, key_source, "
-    "created_at, updated_at"
+    "created_at, updated_at, status, error"
 )
 
 
@@ -674,6 +723,46 @@ class DraftRepo:
         self._c.commit()
         return did
 
+    def create_pending(self, user_id: str, *, posting_id: str | None,
+                       job_source: str = "pool", source_url: str | None = None) -> str:
+        """Insert an empty draft in the 'pending' state and return its id.
+
+        The row exists immediately so the client can show it and navigate to it;
+        the worker fills the content and flips it to 'ready' (or 'failed').
+        """
+        did = _new_id()
+        ts = now_iso()
+        self._c.execute(
+            "INSERT INTO drafts (id, user_id, posting_id, job_source, source_url, "
+            "status, created_at, updated_at) VALUES (?,?,?,?,?, 'pending', ?, ?)",
+            (did, user_id, posting_id, job_source, source_url, ts, ts),
+        )
+        self._c.commit()
+        return did
+
+    def mark_ready(self, draft_id: str, user_id: str, *, profile_id: str | None,
+                   resume_md: str, cover_letter_md: str,
+                   stretch_claims_md: str | None, provider: str | None,
+                   model: str | None, key_source: str | None) -> None:
+        """Fill a pending draft with generated content and mark it ready."""
+        self._c.execute(
+            "UPDATE drafts SET status='ready', error=NULL, profile_id=?, resume_md=?, "
+            "cover_letter_md=?, stretch_claims_md=?, provider=?, model=?, "
+            "key_source=?, updated_at=? WHERE id=? AND user_id=?",
+            (profile_id, resume_md, cover_letter_md, stretch_claims_md, provider,
+             model, key_source, now_iso(), draft_id, user_id),
+        )
+        self._c.commit()
+
+    def mark_failed(self, draft_id: str, user_id: str, error: str) -> None:
+        """Mark a pending draft failed, storing the reason for the client."""
+        self._c.execute(
+            "UPDATE drafts SET status='failed', error=?, updated_at=? "
+            "WHERE id=? AND user_id=?",
+            (error, now_iso(), draft_id, user_id),
+        )
+        self._c.commit()
+
     def get(self, draft_id: str, user_id: str) -> Draft | None:
         row = self._c.execute(
             f"SELECT {_DRAFT_COLS} FROM drafts WHERE id=? AND user_id=?",
@@ -696,6 +785,53 @@ class DraftRepo:
             "ORDER BY created_at DESC LIMIT ?", (user_id, limit),
         ).fetchall()
         return [_to_draft(r) for r in rows]
+
+    def list_summaries(self, user_id: str, *, limit: int = 50) -> list[DraftListItem]:
+        """Draft list rows for the Applications tab, joined to the pool posting.
+
+        `title`/`company` come from the shared pool via `posting_id`; they're
+        ``None`` when the posting has since been purged (the draft itself is
+        still the user's and remains readable).
+        """
+        rows = self._c.execute(
+            "SELECT d.id, d.posting_id, d.job_source, d.key_source, d.created_at, "
+            "p.title, p.company, COALESCE(d.source_url, p.url), o.applied_at, "
+            "d.status, d.error "
+            "FROM drafts d LEFT JOIN postings p ON p.id = d.posting_id "
+            "LEFT JOIN user_posting_overlay o "
+            "  ON o.posting_id = d.posting_id AND o.user_id = d.user_id "
+            "WHERE d.user_id=? ORDER BY d.created_at DESC LIMIT ?",
+            (user_id, limit),
+        ).fetchall()
+        return [
+            DraftListItem(r[0], r[1], r[2], r[3], r[4], r[5], r[6], r[7],
+                          applied=bool(r[8]), status=r[9], error=r[10])
+            for r in rows
+        ]
+
+    def update_content(self, draft_id: str, user_id: str, *,
+                       resume_md: str | None = None,
+                       cover_letter_md: str | None = None) -> "Draft | None":
+        """Persist edited resume/cover-letter markdown for a user's own draft.
+
+        Only the provided fields are changed. Any stale rendered PDF for an edited
+        document is cleared so a download never serves text that no longer matches
+        the markdown. Returns the updated draft, or None if it isn't the user's.
+        """
+        sets, args = ["updated_at=?"], [now_iso()]
+        if resume_md is not None:
+            sets += ["resume_md=?", "resume_pdf=NULL"]
+            args.append(resume_md)
+        if cover_letter_md is not None:
+            sets += ["cover_letter_md=?", "cover_letter_pdf=NULL"]
+            args.append(cover_letter_md)
+        args += [draft_id, user_id]
+        cur = self._c.execute(
+            f"UPDATE drafts SET {', '.join(sets)} WHERE id=? AND user_id=?", tuple(args))
+        self._c.commit()
+        if not cur.rowcount:
+            return None
+        return self.get(draft_id, user_id)
 
 
 # --------------------------------------------------------------------------- async jobs
@@ -830,6 +966,35 @@ class AuditRepo:
 # --------------------------------------------------------------------------- LLM ledger
 
 
+@dataclass
+class UsageEvent:
+    """One LLM call in the ledger, joined to its user + the job that ran it."""
+
+    id: str
+    user_id: str
+    user_email: str | None
+    ts: str
+    action: str
+    provider: str
+    model: str
+    key_source: str
+    input_tokens: int
+    output_tokens: int
+    est_cost_usd: float | None
+    job_id: str | None
+    started_at: str | None
+    finished_at: str | None
+    job_status: str | None
+
+    @property
+    def total_tokens(self) -> int:
+        return (self.input_tokens or 0) + (self.output_tokens or 0)
+
+    @property
+    def duration_seconds(self) -> float | None:
+        return _duration_seconds(self.started_at, self.finished_at)
+
+
 class LLMUsageRepo:
     """Detailed per-user token/cost ledger (admin visibility + cost tracking)."""
 
@@ -854,3 +1019,49 @@ class LLMUsageRepo:
             "FROM llm_usage_events WHERE user_id=?", (user_id,),
         ).fetchone()
         return row[0] if row else 0
+
+    _EVENT_SELECT = (
+        "SELECT e.id, e.user_id, u.email, e.ts, e.action, e.provider, e.model, "
+        "e.key_source, e.input_tokens, e.output_tokens, e.est_cost_usd, e.job_id, "
+        "j.started_at, j.finished_at, j.status "
+        "FROM llm_usage_events e "
+        "LEFT JOIN users u ON u.id = e.user_id "
+        "LEFT JOIN jobs j ON j.id = e.job_id"
+    )
+
+    def list_recent(self, *, limit: int = 100, action: str | None = None,
+                    user_id: str | None = None) -> list[UsageEvent]:
+        """Most-recent LLM events (newest first), joined to user email + job timing.
+
+        Optionally scoped to one `action` (e.g. 'draft') and/or one `user_id`.
+        """
+        where, params = [], []
+        if action:
+            where.append("e.action = ?"); params.append(action)
+        if user_id:
+            where.append("e.user_id = ?"); params.append(user_id)
+        clause = (" WHERE " + " AND ".join(where)) if where else ""
+        rows = self._c.execute(
+            f"{self._EVENT_SELECT}{clause} ORDER BY e.ts DESC LIMIT ?",
+            (*params, limit),
+        ).fetchall()
+        return [UsageEvent(*r) for r in rows]
+
+    def summary(self, *, action: str | None = None,
+                user_id: str | None = None) -> dict[str, Any]:
+        """Aggregate counts/tokens/cost over the ledger, optionally filtered."""
+        where, params = [], []
+        if action:
+            where.append("action = ?"); params.append(action)
+        if user_id:
+            where.append("user_id = ?"); params.append(user_id)
+        clause = (" WHERE " + " AND ".join(where)) if where else ""
+        row = self._c.execute(
+            "SELECT COUNT(*), COALESCE(SUM(input_tokens), 0), "
+            "COALESCE(SUM(output_tokens), 0), COALESCE(SUM(est_cost_usd), 0) "
+            f"FROM llm_usage_events{clause}",
+            tuple(params),
+        ).fetchone()
+        events, in_tok, out_tok, cost = row
+        return {"events": events, "input_tokens": in_tok, "output_tokens": out_tok,
+                "total_tokens": in_tok + out_tok, "cost_usd": cost}

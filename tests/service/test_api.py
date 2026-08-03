@@ -118,21 +118,152 @@ def _seed_user_content(conn):
     return user, p.dedup_key
 
 
+def test_posting_detail_returns_description_and_breakdown(client, auth_headers, conn):
+    client.get("/me", headers=auth_headers)
+    _user, pid = _seed_user_content(conn)
+    r = client.get(f"/postings/{pid}", headers=auth_headers)
+    assert r.status_code == 200
+    body = r.json()
+    # The feed omits the description; the detail endpoint carries it.
+    assert body["description"] == "python fastapi backend remote"
+    assert body["score"] > 0
+    assert "python" in body["matched_skills"]
+
+
+def test_posting_detail_unknown_404(client, auth_headers):
+    assert client.get("/postings/nope", headers=auth_headers).status_code == 404
+
+
+def test_draft_edit_persists(client, auth_headers, conn):
+    client.get("/me", headers=auth_headers)
+    _user, pid = _seed_user_content(conn)
+    r = client.post("/drafts", headers=auth_headers, json={"posting_id": pid})
+    assert r.status_code == 201
+    draft_id = r.json()["id"]
+    upd = client.put(f"/drafts/{draft_id}", headers=auth_headers,
+                     json={"resume_md": "# Edited Resume"})
+    assert upd.status_code == 200 and upd.json()["resume_md"] == "# Edited Resume"
+    # Persisted across a fresh GET.
+    assert client.get(f"/drafts/{draft_id}",
+                      headers=auth_headers).json()["resume_md"] == "# Edited Resume"
+
+
+def test_draft_edit_requires_a_field(client, auth_headers, conn):
+    client.get("/me", headers=auth_headers)
+    _user, pid = _seed_user_content(conn)
+    r = client.post("/drafts", headers=auth_headers, json={"posting_id": pid})
+    draft_id = r.json()["id"]
+    assert client.put(f"/drafts/{draft_id}", headers=auth_headers,
+                      json={}).status_code == 422
+
+
+def test_draft_edit_other_user_404(client, auth_headers, conn):
+    assert client.put("/drafts/nope", headers=auth_headers,
+                      json={"resume_md": "x"}).status_code == 404
+
+
+def test_import_url_pools_and_returns_detail(container, conn):
+    from fastapi.testclient import TestClient
+
+    from scalper.service.app import create_app
+
+    html = ("<html><head><title>Staff Backend Engineer</title>"
+            "<meta property='og:site_name' content='Finch Payments'>"
+            "<meta property='og:description' content='Build payment APIs in python.'>"
+            "</head><body>Remote role. Salary $120,000 - 150,000. python fastapi</body></html>")
+    container.url_fetcher = lambda url: html
+    with TestClient(create_app(container)) as c:
+        h = {"Authorization": f"Bearer "
+             f"{c.post('/auth/google', json={'id_token': 'good'}).json()['tokens']['access_token']}"}
+        r = c.post("/import/url", headers=h,
+                   json={"url": "https://finchpayments.example/jobs/42"})
+        assert r.status_code == 201, r.text
+        body = r.json()
+        assert body["title"] == "Staff Backend Engineer"
+        assert body["company"] == "Finch Payments"
+        assert body["remote"] is True
+        assert body["salary_min"] == 120000 and body["salary_max"] == 150000
+        # Now fetchable by its pool id.
+        assert c.get(f"/postings/{body['posting_id']}", headers=h).status_code == 200
+
+
+def test_import_url_rejects_unfetchable(container):
+    from fastapi.testclient import TestClient
+
+    from scalper.service.app import create_app
+    from scalper.service.url_import import UrlImportError
+
+    def _boom(url):
+        raise UrlImportError("could not fetch the page")
+
+    container.url_fetcher = _boom
+    with TestClient(create_app(container)) as c:
+        h = {"Authorization": f"Bearer "
+             f"{c.post('/auth/google', json={'id_token': 'good'}).json()['tokens']['access_token']}"}
+        r = c.post("/import/url", headers=h, json={"url": "https://x.example/j"})
+        assert r.status_code == 422
+
+
 def test_feed_and_draft_flow(client, auth_headers, conn):
     client.get("/me", headers=auth_headers)  # ensure user row exists
     _user, pid = _seed_user_content(conn)
     client.put("/me/sources", headers=auth_headers, json={"sources": ["remotive"]})
     feed = client.get("/feed", headers=auth_headers).json()
     assert feed["count"] == 1 and feed["items"][0]["posting_id"] == pid
-    # draft (eager job)
+    # draft — the row is returned immediately; the eager job fills it inline, so
+    # by the time the request returns it's already 'ready' with content.
     r = client.post("/drafts", headers=auth_headers, json={"posting_id": pid})
-    assert r.status_code == 202
-    job = client.get(f"/jobs/{r.json()['job_id']}", headers=auth_headers).json()
-    assert job["status"] == "succeeded"
-    draft_id = job["result"]["draft_id"]
+    assert r.status_code == 201
+    created = r.json()
+    assert created["status"] == "ready"
+    draft_id = created["id"]
+    assert created["resume_md"].startswith("# Jane")
     d = client.get(f"/drafts/{draft_id}", headers=auth_headers).json()
     assert d["resume_md"].startswith("# Jane")
-    assert len(client.get("/drafts", headers=auth_headers).json()) == 1
+    listing = client.get("/drafts", headers=auth_headers).json()
+    assert len(listing) == 1
+    # The Applications list is joined to the pool posting for a readable row.
+    assert listing[0]["title"] == "Senior Python Engineer"
+    assert listing[0]["company"] == "Acme"
+    assert listing[0]["url"]  # the posting URL, for an Apply link
+    assert listing[0]["status"] == "ready"
+
+
+def test_mark_applied_visible_everywhere(client, auth_headers, conn):
+    client.get("/me", headers=auth_headers)
+    _user, pid = _seed_user_content(conn)
+    client.put("/me/sources", headers=auth_headers, json={"sources": ["remotive"]})
+    r = client.post("/drafts", headers=auth_headers, json={"posting_id": pid})
+    draft_id = r.json()["id"]
+
+    # Not applied to begin with — on every surface.
+    assert client.get(f"/drafts/{draft_id}", headers=auth_headers).json()["applied"] is False
+    assert client.get("/drafts", headers=auth_headers).json()[0]["applied"] is False
+    assert client.get(f"/postings/{pid}", headers=auth_headers).json()["applied"] is False
+    assert client.get("/feed", headers=auth_headers).json()["items"][0]["applied"] is False
+
+    # Mark applied from the draft detail screen.
+    up = client.put(f"/drafts/{draft_id}/applied", headers=auth_headers,
+                    json={"applied": True})
+    assert up.status_code == 200 and up.json()["applied"] is True
+
+    # Now visible as applied everywhere the posting shows up.
+    assert client.get(f"/drafts/{draft_id}", headers=auth_headers).json()["applied"] is True
+    assert client.get("/drafts", headers=auth_headers).json()[0]["applied"] is True
+    assert client.get(f"/postings/{pid}", headers=auth_headers).json()["applied"] is True
+    assert client.get("/feed", headers=auth_headers).json()["items"][0]["applied"] is True
+
+    # Unmark — clears back to not-applied everywhere.
+    down = client.put(f"/drafts/{draft_id}/applied", headers=auth_headers,
+                      json={"applied": False})
+    assert down.status_code == 200 and down.json()["applied"] is False
+    assert client.get(f"/postings/{pid}", headers=auth_headers).json()["applied"] is False
+    assert client.get("/feed", headers=auth_headers).json()["items"][0]["applied"] is False
+
+
+def test_mark_applied_other_user_404(client, auth_headers):
+    assert client.put("/drafts/nope/applied", headers=auth_headers,
+                      json={"applied": True}).status_code == 404
 
 
 def test_draft_blocked_when_quota_exhausted(client, auth_headers, conn, settings):
@@ -147,6 +278,22 @@ def test_draft_blocked_when_quota_exhausted(client, auth_headers, conn, settings
 def test_draft_unknown_posting_404(client, auth_headers):
     assert client.post("/drafts", headers=auth_headers,
                        json={"posting_id": "nope"}).status_code == 404
+
+
+def test_draft_marked_failed_when_no_resume(client, auth_headers, conn):
+    """A drafting failure flips the pending row to 'failed' with the reason,
+    rather than leaving it stuck pending — so the client stops polling."""
+    client.get("/me", headers=auth_headers)  # user row, but no resume/profile
+    p = posting("remotive", "z", company="Zed", title="Backend Engineer",
+                description="python remote")
+    PostingRepo(conn).ingest([p])
+    r = client.post("/drafts", headers=auth_headers, json={"posting_id": p.dedup_key})
+    assert r.status_code == 201
+    body = r.json()
+    assert body["status"] == "failed"
+    assert "resume" in (body["error"] or "").lower()
+    # Visible as failed on the Applications list too.
+    assert client.get("/drafts", headers=auth_headers).json()[0]["status"] == "failed"
 
 
 # --- jobs isolation ---

@@ -40,6 +40,7 @@ services:
     command: >
       uvicorn --factory scalper.service.app:create_app
       --host 0.0.0.0 --port 8080 --proxy-headers --forwarded-allow-ips=*
+      --no-access-log
     expose:
       - "8080"
 
@@ -48,6 +49,7 @@ services:
     command: >
       uvicorn --factory scalper.admin.app:create_admin_app
       --host 0.0.0.0 --port 8081 --proxy-headers --forwarded-allow-ips=*
+      --no-access-log
     expose:
       - "8081"
 
@@ -58,6 +60,15 @@ services:
   scheduler:
     <<: *app
     command: ["scalper-scheduler"]
+
+  pdf-service:
+    build:
+      context: ./pdf-service
+    restart: unless-stopped
+    expose:
+      - "8090"
+    networks:
+      - internal
 
   cloudflared:
     image: cloudflare/cloudflared:latest

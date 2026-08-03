@@ -30,4 +30,4 @@ EXPOSE 8080 8081
 # Default to the public API; compose overrides `command` per service.
 CMD ["uvicorn", "--factory", "scalper.service.app:create_app", \
      "--host", "0.0.0.0", "--port", "8080", \
-     "--proxy-headers", "--forwarded-allow-ips=*"]
+     "--proxy-headers", "--forwarded-allow-ips=*", "--no-access-log"]

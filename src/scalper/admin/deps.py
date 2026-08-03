@@ -77,6 +77,8 @@ def current_admin(request: Request, ctx: AdminContext = Depends(get_admin_ctx)) 
         if sid:
             ctx.admin.sessions.delete(sid)
         raise _Redirect("/login")
+    # Attribute the request line to this admin (see logging middleware).
+    request.state.user_id = user.id
     return user
 
 

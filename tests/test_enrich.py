@@ -76,6 +76,24 @@ def test_parse_unparseable_falls_back_to_none():
     assert _parse("totally not json").remote is None
 
 
+def test_parse_key_requirements_and_red_flags():
+    enr = _parse('{"remote": true, "seniority": "staff", '
+                 '"key_requirements": ["8+ yrs python", "distributed systems"], '
+                 '"red_flags": ["on-call heavy"]}')
+    assert enr.key_requirements == ["8+ yrs python", "distributed systems"]
+    assert enr.red_flags == ["on-call heavy"]
+
+
+def test_parse_defaults_new_lists_to_empty():
+    enr = _parse('{"remote": true}')
+    assert enr.key_requirements == [] and enr.red_flags == []
+
+
+def test_parse_coerces_scalar_lists():
+    enr = _parse('{"key_requirements": "python", "red_flags": null}')
+    assert enr.key_requirements == ["python"] and enr.red_flags == []
+
+
 def test_parse_non_bool_remote_is_none():
     # The model must answer with a real boolean; anything else → undeterminable.
     assert _parse('{"remote": "yes"}').remote is None

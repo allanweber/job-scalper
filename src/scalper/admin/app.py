@@ -32,7 +32,18 @@ from scalper.admin.deps import (
 )
 from scalper.admin.oauth import OAuthError
 from scalper.db import apply_pending
-from scalper.service.content_repos import AuditRepo, JobRepo, LLMUsageRepo, PostingRepo
+from scalper.service.content_repos import (
+    AuditRepo,
+    JobRepo,
+    LLMUsageRepo,
+    PostingRepo,
+    UserSourceRepo,
+)
+from scalper.service.logging_setup import (
+    RequestLoggingMiddleware,
+    configure_logging,
+    unhandled_exception_handler,
+)
 from scalper.service.jobs import KIND_PURGE, KIND_SCRAPE, JobQueue
 from scalper.service.models import User
 from scalper.service.quota import METRICS
@@ -40,9 +51,26 @@ from scalper.service.repositories import QuotaOverrideRepo, UserRepo
 
 _STATE_COOKIE = "scalper_admin_state"
 _PLANS = ["free", "pro"]
+_FREE_MAX_SOURCES = 3
 
 _env = Environment(loader=PackageLoader("scalper.admin", "templates"),
                    autoescape=select_autoescape(["html"]))
+
+#: LLM actions surfaced on the usage page (order = filter chip order).
+_USAGE_ACTIONS = ["draft", "profile_build", "enrich"]
+
+
+def _fmt_duration(seconds: float | None) -> str:
+    if seconds is None:
+        return "—"
+    if seconds < 1:
+        return f"{int(seconds * 1000)}ms"
+    return f"{seconds:.1f}s"
+
+
+_env.filters["usd"] = lambda v: "—" if v is None else f"${v:,.4f}"
+_env.filters["commas"] = lambda v: f"{int(v or 0):,}"
+_env.filters["dur"] = _fmt_duration
 
 
 def _base_url(ctx: AdminContext, request: Request) -> str:
@@ -66,6 +94,7 @@ def _audit(ctx: AdminContext, admin: User, action: str, **kw: Any) -> None:
 
 
 def create_admin_app(admin_container: AdminContainer | None = None) -> FastAPI:
+    configure_logging()
     admin_container = admin_container or AdminContainer.from_env()
 
     conn = admin_container.service.connect()
@@ -76,6 +105,8 @@ def create_admin_app(admin_container: AdminContainer | None = None) -> FastAPI:
 
     app = FastAPI(title="Job Scalper Admin", docs_url=None, redoc_url=None, openapi_url=None)
     app.state.admin = admin_container
+    app.add_middleware(RequestLoggingMiddleware)
+    app.add_exception_handler(Exception, unhandled_exception_handler)
 
     @app.exception_handler(_Redirect)
     async def _on_redirect(_request: Request, exc: _Redirect):
@@ -168,9 +199,15 @@ def create_admin_app(admin_container: AdminContainer | None = None) -> FastAPI:
             return redirect("/users?flash=" + quote("User not found."))
         overrides = {m: v for m in METRICS
                      if (v := QuotaOverrideRepo(ctx.conn).get(user_id, m)) is not None}
+        enabled_sources = list(ctx.settings.get("sources.enabled", []) or [])
+        chosen = UserSourceRepo(ctx.conn).list_for(user_id)
+        source_defaults = list(ctx.settings.get("sources.default", []) or [])
         return _render(request, "user_detail.html", admin=admin, active="users", u=u,
                        plans=_PLANS, metrics=list(METRICS), overrides=overrides,
-                       tokens_used=LLMUsageRepo(ctx.conn).total_tokens_for(user_id))
+                       tokens_used=LLMUsageRepo(ctx.conn).total_tokens_for(user_id),
+                       enabled_sources=enabled_sources, chosen_sources=chosen,
+                       source_defaults=source_defaults,
+                       free_max_sources=_FREE_MAX_SOURCES)
 
     @app.post("/users/{user_id}/plan")
     def set_plan(user_id: str, plan: str = Form(...),
@@ -203,6 +240,24 @@ def create_admin_app(admin_container: AdminContainer | None = None) -> FastAPI:
         _audit(ctx, admin, "user.quota", target_type="user", target_id=user_id,
                after=changed)
         return _flash_redirect(f"/users/{user_id}", "Quota overrides saved.")
+
+    @app.post("/users/{user_id}/sources")
+    async def set_sources(user_id: str, request: Request,
+                          ctx: AdminContext = Depends(get_admin_ctx),
+                          admin: User = Depends(current_admin)):
+        u = UserRepo(ctx.conn).get(user_id)
+        if u is None:
+            return redirect("/users")
+        form = await request.form()
+        # The form sends a checkbox per enabled source; unchecked = absent.
+        enabled_sources = set(ctx.settings.get("sources.enabled", []) or [])
+        chosen = [s for s in (form.getlist("sources") or [])
+                  if s in enabled_sources]
+        old = UserSourceRepo(ctx.conn).list_for(user_id)
+        UserSourceRepo(ctx.conn).set_for(user_id, chosen)
+        _audit(ctx, admin, "user.sources", target_type="user", target_id=user_id,
+               before={"sources": old}, after={"sources": chosen})
+        return _flash_redirect(f"/users/{user_id}", "Sources updated.")
 
     @app.post("/users/{user_id}/suspend")
     def suspend(user_id: str, ctx: AdminContext = Depends(get_admin_ctx),
@@ -298,6 +353,24 @@ def create_admin_app(admin_container: AdminContainer | None = None) -> FastAPI:
         _audit(ctx, admin, "job.retry", target_type="job", target_id=jid,
                before={"of": job_id})
         return _flash_redirect("/jobs", "Job re-enqueued.")
+
+    # -- LLM usage / activity (per-draft metrics: tokens, cost, duration) --
+
+    @app.get("/usage", response_class=HTMLResponse)
+    def usage_page(request: Request, action: str | None = None,
+                   ctx: AdminContext = Depends(get_admin_ctx),
+                   admin: User = Depends(current_admin)):
+        repo = LLMUsageRepo(ctx.conn)
+        action = action if action in _USAGE_ACTIONS else None
+        events = repo.list_recent(limit=100, action=action)
+        summary = repo.summary(action=action)
+        durations = [e.duration_seconds for e in events
+                     if e.duration_seconds is not None]
+        summary["avg_duration"] = (sum(durations) / len(durations)
+                                   if durations else None)
+        return _render(request, "usage.html", admin=admin, active="usage",
+                       events=events, summary=summary, action=action or "",
+                       actions=_USAGE_ACTIONS)
 
     # -- postings (browse the scraped job pool) --
 

@@ -69,3 +69,23 @@ def test_record_usage_writes_ledger(conn, settings, vault):
     d = r.resolve(user.id, "draft")
     r.record_usage(user.id, action="draft", decision=d, input_tokens=5, output_tokens=7)
     assert LLMUsageRepo(conn).total_tokens_for(user.id) == 12
+
+
+def test_record_usage_estimates_cost(conn, settings, vault):
+    user = _user(conn)
+    r = _router(conn, settings, vault, environ={"SCALPER_PLATFORM_ANTHROPIC_KEY": "k"})
+    d = r.resolve(user.id, "draft")  # platform model claude-haiku-4-5 ($1/$5 per Mtok)
+    r.record_usage(user.id, action="draft", decision=d,
+                   input_tokens=1000, output_tokens=2000)
+    event = LLMUsageRepo(conn).list_recent()[0]
+    assert event.est_cost_usd == 0.011  # (1000*1 + 2000*5)/1e6
+
+
+def test_record_usage_cost_uses_price_overrides(conn, settings, vault):
+    settings.set("llm.model_prices", {"claude-haiku-4-5": {"input": 10.0, "output": 0.0}})
+    user = _user(conn)
+    r = _router(conn, settings, vault, environ={"SCALPER_PLATFORM_ANTHROPIC_KEY": "k"})
+    d = r.resolve(user.id, "draft")
+    r.record_usage(user.id, action="draft", decision=d,
+                   input_tokens=1_000_000, output_tokens=0)
+    assert LLMUsageRepo(conn).list_recent()[0].est_cost_usd == 10.0
