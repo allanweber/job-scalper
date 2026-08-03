@@ -375,6 +375,124 @@ def test_new_stages_accepted(client, auth_headers, conn):
         assert up.status_code == 200 and up.json()["application_status"] == stage
 
 
+def test_notification_prefs_defaults_and_update(client, auth_headers):
+    client.get("/me", headers=auth_headers)  # ensure user row
+    # Defaults mirror the onboarding promise: alerts on, notify at 90+.
+    p = client.get("/me/notifications", headers=auth_headers).json()
+    assert p == {"match_alerts": True, "min_score": 90}
+    up = client.put("/me/notifications", headers=auth_headers,
+                    json={"match_alerts": False, "min_score": 80})
+    assert up.status_code == 200
+    assert up.json() == {"match_alerts": False, "min_score": 80}
+    assert client.get("/me/notifications", headers=auth_headers).json()["min_score"] == 80
+
+
+def test_notification_prefs_validates_score(client, auth_headers):
+    client.get("/me", headers=auth_headers)
+    assert client.put("/me/notifications", headers=auth_headers,
+                      json={"min_score": 150}).status_code == 422
+
+
+def test_register_and_unregister_device(client, auth_headers):
+    client.get("/me", headers=auth_headers)
+    r = client.post("/me/devices", headers=auth_headers,
+                    json={"token": "tok-1", "platform": "android"})
+    assert r.status_code == 200
+    # Re-registering the same token is idempotent.
+    assert client.post("/me/devices", headers=auth_headers,
+                       json={"token": "tok-1", "platform": "android"}).status_code == 200
+    assert client.request("DELETE", "/me/devices/tok-1",
+                          headers=auth_headers).status_code == 200
+
+
+def test_register_device_requires_token(client, auth_headers):
+    client.get("/me", headers=auth_headers)
+    assert client.post("/me/devices", headers=auth_headers,
+                       json={"token": ""}).status_code == 422
+
+
+class _FakeSender:
+    """Records notification sends; reports one token as unregistered."""
+
+    def __init__(self, invalid=()):
+        self.calls = []
+        self._invalid = list(invalid)
+
+    def send(self, tokens, *, title, body, data):
+        from scalper.service.push import SendResult
+        self.calls.append({"tokens": list(tokens), "title": title,
+                           "body": body, "data": data})
+        invalid = [t for t in tokens if t in self._invalid]
+        return SendResult(sent=len(tokens) - len(invalid), invalid_tokens=invalid)
+
+
+def _prime_notify_user(conn):
+    """Seed a user with a profile, a matching pooled posting, sources, prefs,
+    and a device — everything run_notify needs to push one match."""
+    from scalper.service.content_repos import UserSourceRepo
+    from scalper.service.push_repos import NotificationPrefsRepo, PushDeviceRepo
+
+    user, pid = _seed_user_content(conn)
+    UserSourceRepo(conn).set_for(user.id, ["remotive"])
+    # Low threshold so the test doesn't depend on the exact match score.
+    NotificationPrefsRepo(conn).upsert(user.id, match_alerts=True, min_score=1)
+    PushDeviceRepo(conn).register(user.id, "tok-1", "android")
+    return user, pid
+
+
+def test_run_notify_pushes_new_matches_once(client, auth_headers, container, conn):
+    from scalper.service.content_repos import JobRepo
+    from scalper.service.jobs import run_notify
+
+    client.get("/me", headers=auth_headers)  # create the user row
+    _user, pid = _prime_notify_user(conn)
+    fake = _FakeSender()
+    container.push_sender = fake
+
+    jid = JobRepo(conn).create("notify", user_id=None)
+    res = run_notify(container, conn, jid, {})
+    assert res["users_notified"] == 1 and res["pushes"] == 1
+    assert fake.calls[0]["tokens"] == ["tok-1"]
+    assert fake.calls[0]["data"] == {"type": "match", "posting_id": pid}
+
+    # Dedup: the same match is not pushed again.
+    res2 = run_notify(container, conn, jid, {})
+    assert res2["users_notified"] == 0
+    assert len(fake.calls) == 1
+
+
+def test_run_notify_skips_when_alerts_off(client, auth_headers, container, conn):
+    from scalper.service.content_repos import JobRepo
+    from scalper.service.jobs import run_notify
+    from scalper.service.push_repos import NotificationPrefsRepo
+
+    client.get("/me", headers=auth_headers)
+    user, _pid = _prime_notify_user(conn)
+    NotificationPrefsRepo(conn).upsert(user.id, match_alerts=False, min_score=1)
+    fake = _FakeSender()
+    container.push_sender = fake
+
+    jid = JobRepo(conn).create("notify", user_id=None)
+    res = run_notify(container, conn, jid, {})
+    assert res["users_notified"] == 0 and not fake.calls
+
+
+def test_run_notify_prunes_invalid_tokens(client, auth_headers, container, conn):
+    from scalper.service.content_repos import JobRepo
+    from scalper.service.jobs import run_notify
+    from scalper.service.push_repos import PushDeviceRepo
+
+    client.get("/me", headers=auth_headers)
+    user, _pid = _prime_notify_user(conn)
+    fake = _FakeSender(invalid=["tok-1"])
+    container.push_sender = fake
+
+    jid = JobRepo(conn).create("notify", user_id=None)
+    run_notify(container, conn, jid, {})
+    # The token FCM rejected is removed so it isn't tried again.
+    assert PushDeviceRepo(conn).tokens_for(user.id) == []
+
+
 def test_draft_blocked_when_quota_exhausted(client, auth_headers, conn, settings):
     client.get("/me", headers=auth_headers)
     _user, pid = _seed_user_content(conn)

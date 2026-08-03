@@ -4,6 +4,8 @@ plugins {
     id("com.android.application")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
+    // Firebase: reads google-services.json to configure FCM at build time.
+    id("com.google.gms.google-services")
 }
 
 // Optional release signing: CI writes android/key.properties from secrets when a

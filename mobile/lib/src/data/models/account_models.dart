@@ -263,3 +263,23 @@ class JobRecord {
         error: j['error'] as String?,
       );
 }
+
+/// Notification preferences (`GET/PUT /me/notifications`): whether to send
+/// new-match alerts and the minimum match score that triggers one.
+class NotificationPrefs {
+  const NotificationPrefs({required this.matchAlerts, required this.minScore});
+
+  final bool matchAlerts;
+  final int minScore;
+
+  NotificationPrefs copyWith({bool? matchAlerts, int? minScore}) =>
+      NotificationPrefs(
+        matchAlerts: matchAlerts ?? this.matchAlerts,
+        minScore: minScore ?? this.minScore,
+      );
+
+  factory NotificationPrefs.fromJson(Map<String, dynamic> j) => NotificationPrefs(
+        matchAlerts: (j['match_alerts'] as bool?) ?? true,
+        minScore: (j['min_score'] as num?)?.toInt() ?? 90,
+      );
+}

@@ -47,6 +47,7 @@ KIND_DRAFT = "draft"
 KIND_ENRICH = "enrich"
 KIND_SCRAPE = "scrape"
 KIND_PURGE = "purge"
+KIND_NOTIFY = "notify"
 
 USER_KINDS = {KIND_PROFILE, KIND_DRAFT, KIND_ENRICH}
 
@@ -241,12 +242,74 @@ def run_enrich(container: "Container", conn: Any, job_id: str, user_id: str,
 
 def run_scrape(container: "Container", conn: Any, job_id: str,
                params: dict[str, Any]) -> dict[str, Any]:
-    """System job: fill the shared pool (scheduled or admin 'run now')."""
+    """System job: fill the shared pool (scheduled or admin 'run now').
+
+    After ingest, chains a notify job so users get pushed about the new matches
+    the scrape surfaced. A notify failure never fails the scrape.
+    """
     from scalper.service.ingest import Ingestor
 
     settings = container.settings(conn)
     ing = Ingestor(conn, settings, adapter_builder=container.adapter_builder)
-    return ing.run(sources=params.get("sources"), terms=params.get("terms"))
+    result = ing.run(sources=params.get("sources"), terms=params.get("terms"))
+    try:
+        JobQueue(container).enqueue(conn, KIND_NOTIFY, user_id=None, params={})
+    except Exception:  # noqa: BLE001 — notifications are best-effort
+        _log.warning("post-scrape notify enqueue failed", exc_info=True)
+    return result
+
+
+def run_notify(container: "Container", conn: Any, job_id: str,
+               params: dict[str, Any]) -> dict[str, Any]:
+    """System job: push each opted-in user their new high-score matches.
+
+    For every active user with a registered device and match alerts on, score
+    their pool matches (reusing the feed), take those at/above their threshold
+    that we haven't pushed before, and send one summary notification — then mark
+    those postings notified so nobody is pinged twice. Stale tokens FCM rejects
+    are pruned.
+    """
+    from scalper.service.content_repos import OverlayRepo
+    from scalper.service.feed import FeedService
+    from scalper.service.push_repos import NotificationPrefsRepo, PushDeviceRepo
+
+    settings = container.settings(conn)
+    sender = container.push_sender
+    devices = PushDeviceRepo(conn)
+    prefs_repo = NotificationPrefsRepo(conn)
+    overlay = OverlayRepo(conn)
+
+    users_notified = 0
+    pushes = 0
+    for user_id in devices.user_ids_with_devices():
+        prefs = prefs_repo.get(user_id)
+        if not prefs.match_alerts:
+            continue
+        tokens = devices.tokens_for(user_id)
+        if not tokens:
+            continue
+        items = FeedService(conn, settings).build(
+            user_id, limit=50, min_score=prefs.min_score)
+        if not items:
+            continue
+        already = overlay.notified_posting_ids(user_id, [it.posting_id for it in items])
+        fresh = [it for it in items if it.posting_id not in already]
+        if not fresh:
+            continue
+        top = fresh[0]
+        n = len(fresh)
+        title = f"{n} new match{'es' if n != 1 else ''}"
+        lead = "Top: " if n != 1 else ""
+        body = f"{lead}{top.title} at {top.company} · {top.score} match"
+        res = sender.send(tokens, title=title, body=body,
+                          data={"type": "match", "posting_id": top.posting_id})
+        for tok in res.invalid_tokens:
+            devices.delete_token(tok)
+        for it in fresh:
+            overlay.mark_notified(user_id, it.posting_id)
+        users_notified += 1
+        pushes += res.sent
+    return {"users_notified": users_notified, "pushes": pushes}
 
 
 def run_purge(container: "Container", conn: Any, job_id: str,
@@ -283,6 +346,8 @@ def execute(container: "Container", job_id: str) -> None:
                                              rec.params)
             elif rec.kind == KIND_SCRAPE:
                 result = run_scrape(container, conn, job_id, rec.params)
+            elif rec.kind == KIND_NOTIFY:
+                result = run_notify(container, conn, job_id, rec.params)
             elif rec.kind == KIND_PURGE:
                 result = run_purge(container, conn, job_id, rec.params)
             else:

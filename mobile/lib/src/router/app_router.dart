@@ -16,6 +16,7 @@ import '../features/profile/appearance_screen.dart';
 import '../features/profile/boards_screen.dart';
 import '../features/profile/delete_account_screen.dart';
 import '../features/profile/llm_key_screen.dart';
+import '../features/profile/notifications_screen.dart';
 import '../features/profile/profile_edit_screen.dart';
 import '../features/profile/profile_screen.dart';
 import '../features/profile/resume_screen.dart';
@@ -106,6 +107,9 @@ final routerProvider = Provider<GoRouter>((ref) {
                     path: 'boards', builder: (_, _) => const BoardsScreen()),
                 GoRoute(path: 'key', builder: (_, _) => const LlmKeyScreen()),
                 GoRoute(path: 'usage', builder: (_, _) => const UsageScreen()),
+                GoRoute(
+                    path: 'notifications',
+                    builder: (_, _) => const NotificationsScreen()),
                 GoRoute(
                     path: 'appearance',
                     builder: (_, _) => const AppearanceScreen()),

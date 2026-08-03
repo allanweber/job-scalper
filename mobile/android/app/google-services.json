@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "821806817291",
+    "project_id": "jobscalper",
+    "storage_bucket": "jobscalper.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:821806817291:android:2fbf244ee174a24bd6270e",
+        "android_client_info": {
+          "package_name": "dev.allanweber.job_scalper"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCnISYUACLbA6HGAjVFZKYyb1h9on2CsVk"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

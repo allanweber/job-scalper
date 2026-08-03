@@ -16,12 +16,16 @@ from scalper.service.models import User
 from scalper.service.quota import METRICS, QuotaService
 from scalper.service.repositories import LLMCredentialRepo, UserRepo
 from scalper.service.routers._helpers import profile_response, user_response
+from scalper.service.push_repos import NotificationPrefsRepo, PushDeviceRepo
 from scalper.service.schemas import (
+    DeviceRegisterRequest,
     JobAccepted,
     LLMKeyInfo,
     LLMKeyRequest,
     LLMKeysResponse,
     MessageResponse,
+    NotificationPrefsRequest,
+    NotificationPrefsResponse,
     ProfileFields,
     ProfileResponse,
     QuotaMetric,
@@ -213,3 +217,39 @@ def delete_account(ctx: RequestContext = Depends(get_ctx), user: User = Depends(
     """GDPR-style self-service deletion: cascades to all the user's owned rows."""
     UserRepo(ctx.conn).delete(user.id)
     return MessageResponse(message="account deleted")
+
+
+# --- push notifications ---
+
+@router.post("/devices", response_model=MessageResponse)
+def register_device(body: DeviceRegisterRequest, ctx: RequestContext = Depends(get_ctx),
+                    user: User = Depends(current_user)):
+    """Register (or refresh) this device's push token for the current user."""
+    PushDeviceRepo(ctx.conn).register(user.id, body.token, body.platform)
+    return MessageResponse(message="device registered")
+
+
+@router.delete("/devices/{token}", response_model=MessageResponse)
+def unregister_device(token: str, ctx: RequestContext = Depends(get_ctx),
+                      user: User = Depends(current_user)):
+    """Remove one of the user's device tokens (sign-out / notifications off)."""
+    PushDeviceRepo(ctx.conn).unregister(user.id, token)
+    return MessageResponse(message="device removed")
+
+
+@router.get("/notifications", response_model=NotificationPrefsResponse)
+def get_notification_prefs(ctx: RequestContext = Depends(get_ctx),
+                           user: User = Depends(current_user)):
+    prefs = NotificationPrefsRepo(ctx.conn).get(user.id)
+    return NotificationPrefsResponse(match_alerts=prefs.match_alerts,
+                                     min_score=prefs.min_score)
+
+
+@router.put("/notifications", response_model=NotificationPrefsResponse)
+def set_notification_prefs(body: NotificationPrefsRequest,
+                           ctx: RequestContext = Depends(get_ctx),
+                           user: User = Depends(current_user)):
+    prefs = NotificationPrefsRepo(ctx.conn).upsert(
+        user.id, match_alerts=body.match_alerts, min_score=body.min_score)
+    return NotificationPrefsResponse(match_alerts=prefs.match_alerts,
+                                     min_score=prefs.min_score)

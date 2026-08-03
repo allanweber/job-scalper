@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../state/push_registration.dart';
 import '../../state/session.dart';
 import 'widgets/settings_tile.dart';
 
@@ -62,6 +63,12 @@ class ProfileScreen extends ConsumerWidget {
           const SizedBox(height: 8),
           _SectionLabel('App'),
           SettingsTile(
+            icon: Icons.notifications_none_rounded,
+            title: 'Notifications',
+            subtitle: 'New-match alerts and threshold',
+            onTap: () => context.push('/profile/notifications'),
+          ),
+          SettingsTile(
             icon: Icons.palette_outlined,
             title: 'Appearance',
             subtitle: 'Light, dark or system theme',
@@ -116,6 +123,9 @@ class ProfileScreen extends ConsumerWidget {
       ),
     );
     if (ok == true) {
+      // Drop this device's push token first, while the session is still
+      // authorized to make the request.
+      await ref.read(pushRegistrationProvider.notifier).unregisterCurrent();
       await ref.read(sessionProvider.notifier).signOut();
     }
   }

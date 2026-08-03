@@ -60,6 +60,22 @@
 <p class="muted">No sources enabled yet — add them on the <a href="/settings">Settings</a> page.</p>
 {% endif %}
 
+<h2>Notifications</h2>
+<p class="muted">
+  {% if device_count %}
+  {{ device_count }} registered device{{ '' if device_count == 1 else 's' }}.
+  Send a test push to confirm delivery end to end.
+  {% else %}
+  No registered devices yet — the user must sign in on an app build with push
+  wired to register one.
+  {% endif %}
+</p>
+{% if device_count %}
+<form method="post" action="/users/{{ u.id }}/test-notification">
+  <button class="primary">Send test notification</button>
+</form>
+{% endif %}
+
 <h2>Account</h2>
 <p>
   {% if u.is_active %}
