@@ -263,8 +263,11 @@ class OnboardingController extends Notifier<OnboardingState> {
     final started = DateTime.now();
     await _settle(started);
     ticker.cancel();
-    state = state.copyWith(buildPhase: AsyncPhase.done, buildStepIndex: 3);
+    // Flip the session flag before marking the build "done", so anything that
+    // reacts to completion (the router redirect, the screen's own navigation)
+    // sees onboarding as already complete and can't bounce back here.
     await _session.completeOnboarding();
+    state = state.copyWith(buildPhase: AsyncPhase.done, buildStepIndex: 3);
   }
 
   // -- navigation -----------------------------------------------------------

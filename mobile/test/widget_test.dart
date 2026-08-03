@@ -53,6 +53,28 @@ void main() {
     await tester.pumpAndSettle();
   });
 
+  testWidgets('completing onboarding leaves it for the feed', (tester) async {
+    // Signed in but not yet onboarded — the state during the onboarding flow.
+    await _pumpApp(tester, seed: {
+      'session.tokens':
+          '{"access_token":"a","refresh_token":"r","expires_in":900}',
+    });
+    await tester.pump(const Duration(milliseconds: 1700));
+    await tester.pumpAndSettle();
+    // Lands on onboarding (signed in, no profile yet).
+    expect(find.text('Remote roles, already ranked'), findsOneWidget);
+
+    // Reaching the end of onboarding flips the session flag; the app must move
+    // to the feed and not strand the user on the onboarding flow.
+    final container = ProviderScope.containerOf(
+        tester.element(find.byType(JobScalperApp)));
+    await container.read(sessionProvider.notifier).completeOnboarding();
+    await tester.pumpAndSettle();
+
+    expect(find.text('Remote roles, already ranked'), findsNothing);
+    expect(find.widgetWithText(AppBar, 'Feed'), findsOneWidget);
+  });
+
   testWidgets('session persists onboarding + theme mode', (tester) async {
     await _pumpApp(tester);
     final container = ProviderScope.containerOf(

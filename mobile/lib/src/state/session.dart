@@ -78,11 +78,13 @@ class SessionController extends Notifier<SessionState> implements TokenStore {
     // Onboarding completion follows the account, not the device: a recreated
     // account (no server profile) must re-onboard even if a stale local flag
     // from a previous account says otherwise. Set both in one update so the
-    // router never sees signedIn with the wrong flag.
-    await _prefs.setBool(_kOnboarding, res.user.hasProfile);
+    // router never sees signedIn with the wrong flag. If the server predates
+    // `has_profile` (null), keep the local flag rather than guessing.
+    final onboarded = res.user.hasProfile ?? state.onboardingComplete;
+    await _prefs.setBool(_kOnboarding, onboarded);
     state = state.copyWith(
         status: AuthStatus.signedIn, user: res.user, tokens: res.tokens,
-        onboardingComplete: res.user.hasProfile);
+        onboardingComplete: onboarded);
   }
 
   Future<void> signOut() async {
@@ -110,8 +112,14 @@ class SessionController extends Notifier<SessionState> implements TokenStore {
       final user = await _auth.me();
       // Keep the onboarding gate honest on relaunch too: if the account has no
       // profile, it still needs onboarding regardless of the persisted flag.
-      await _prefs.setBool(_kOnboarding, user.hasProfile);
-      state = state.copyWith(user: user, onboardingComplete: user.hasProfile);
+      // A server without `has_profile` (null) leaves the local flag untouched.
+      final onboarded = user.hasProfile;
+      if (onboarded != null) {
+        await _prefs.setBool(_kOnboarding, onboarded);
+      }
+      state = state.copyWith(
+          user: user,
+          onboardingComplete: onboarded ?? state.onboardingComplete);
     } catch (_) {/* best-effort; keep the existing session */}
   }
 

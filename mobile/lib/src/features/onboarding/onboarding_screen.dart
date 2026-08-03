@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
+import '../../state/session.dart';
 import 'onboarding_controller.dart';
 import 'steps/boards_step.dart';
 import 'steps/consent_step.dart';
@@ -21,6 +23,18 @@ class OnboardingScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final step = ref.watch(onboardingControllerProvider.select((s) => s.step));
+    // Leave onboarding as soon as it's complete, rather than depending solely on
+    // the router's redirect side-effect (which could otherwise strand the user
+    // on the final "Building your feed" screen). Guarded so router-less tests
+    // don't try to navigate.
+    ref.listen<bool>(
+      sessionProvider.select((s) => s.isSignedIn && s.onboardingComplete),
+      (_, done) {
+        if (done && context.mounted && GoRouter.maybeOf(context) != null) {
+          context.go('/feed');
+        }
+      },
+    );
     return PopScope(
       // Back is handled inside each step via the controller.
       canPop: false,
