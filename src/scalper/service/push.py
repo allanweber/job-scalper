@@ -99,11 +99,32 @@ class FcmPushSender:
         return result
 
 
+def _parse_credentials(raw: str) -> dict:
+    """Parse the service-account JSON from an env value.
+
+    Tolerates the two ways an env editor mangles a big JSON blob: surrounding
+    quotes, and — because raw JSON with spaces/braces/newlines is fragile in
+    many env UIs — a base64-encoded form. Tries plain JSON first, then base64.
+    """
+    raw = raw.strip()
+    if len(raw) >= 2 and raw[0] == raw[-1] and raw[0] in "\"'":
+        raw = raw[1:-1].strip()
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError:
+        import base64
+
+        return json.loads(base64.b64decode(raw))
+
+
 def build_push_sender(env: dict[str, str]) -> PushSender:
     """Build the configured sender, or a no-op when push isn't set up.
 
     Never raises: any missing config or unavailable google-auth degrades to
     :class:`NullPushSender` with a log line, so the service always starts.
+
+    Credentials come from ``SCALPER_FCM_CREDENTIALS`` (the service-account JSON,
+    or that JSON base64-encoded) or ``GOOGLE_APPLICATION_CREDENTIALS`` (a path).
     """
     project_id = env.get("SCALPER_FCM_PROJECT_ID")
     raw = env.get("SCALPER_FCM_CREDENTIALS")
@@ -113,10 +134,12 @@ def build_push_sender(env: dict[str, str]) -> PushSender:
     try:
         from google.oauth2 import service_account
 
-        info = json.loads(raw) if raw else json.load(open(cred_path))
+        info = _parse_credentials(raw) if raw else json.load(open(cred_path))
         creds = service_account.Credentials.from_service_account_info(
             info, scopes=[_FCM_SCOPE])
         return FcmPushSender(project_id, creds)
     except Exception:
-        logger.exception("FCM credentials invalid/unavailable — push disabled")
+        logger.exception(
+            "FCM credentials invalid/unavailable — push disabled. Set "
+            "SCALPER_FCM_CREDENTIALS to the service-account JSON or its base64.")
         return NullPushSender()
