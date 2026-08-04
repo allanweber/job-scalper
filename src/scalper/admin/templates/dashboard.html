@@ -18,6 +18,15 @@
   {% endfor %}
 </div>
 
+<h2>Drafts by status</h2>
+<div class="cards">
+  {% for status, n in draft_counts.items() %}
+  <div class="card"><div class="n">{{ n }}</div><div class="l">{{ status }}</div></div>
+  {% else %}
+  <p class="muted">No drafts yet.</p>
+  {% endfor %}
+</div>
+
 <h2>Scraping</h2>
 <table>
   <tr><th>Interval (min)</th><td>{{ scrape_interval }}</td></tr>

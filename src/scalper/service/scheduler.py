@@ -17,6 +17,7 @@ from typing import Any
 from scalper.db import apply_pending
 from scalper.service.container import Container
 from scalper.service.jobs import KIND_PURGE, KIND_SCRAPE, JobQueue
+from scalper.service.reaper import reap
 from scalper.service.settings import Settings
 
 
@@ -47,15 +48,21 @@ def purge_due(settings: Settings, *, now: datetime | None = None) -> bool:
     return now - last >= timedelta(days=1)
 
 
-def tick(container: Container, *, now: datetime | None = None) -> dict[str, str | None]:
-    """One scheduler step: enqueue scrape and/or purge if due. Returns job ids."""
+def tick(container: Container, *, now: datetime | None = None) -> dict[str, Any]:
+    """One scheduler step: reap stale work, then enqueue scrape/purge if due.
+
+    Returns the scrape/purge job ids and the reaper's per-kind counts.
+    """
     now = now or datetime.now(timezone.utc)
     conn = container.connect()
-    out: dict[str, str | None] = {"scrape": None, "purge": None}
+    out: dict[str, Any] = {"scrape": None, "purge": None, "reaped": None}
     try:
         settings = container.settings(conn)
         if bool(settings.get("maintenance.enabled", False)):
             return out
+        # Reap first, every tick: a stuck draft/job shouldn't wait on the scrape
+        # interval to be cleaned up (and its credit refunded).
+        out["reaped"] = reap(conn, settings, now=now)
         queue = JobQueue(container)
         if scrape_due(settings, now=now):
             out["scrape"] = queue.enqueue(conn, KIND_SCRAPE, user_id=None, params={})

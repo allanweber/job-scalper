@@ -879,6 +879,12 @@ class DraftRepo:
             for r in rows
         ]
 
+    def counts_by_status(self) -> dict[str, int]:
+        """Global draft lifecycle counts (pending/ready/failed) for admin health."""
+        rows = self._c.execute(
+            "SELECT status, COUNT(*) FROM drafts GROUP BY status").fetchall()
+        return {r[0]: r[1] for r in rows}
+
     def application_status_counts(self, user_id: str) -> tuple[int, dict[str, int]]:
         """Aggregate the user's applications by pipeline stage for the funnel.
 

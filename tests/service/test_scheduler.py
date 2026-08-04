@@ -43,4 +43,4 @@ def test_tick_enqueues_scrape_and_purge(container, conn, settings):
 def test_tick_skips_when_maintenance(container, conn, settings):
     settings.set("maintenance.enabled", True)
     out = tick(container)
-    assert out == {"scrape": None, "purge": None}
+    assert out == {"scrape": None, "purge": None, "reaped": None}

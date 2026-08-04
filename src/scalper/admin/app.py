@@ -34,6 +34,7 @@ from scalper.admin.oauth import OAuthError
 from scalper.db import apply_pending
 from scalper.service.content_repos import (
     AuditRepo,
+    DraftRepo,
     JobRepo,
     LLMUsageRepo,
     PostingRepo,
@@ -177,6 +178,7 @@ def create_admin_app(admin_container: AdminContainer | None = None) -> FastAPI:
                        users_suspended=by_status.get("suspended", 0),
                        pool_count=PostingRepo(ctx.conn).count(),
                        job_counts=JobRepo(ctx.conn).counts_by_status(),
+                       draft_counts=DraftRepo(ctx.conn).counts_by_status(),
                        scrape_interval=s.get("scrape.interval_minutes"),
                        last_run=s.get("scrape.last_run_at"),
                        enabled_sources=s.get("sources.enabled", []) or [],
