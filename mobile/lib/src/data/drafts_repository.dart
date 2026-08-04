@@ -17,6 +17,11 @@ abstract class DraftsRepository {
   /// One draft's full content (`GET /drafts/{id}`).
   Future<Draft> getDraft(String id);
 
+  /// Re-run drafting for an existing draft, optionally in a new [tone]
+  /// (`POST /drafts/{id}/regenerate`). Returns the draft (back in 'pending');
+  /// poll [getDraft] until it's ready.
+  Future<Draft> regenerateDraft(String id, {String? tone});
+
   /// Persist edited resume and/or cover-letter markdown (`PUT /drafts/{id}`).
   Future<Draft> updateDraft(String id, {String? resumeMd, String? coverLetterMd});
 
@@ -54,6 +59,13 @@ class HttpDraftsRepository implements DraftsRepository {
   @override
   Future<Draft> getDraft(String id) async {
     final r = await _api.get<Map<String, dynamic>>('/drafts/$id');
+    return Draft.fromJson(r.data!);
+  }
+
+  @override
+  Future<Draft> regenerateDraft(String id, {String? tone}) async {
+    final r = await _api.post<Map<String, dynamic>>('/drafts/$id/regenerate',
+        data: {'tone': tone});
     return Draft.fromJson(r.data!);
   }
 

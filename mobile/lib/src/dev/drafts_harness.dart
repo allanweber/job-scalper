@@ -59,6 +59,8 @@ Draft _demoDraft(DraftSummary s) => Draft(
       applicationStatus: s.applicationStatus,
       status: s.status,
       error: s.error,
+      matchedSkills:
+          s.isReady ? const ['Python', 'PostgreSQL', 'AWS'] : const [],
     );
 
 /// In-memory [DraftsRepository]. Serves the demo drafts, records edits for
@@ -89,6 +91,7 @@ class FakeDraftsRepository implements DraftsRepository {
   final List<({String id, String? resumeMd, String? coverLetterMd})> edits = [];
   final List<({String id, bool applied})> appliedCalls = [];
   final List<({String id, String? status})> statusCalls = [];
+  final List<({String id, String? tone})> regenerateCalls = [];
   final Map<String, Draft> _overrides = {};
 
   @override
@@ -116,6 +119,23 @@ class FakeDraftsRepository implements DraftsRepository {
       );
     }
     return _demoDraft(s);
+  }
+
+  @override
+  Future<Draft> regenerateDraft(String id, {String? tone}) async {
+    if (delay != null) await Future.delayed(delay!);
+    if (fails) throw Exception('Failed host lookup');
+    regenerateCalls.add((id: id, tone: tone));
+    final s = _items.firstWhere((e) => e.id == id, orElse: () => _items.first);
+    final draft = _demoDraft(s).copyWith(status: 'ready');
+    return Draft(
+      id: draft.id, postingId: draft.postingId, jobSource: draft.jobSource,
+      resumeMd: draft.resumeMd, coverLetterMd: draft.coverLetterMd,
+      stretchClaimsMd: draft.stretchClaimsMd, provider: draft.provider,
+      model: draft.model, keySource: draft.keySource, createdAt: draft.createdAt,
+      applied: draft.applied, applicationStatus: draft.applicationStatus,
+      status: 'ready', tone: tone, matchedSkills: draft.matchedSkills,
+    );
   }
 
   @override

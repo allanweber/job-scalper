@@ -710,6 +710,10 @@ class Draft:
     updated_at: str
     status: str = "ready"
     error: str | None = None
+    #: Cover-letter/summary voice used on (re)generation; null = professional.
+    tone: str | None = None
+    #: JSON array of profile skills the posting matched (the "why this draft").
+    matched_skills: str | None = None
 
 
 @dataclass
@@ -733,7 +737,7 @@ class DraftListItem:
 _DRAFT_COLS = (
     "id, user_id, profile_id, posting_id, job_source, source_url, resume_md, "
     "cover_letter_md, stretch_claims_md, provider, model, key_source, "
-    "created_at, updated_at, status, error"
+    "created_at, updated_at, status, error, tone, matched_skills"
 )
 
 
@@ -768,7 +772,8 @@ class DraftRepo:
         return did
 
     def create_pending(self, user_id: str, *, posting_id: str | None,
-                       job_source: str = "pool", source_url: str | None = None) -> str:
+                       job_source: str = "pool", source_url: str | None = None,
+                       tone: str | None = None) -> str:
         """Insert an empty draft in the 'pending' state and return its id.
 
         The row exists immediately so the client can show it and navigate to it;
@@ -778,23 +783,43 @@ class DraftRepo:
         ts = now_iso()
         self._c.execute(
             "INSERT INTO drafts (id, user_id, posting_id, job_source, source_url, "
-            "status, created_at, updated_at) VALUES (?,?,?,?,?, 'pending', ?, ?)",
-            (did, user_id, posting_id, job_source, source_url, ts, ts),
+            "tone, status, created_at, updated_at) "
+            "VALUES (?,?,?,?,?,?, 'pending', ?, ?)",
+            (did, user_id, posting_id, job_source, source_url, tone, ts, ts),
         )
         self._c.commit()
         return did
 
+    def reset_pending(self, draft_id: str, user_id: str, *,
+                      tone: str | None) -> bool:
+        """Put an existing draft back into 'pending' for regeneration.
+
+        Clears the old content/error and sets the new tone; the worker refills it.
+        Returns False if the draft isn't the user's.
+        """
+        cur = self._c.execute(
+            "UPDATE drafts SET status='pending', error=NULL, resume_md=NULL, "
+            "cover_letter_md=NULL, stretch_claims_md=NULL, resume_pdf=NULL, "
+            "cover_letter_pdf=NULL, tone=?, updated_at=? WHERE id=? AND user_id=?",
+            (tone, now_iso(), draft_id, user_id),
+        )
+        self._c.commit()
+        return bool(cur.rowcount)
+
     def mark_ready(self, draft_id: str, user_id: str, *, profile_id: str | None,
                    resume_md: str, cover_letter_md: str,
                    stretch_claims_md: str | None, provider: str | None,
-                   model: str | None, key_source: str | None) -> None:
+                   model: str | None, key_source: str | None,
+                   matched_skills: list[str] | None = None) -> None:
         """Fill a pending draft with generated content and mark it ready."""
         self._c.execute(
             "UPDATE drafts SET status='ready', error=NULL, profile_id=?, resume_md=?, "
             "cover_letter_md=?, stretch_claims_md=?, provider=?, model=?, "
-            "key_source=?, updated_at=? WHERE id=? AND user_id=?",
+            "key_source=?, matched_skills=?, updated_at=? WHERE id=? AND user_id=?",
             (profile_id, resume_md, cover_letter_md, stretch_claims_md, provider,
-             model, key_source, now_iso(), draft_id, user_id),
+             model, key_source,
+             json.dumps(matched_skills) if matched_skills is not None else None,
+             now_iso(), draft_id, user_id),
         )
         self._c.commit()
 

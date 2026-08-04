@@ -97,7 +97,21 @@ def split_draft(text: str) -> DraftParts:
     return DraftParts(resume=resume, cover_letter=cover_letter, stretch_claims=stretch)
 
 
-def build_prompt(profile_name: str, resume_text: str, scored: "ScoredPosting") -> str:
+#: Cover-letter/summary voice options. ``professional`` is the default (no extra
+#: directive); the others append a one-line steer to the prompt.
+TONES = ("professional", "warm", "confident", "concise")
+_TONE_DIRECTIVE = {
+    "warm": "Tone: warm and personable — friendly and human, while still "
+            "professional.",
+    "confident": "Tone: confident and results-forward — lead with impact and "
+                 "ownership, without arrogance.",
+    "concise": "Tone: concise and punchy — keep the cover letter tight (aim for "
+               "~200 words) and the summary to 2 sentences.",
+}
+
+
+def build_prompt(profile_name: str, resume_text: str, scored: "ScoredPosting",
+                 tone: str | None = None) -> str:
     p = scored.posting
     desc = p.description.strip()
     if len(desc) > _DESC_LIMIT:
@@ -108,7 +122,10 @@ def build_prompt(profile_name: str, resume_text: str, scored: "ScoredPosting") -
 
     matched = ", ".join(scored.matched_skills) or "(none)"
     missing = ", ".join(scored.missing_skills) or "(none)"
+    directive = _TONE_DIRECTIVE.get(tone or "")
+    tone_line = f"{directive}\n" if directive else ""
     return (
+        f"{tone_line}"
         f"Profile: {profile_name}\n"
         f"Job title: {p.title}\n"
         f"Company: {p.company}\n"
@@ -127,6 +144,7 @@ def draft_application(
     resume_text: str,
     scored: "ScoredPosting",
     *,
+    tone: str | None = None,
     logger: Logger | None = None,
 ) -> tuple[str, "Completion"]:
     """Call the LLM once to draft a tailored resume + cover letter for one posting.
@@ -137,7 +155,7 @@ def draft_application(
     """
     log = logger or (lambda _msg: None)
     p = scored.posting
-    prompt = build_prompt(profile_name, resume_text, scored)
+    prompt = build_prompt(profile_name, resume_text, scored, tone)
     log(
         f"\n─── application draft (model={model}) {p.uid} — {p.title} ({p.company}) ───\n"
         f"REQUEST:\n[system]\n{_SYSTEM}\n[user]\n{prompt}"

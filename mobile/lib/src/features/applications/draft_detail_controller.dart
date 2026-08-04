@@ -23,6 +23,7 @@ class DraftDetailState {
     this.saving = false,
     this.saveError,
     this.applying = false,
+    this.regenerating = false,
   });
 
   final DraftDetailStatus status;
@@ -34,6 +35,9 @@ class DraftDetailState {
   /// True while the applied mark/unmark request is in flight.
   final bool applying;
 
+  /// True while a regenerate request is in flight (before polling resumes).
+  final bool regenerating;
+
   DraftDetailState copyWith({
     DraftDetailStatus? status,
     Draft? draft,
@@ -41,6 +45,7 @@ class DraftDetailState {
     bool? saving,
     Object? saveError = _noChange,
     bool? applying,
+    bool? regenerating,
   }) =>
       DraftDetailState(
         status: status ?? this.status,
@@ -50,6 +55,7 @@ class DraftDetailState {
         saveError:
             saveError == _noChange ? this.saveError : saveError as String?,
         applying: applying ?? this.applying,
+        regenerating: regenerating ?? this.regenerating,
       );
 
   static const _noChange = Object();
@@ -112,6 +118,28 @@ class DraftDetailController extends Notifier<DraftDetailState> {
 
   Future<void> refresh() async {
     if (_id != null) await load(_id!);
+  }
+
+  /// Re-draft this application, optionally in a new [tone]. Consumes draft
+  /// quota (a fresh generation). The draft returns to 'pending' and we poll it
+  /// to 'ready' as on first draft; a failure (e.g. quota) surfaces in
+  /// [saveError]. Returns true if the regenerate request was accepted.
+  Future<bool> regenerate({String? tone}) async {
+    final d = state.draft;
+    final id = _id;
+    if (d == null || id == null || state.regenerating) return false;
+    state = state.copyWith(regenerating: true, saveError: null);
+    try {
+      final draft = await _repo.regenerateDraft(id, tone: tone);
+      if (_disposed || _id != id) return true;
+      state = state.copyWith(draft: draft, regenerating: false);
+      if (draft.isPending) unawaited(_pollWhilePending(id));
+      ref.read(draftsRevisionProvider.notifier).bump();
+      return true;
+    } catch (e) {
+      state = state.copyWith(regenerating: false, saveError: _humanize(e));
+      return false;
+    }
   }
 
   /// Persist an edit to one document. Returns true on success (so the editor

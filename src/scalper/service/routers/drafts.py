@@ -7,6 +7,8 @@ here for a fast 402 before enqueuing; the job consumes authoritatively.
 
 from __future__ import annotations
 
+import json
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import Response
 
@@ -21,6 +23,7 @@ from scalper.service.schemas import (
     AppliedRequest,
     ApplicationInsights,
     ApplicationStatusRequest,
+    DraftRegenerateRequest,
     DraftRequest,
     DraftResponse,
     DraftSummary,
@@ -32,12 +35,20 @@ from scalper.service.schemas import (
 
 def _draft_response(d: "object", *, applied: bool = False,
                     application_status: str | None = None) -> DraftResponse:
+    matched = []
+    raw = getattr(d, "matched_skills", None)
+    if raw:
+        try:
+            matched = list(json.loads(raw))
+        except (ValueError, TypeError):
+            matched = []
     return DraftResponse(
         id=d.id, posting_id=d.posting_id, job_source=d.job_source,
         resume_md=d.resume_md, cover_letter_md=d.cover_letter_md,
         stretch_claims_md=d.stretch_claims_md, provider=d.provider, model=d.model,
         key_source=d.key_source, created_at=d.created_at, applied=applied,
         application_status=application_status, status=d.status, error=d.error,
+        tone=getattr(d, "tone", None), matched_skills=matched,
     )
 
 router = APIRouter(tags=["drafts"])
@@ -88,11 +99,40 @@ def create_draft(body: DraftRequest, ctx: RequestContext = Depends(get_ctx),
         raise HTTPException(status.HTTP_404_NOT_FOUND, "posting not found in the pool")
     _precheck_quota(ctx, user, "draft")
     draft_id = DraftRepo(ctx.conn).create_pending(
-        user.id, posting_id=body.posting_id, job_source="pool")
+        user.id, posting_id=body.posting_id, job_source="pool", tone=body.tone)
     JobQueue(ctx.container).enqueue(
         ctx.conn, KIND_DRAFT, user_id=user.id,
-        params={"posting_id": body.posting_id, "draft_id": draft_id})
+        params={"posting_id": body.posting_id, "draft_id": draft_id,
+                "tone": body.tone})
     return _draft_response(DraftRepo(ctx.conn).get(draft_id, user.id), applied=False)
+
+
+@router.post("/drafts/{draft_id}/regenerate", response_model=DraftResponse,
+             status_code=status.HTTP_202_ACCEPTED, tags=["drafts"])
+def regenerate_draft(draft_id: str, body: DraftRegenerateRequest,
+                     ctx: RequestContext = Depends(get_ctx),
+                     user: User = Depends(current_user)):
+    """Re-draft an existing draft, optionally in a different tone.
+
+    Puts the draft back to 'pending' and re-runs the LLM against the same posting
+    (a fresh generation, so it consumes draft quota). The client polls
+    GET /drafts/{id} as with a first draft.
+    """
+    d = DraftRepo(ctx.conn).get(draft_id, user.id)
+    if d is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "draft not found")
+    if not d.posting_id or PostingRepo(ctx.conn).get(d.posting_id) is None:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY,
+                            "this draft's posting is no longer available to redraft")
+    _precheck_quota(ctx, user, "draft")
+    tone = body.tone if body.tone is not None else d.tone
+    DraftRepo(ctx.conn).reset_pending(draft_id, user.id, tone=tone)
+    JobQueue(ctx.container).enqueue(
+        ctx.conn, KIND_DRAFT, user_id=user.id,
+        params={"posting_id": d.posting_id, "draft_id": draft_id, "tone": tone})
+    applied, app_status = _overlay_state_for(ctx, user.id, d.posting_id)
+    return _draft_response(DraftRepo(ctx.conn).get(draft_id, user.id),
+                           applied=applied, application_status=app_status)
 
 
 @router.post("/enrich", response_model=JobAccepted, status_code=status.HTTP_202_ACCEPTED,

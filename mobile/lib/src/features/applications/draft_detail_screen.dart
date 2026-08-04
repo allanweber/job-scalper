@@ -136,15 +136,26 @@ class _DraftDetailScreenState extends ConsumerState<DraftDetailScreen> {
       appBar: AppBar(
         title: Text(_title, maxLines: 1, overflow: TextOverflow.ellipsis),
         actions: [
-          // Editing is only available once the content is in (ready).
+          // Regenerate + edit are only available once the content is in (ready).
           if (state.status == DraftDetailStatus.ready &&
               d != null &&
-              d.isReady)
+              d.isReady) ...[
+            IconButton(
+              tooltip: 'Regenerate',
+              onPressed: state.regenerating ? null : () => _regenerate(d),
+              icon: state.regenerating
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2))
+                  : const Icon(Icons.autorenew_rounded),
+            ),
             IconButton(
               tooltip: 'Edit',
               onPressed: state.saving ? null : () => _edit(d),
               icon: const Icon(Icons.edit_outlined),
             ),
+          ],
         ],
       ),
       body: switch (state.status) {
@@ -174,6 +185,27 @@ class _DraftDetailScreenState extends ConsumerState<DraftDetailScreen> {
           ),
       },
     );
+  }
+
+  Future<void> _regenerate(Draft d) async {
+    final tone = await showModalBottomSheet<String>(
+      context: context,
+      showDragHandle: true,
+      builder: (_) => _TonePicker(current: d.tone ?? 'professional'),
+    );
+    if (tone == null || !mounted) return; // dismissed
+    final ok = await ref
+        .read(draftDetailControllerProvider.notifier)
+        .regenerate(tone: tone);
+    if (!mounted) return;
+    if (ok) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Regenerating in a ${kDraftToneLabels[tone]} tone…')));
+    } else {
+      final err = ref.read(draftDetailControllerProvider).saveError;
+      ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(err ?? "Couldn't regenerate — try again.")));
+    }
   }
 
   Future<void> _setStatus(String? status) async {
@@ -260,6 +292,10 @@ class _Ready extends StatelessWidget {
             ],
           ),
         ],
+        if (draft.matchedSkills.isNotEmpty) ...[
+          const SizedBox(height: 14),
+          _WhyThisDraft(skills: draft.matchedSkills, tone: draft.tone),
+        ],
         const SizedBox(height: 12),
         _ApplicationStatusControl(
             status: status, busy: applying, onSetStatus: onSetStatus),
@@ -288,6 +324,132 @@ class _Ready extends StatelessWidget {
         const SizedBox(height: 16),
         _Document(text: content),
       ],
+    );
+  }
+}
+
+/// Cover-letter/summary voices offered for (re)generation. Mirrors the backend
+/// DRAFT_TONES; 'professional' is the default.
+const kDraftTones = ['professional', 'warm', 'confident', 'concise'];
+const kDraftToneLabels = {
+  'professional': 'Professional',
+  'warm': 'Warm',
+  'confident': 'Confident',
+  'concise': 'Concise',
+};
+const _kDraftToneBlurbs = {
+  'professional': 'Polished and neutral (default)',
+  'warm': 'Friendly and personable',
+  'confident': 'Assertive, results-forward',
+  'concise': 'Short and punchy',
+};
+
+/// "Why this draft": the profile skills this posting matched, so the user can
+/// see what the tailoring leaned on (and the tone it was written in).
+class _WhyThisDraft extends StatelessWidget {
+  const _WhyThisDraft({required this.skills, required this.tone});
+  final List<String> skills;
+  final String? tone;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.auto_awesome_rounded,
+                  size: 16, color: scheme.primary),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text('Why this draft',
+                    style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        color: scheme.onSurface)),
+              ),
+              if (tone != null && tone != 'professional')
+                Text('${kDraftToneLabels[tone] ?? tone} tone',
+                    style: TextStyle(
+                        fontSize: 12, color: scheme.onSurfaceVariant)),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text('Tailored around the skills this role asks for that are in your '
+              'profile:',
+              style: TextStyle(fontSize: 12.5, color: scheme.onSurfaceVariant)),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final s in skills)
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: scheme.primaryContainer,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(s,
+                      style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: scheme.onPrimaryContainer)),
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Bottom sheet to pick a tone for regeneration; pops the chosen tone slug.
+class _TonePicker extends StatelessWidget {
+  const _TonePicker({required this.current});
+  final String current;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return SafeArea(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 4, 20, 4),
+            child: Text('Regenerate in a tone',
+                style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w800,
+                    color: scheme.onSurface)),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+            child: Text('Uses one draft credit to rewrite this application.',
+                style: TextStyle(fontSize: 12.5, color: scheme.onSurfaceVariant)),
+          ),
+          for (final t in kDraftTones)
+            ListTile(
+              title: Text(kDraftToneLabels[t]!),
+              subtitle: Text(_kDraftToneBlurbs[t]!),
+              trailing: t == current
+                  ? Icon(Icons.check_rounded, color: scheme.primary)
+                  : null,
+              onTap: () => Navigator.of(context).pop(t),
+            ),
+          const SizedBox(height: 8),
+        ],
+      ),
     );
   }
 }

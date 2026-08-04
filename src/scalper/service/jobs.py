@@ -162,11 +162,18 @@ def run_draft(container: "Container", conn: Any, job_id: str, user_id: str,
         quota = QuotaService(conn=conn, settings=settings)
         user = UserRepo(conn).get(user_id)
         unlimited = _has_byo(container, conn, user_id)
+        # Tone comes from the (re)generate request, falling back to whatever the
+        # draft row already carries (e.g. a regenerate that didn't change it).
+        tone = params.get("tone")
+        if tone is None and draft_id:
+            existing = DraftRepo(conn).get(draft_id, user_id)
+            tone = existing.tone if existing else None
         with _reserved(quota, user, "draft", unlimited=unlimited):
             scored = score_posting(profile.criteria(), pool.to_job_posting())
             decision = router.resolve(user_id, "draft")
             text, comp = draft_application(decision.provider, decision.model,
-                                           profile.name, resume_text, scored)
+                                           profile.name, resume_text, scored,
+                                           tone=tone)
             parts = split_draft(text)
             router.record_usage(user_id, action="draft", decision=decision,
                                 input_tokens=comp.input_tokens,
@@ -179,6 +186,7 @@ def run_draft(container: "Container", conn: Any, job_id: str, user_id: str,
                     stretch_claims_md=parts.stretch_claims,
                     provider=decision.provider_name, model=decision.model,
                     key_source=decision.key_source,
+                    matched_skills=scored.matched_skills,
                 )
             else:
                 draft_id = DraftRepo(conn).create(

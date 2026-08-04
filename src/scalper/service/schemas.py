@@ -192,8 +192,36 @@ class JobAccepted(BaseModel):
     status: str
 
 
+#: Cover-letter/summary voice options for a draft (see scalper.app_draft.TONES).
+DRAFT_TONES = ("professional", "warm", "confident", "concise")
+
+
+def _validate_tone(v: str | None) -> str | None:
+    if v is not None and v not in DRAFT_TONES:
+        raise ValueError(f"tone must be one of {DRAFT_TONES} or null")
+    return v
+
+
 class DraftRequest(BaseModel):
     posting_id: str
+    #: Optional voice; null uses the default professional tone.
+    tone: str | None = None
+
+    @field_validator("tone")
+    @classmethod
+    def _known_tone(cls, v: str | None) -> str | None:
+        return _validate_tone(v)
+
+
+class DraftRegenerateRequest(BaseModel):
+    """Re-run drafting for an existing draft, optionally changing the tone."""
+
+    tone: str | None = None
+
+    @field_validator("tone")
+    @classmethod
+    def _known_tone(cls, v: str | None) -> str | None:
+        return _validate_tone(v)
 
 
 class EnrichRequest(BaseModel):
@@ -265,6 +293,10 @@ class DraftResponse(BaseModel):
     application_status: str | None = None  # applied|interviewing|offer|rejected
     status: str = "ready"  # 'pending' | 'ready' | 'failed'
     error: str | None = None
+    #: The voice used to generate this draft (null = professional).
+    tone: str | None = None
+    #: Profile skills the posting matched — the "why this draft" evidence.
+    matched_skills: list[str] = Field(default_factory=list)
 
 
 class ApplicationInsights(BaseModel):

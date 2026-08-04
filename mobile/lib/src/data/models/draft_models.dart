@@ -100,6 +100,8 @@ class Draft {
     this.applicationStatus,
     this.status = 'ready',
     this.error,
+    this.tone,
+    this.matchedSkills = const [],
   });
 
   final String id;
@@ -121,6 +123,12 @@ class Draft {
   /// Lifecycle: 'pending' while drafting, 'ready' when done, 'failed' on error.
   final String status;
   final String? error;
+
+  /// The voice this draft was generated in (null = professional).
+  final String? tone;
+
+  /// Profile skills the posting matched — shown as "why this draft".
+  final List<String> matchedSkills;
 
   bool get isPending => status == 'pending';
   bool get isReady => status == 'ready';
@@ -155,6 +163,8 @@ class Draft {
             : applicationStatus as String?,
         status: status ?? this.status,
         error: error ?? this.error,
+        tone: tone,
+        matchedSkills: matchedSkills,
       );
 
   factory Draft.fromJson(Map<String, dynamic> j) => Draft(
@@ -172,5 +182,10 @@ class Draft {
         applicationStatus: j['application_status'] as String?,
         status: (j['status'] as String?) ?? 'ready',
         error: j['error'] as String?,
+        tone: j['tone'] as String?,
+        matchedSkills: (j['matched_skills'] as List?)
+                ?.map((e) => e.toString())
+                .toList() ??
+            const [],
       );
 }

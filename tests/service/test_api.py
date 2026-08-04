@@ -261,6 +261,36 @@ def test_feed_and_draft_flow(client, auth_headers, conn):
     assert listing[0]["status"] == "ready"
 
 
+def test_draft_tone_and_regenerate(client, auth_headers, conn):
+    client.get("/me", headers=auth_headers)
+    _user, pid = _seed_user_content(conn)
+
+    # Create in a chosen tone; the "why this draft" skills ride along.
+    r = client.post("/drafts", headers=auth_headers,
+                    json={"posting_id": pid, "tone": "warm"})
+    assert r.status_code == 201, r.text
+    created = r.json()
+    draft_id = created["id"]
+    assert created["tone"] == "warm"
+    assert created["status"] == "ready"
+    assert len(created["matched_skills"]) >= 1
+
+    # An unknown tone is rejected up front.
+    bad = client.post("/drafts", headers=auth_headers,
+                      json={"posting_id": pid, "tone": "sassy"})
+    assert bad.status_code == 422
+
+    # Regenerate re-fills the same draft and can switch tone.
+    rg = client.post(f"/drafts/{draft_id}/regenerate", headers=auth_headers,
+                     json={"tone": "concise"})
+    assert rg.status_code == 202, rg.text
+    body = rg.json()
+    assert body["id"] == draft_id
+    assert body["tone"] == "concise"
+    assert body["status"] == "ready"
+    assert body["resume_md"].startswith("# Jane")
+
+
 def test_mark_applied_visible_everywhere(client, auth_headers, conn):
     client.get("/me", headers=auth_headers)
     _user, pid = _seed_user_content(conn)

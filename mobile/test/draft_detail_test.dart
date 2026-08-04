@@ -46,6 +46,30 @@ Future<void> _pump(WidgetTester tester, ProviderContainer container,
 }
 
 void main() {
+  testWidgets('why-this-draft shows matched skills; regenerate picks a tone',
+      (tester) async {
+    tester.view.physicalSize = const Size(1170, 7000);
+    tester.view.devicePixelRatio = 3.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final repo = FakeDraftsRepository();
+    await _pump(tester, _container(repo: repo));
+
+    // "Why this draft" surfaces the matched profile skills.
+    expect(find.text('Why this draft'), findsOneWidget);
+    expect(find.text('Python'), findsWidgets);
+
+    // Regenerate opens the tone sheet; picking a tone calls the repo with it.
+    await tester.tap(find.byTooltip('Regenerate'));
+    await tester.pumpAndSettle();
+    expect(find.text('Regenerate in a tone'), findsOneWidget);
+    await tester.tap(find.text('Confident'));
+    await tester.pumpAndSettle();
+    expect(repo.regenerateCalls, hasLength(1));
+    expect(repo.regenerateCalls.first.tone, 'confident');
+  });
+
   testWidgets('shows resume by default and switches to the cover letter',
       (tester) async {
     tester.view.physicalSize = const Size(1170, 7000);
