@@ -93,6 +93,29 @@ def test_compound_skills_are_split_into_separate_items():
     assert draft.nice_to_have_skills == ["mongodb", "postgres", "redis"]
 
 
+def test_normalization_dedupes_denoises_and_de_overlaps():
+    text = json.dumps({
+        "titles": ["Backend Engineer", "backend engineer", "- Staff Engineer"],
+        "required_skills": ["Python", "python", "docker, kubernetes"],
+        # 'python' also appears in required, so it's dropped here (required wins).
+        "nice_to_have_skills": ["python", "GraphQL", ""],
+        "keywords": ["  distributed systems  ", "distributed systems"],
+    })
+    d = parse_draft(text)
+    # Case-insensitive dedupe keeps the first casing; leading noise stripped.
+    assert d.titles == ["Backend Engineer", "Staff Engineer"]
+    # Composite split on comma; case-dupe collapsed.
+    assert d.required_skills == ["Python", "docker", "kubernetes"]
+    # Overlap with required removed; empties dropped.
+    assert d.nice_to_have_skills == ["GraphQL"]
+    assert d.keywords == ["distributed systems"]
+
+
+def test_normalization_caps_runaway_lists():
+    draft = ProfileDraft(keywords=[f"kw{i}" for i in range(50)])
+    assert len(draft.keywords) == 30
+
+
 def test_to_yaml_block_is_parseable_and_nested_under_name():
     import yaml
 

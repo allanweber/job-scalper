@@ -11,7 +11,7 @@ import re
 from typing import TYPE_CHECKING, Callable
 
 import yaml
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, model_validator
 
 from scalper.prompts import PROFILE_DRAFT_SYSTEM as _SYSTEM
 
@@ -24,15 +24,35 @@ Logger = Callable[[str], None]
 #: Trim the resume before prompting, to bound token cost.
 _RESUME_LIMIT = 6000
 
-#: Defensive split for composite skills the model still joins despite the prompt
-#: (e.g. "python / pandas data pipelines" → "python", "pandas data pipelines").
-_COMPOUND_SPLIT_RE = re.compile(r"\s*/\s*")
+#: Split composite skills the model still joins despite the prompt
+#: (e.g. "python / pandas", "docker, k8s" → separate items).
+_ATOMIC_SPLIT_RE = re.compile(r"\s*[/,]\s*")
+#: Strip leading list noise (bullets, dashes) the model sometimes leaves in.
+_LEAD_NOISE_RE = re.compile(r"^[\-\*•\s]+")
+
+#: Per-list caps so a runaway extraction can't bloat the profile (and skew scoring).
+_CAP_TITLES = 10
+_CAP_SKILLS = 25
+_CAP_KEYWORDS = 30
 
 
-def _split_compound_skills(items: list[str]) -> list[str]:
+def _clean_items(items: list[str], *, cap: int, atomic: bool = False) -> list[str]:
+    """Normalize an extracted list: trim, de-noise, drop empties, dedupe
+    case-insensitively (first casing wins), optionally split composite skills,
+    and cap the length."""
+    seen: set[str] = set()
     out: list[str] = []
-    for item in items:
-        out.extend(part.strip() for part in _COMPOUND_SPLIT_RE.split(item) if part.strip())
+    for raw in items:
+        if not isinstance(raw, str):
+            continue
+        for part in (_ATOMIC_SPLIT_RE.split(raw) if atomic else [raw]):
+            v = _LEAD_NOISE_RE.sub("", part.strip().strip("\"'")).strip()
+            if len(v) < 2 or v.lower() in seen:
+                continue
+            seen.add(v.lower())
+            out.append(v)
+            if len(out) >= cap:
+                return out
     return out
 
 
@@ -44,10 +64,19 @@ class ProfileDraft(BaseModel):
     nice_to_have_skills: list[str] = Field(default_factory=list)
     keywords: list[str] = Field(default_factory=list)
 
-    @field_validator("required_skills", "nice_to_have_skills")
-    @classmethod
-    def _no_compound_skills(cls, value: list[str]) -> list[str]:
-        return _split_compound_skills(value)
+    @model_validator(mode="after")
+    def _normalize(self) -> "ProfileDraft":
+        self.titles = _clean_items(self.titles, cap=_CAP_TITLES)
+        self.required_skills = _clean_items(
+            self.required_skills, cap=_CAP_SKILLS, atomic=True)
+        self.nice_to_have_skills = _clean_items(
+            self.nice_to_have_skills, cap=_CAP_SKILLS, atomic=True)
+        self.keywords = _clean_items(self.keywords, cap=_CAP_KEYWORDS)
+        # A skill can't be both required and nice-to-have; required wins.
+        req = {s.lower() for s in self.required_skills}
+        self.nice_to_have_skills = [
+            s for s in self.nice_to_have_skills if s.lower() not in req]
+        return self
 
 
 class _IndentDumper(yaml.SafeDumper):

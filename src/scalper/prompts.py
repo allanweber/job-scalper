@@ -33,7 +33,9 @@ PROFILE_DRAFT_SYSTEM = (
     "Keep each list short (3-8 items) and use lowercase, concise phrases. Each skill must "
     'be ONE atomic skill or technology per item — never join several with "/", ",", or '
     '"and" into a single item (e.g. write "postgres" and "redis" as two separate items, '
-    'not "postgres / redis" as one)."'
+    'not "postgres / redis" as one). Use the canonical tool/skill name, not a sentence '
+    '(e.g. "postgresql", not "expert in postgresql databases"). Never repeat the same '
+    "skill in both required_skills and nice_to_have_skills."
 )
 
 APP_DRAFT_SYSTEM = """\
