@@ -96,6 +96,41 @@ def test_draft_job_creates_draft_and_marks_overlay(container, conn,
     assert ov[pool_posting].drafted_at is not None
 
 
+def test_draft_job_retries_once_on_unparseable_output(container, conn, settings,
+                                                      with_resume_and_profile, pool_posting):
+    """A first draft response we can't split triggers one retry; the clean second
+    response succeeds and the user is billed for both calls (real spend)."""
+    from _helpers import make_container
+    from scalper.llm.base import Completion
+
+    class _FlakyProvider:
+        name = "fake"
+
+        def __init__(self):
+            self.draft_calls = 0
+
+        def complete(self, prompt, *, model, system=None, max_tokens=1024,
+                     temperature=0.2):
+            if "Matched skills" in prompt:
+                self.draft_calls += 1
+                if self.draft_calls == 1:
+                    # No delimiters at all — unsplittable.
+                    return Completion(text="Sorry, here is your resume draft.",
+                                      model=model, input_tokens=20, output_tokens=30)
+                return Completion(
+                    text="<<<RESUME>>>\n# Jane Doe\nExperience\n"
+                         "<<<COVER_LETTER>>>\nDear team,\nRegards\n",
+                    model=model, input_tokens=20, output_tokens=30)
+            return Completion(text="{}", model=model, input_tokens=1, output_tokens=1)
+
+    prov = _FlakyProvider()
+    c2 = make_container(container.vault, provider=prov)
+    rec = _run(c2, conn, KIND_DRAFT, with_resume_and_profile.id,
+               {"posting_id": pool_posting})
+    assert rec.status == "succeeded", rec.error
+    assert prov.draft_calls == 2  # retried once, then parsed cleanly
+
+
 def test_draft_job_quota_exceeded(container, conn, settings,
                                   with_resume_and_profile, pool_posting):
     settings.set("quota.free", {"draft_per_month": 0, "profile_build_per_month": 5,

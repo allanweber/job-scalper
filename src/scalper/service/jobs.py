@@ -171,16 +171,31 @@ def run_draft(container: "Container", conn: Any, job_id: str, user_id: str,
         with _reserved(quota, user, "draft", unlimited=unlimited):
             scored = score_posting(profile.criteria(), pool.to_job_posting())
             decision = router.resolve(user_id, "draft")
-            text, comp = draft_application(decision.provider, decision.model,
-                                           profile.name, resume_text, scored,
-                                           tone=tone)
-            # Record the LLM spend as soon as the call returns — before parsing —
-            # so a parse failure (e.g. the model omitted a section) still shows
-            # the real cost in admin usage instead of vanishing.
-            router.record_usage(user_id, action="draft", decision=decision,
-                                input_tokens=comp.input_tokens,
-                                output_tokens=comp.output_tokens, job_id=job_id)
-            parts = split_draft(text)
+            # One call usually suffices, but the model occasionally returns output
+            # we can't split (a missing delimiter). Retry once — a fresh call
+            # almost always comes back clean — before failing the draft.
+            parts = None
+            parse_error: ValueError | None = None
+            for attempt in range(2):
+                text, comp = draft_application(decision.provider, decision.model,
+                                               profile.name, resume_text, scored,
+                                               tone=tone)
+                # Record the LLM spend as soon as each call returns — before
+                # parsing — so a parse failure still shows the real cost in admin
+                # usage instead of vanishing.
+                router.record_usage(user_id, action="draft", decision=decision,
+                                    input_tokens=comp.input_tokens,
+                                    output_tokens=comp.output_tokens, job_id=job_id)
+                try:
+                    parts = split_draft(text)
+                    break
+                except ValueError as exc:
+                    parse_error = exc
+                    _log.warning("draft parse failed (attempt %d/2): %s",
+                                 attempt + 1, exc)
+            if parts is None:
+                assert parse_error is not None
+                raise parse_error
 
             if draft_id:
                 DraftRepo(conn).mark_ready(

@@ -40,6 +40,20 @@ RESUME_MARK = "<<<RESUME>>>"
 COVER_LETTER_MARK = "<<<COVER_LETTER>>>"
 STRETCH_CLAIMS_MARK = "<<<STRETCH_CLAIMS>>>"
 
+#: Tolerant matcher for each sentinel. The model occasionally decorates the
+#: delimiter (markdown bold/heading, spaces inside, a doubled `>>`) instead of
+#: emitting it verbatim; accept those variants rather than fail the whole draft.
+#: Trailing markdown decoration on the delimiter's own line (e.g. the closing
+#: ``**`` of a bolded sentinel) so it isn't left glued to the section body.
+_TRAIL = r"[*`_ \t#]*"
+_MARK_RE = {
+    RESUME_MARK: re.compile(rf"<<+\s*RESUME\s*>>+{_TRAIL}", re.IGNORECASE),
+    COVER_LETTER_MARK: re.compile(
+        rf"<<+\s*COVER[ _]?LETTER\s*>>+{_TRAIL}", re.IGNORECASE),
+    STRETCH_CLAIMS_MARK: re.compile(
+        rf"<<+\s*STRETCH[ _]?CLAIMS\s*>>+{_TRAIL}", re.IGNORECASE),
+}
+
 
 def slugify(text: str) -> str:
     """Lowercase, hyphen-joined slug safe for use in a path component."""
@@ -72,22 +86,33 @@ def split_draft(text: str) -> DraftParts:
     empty — the caller turns that into a per-posting failure (no partial folder written).
     """
     marks = [RESUME_MARK, COVER_LETTER_MARK, STRETCH_CLAIMS_MARK]
-    # Locate each sentinel; a part runs from after its mark to the next present mark.
+    # Locate each sentinel (tolerant of decoration); a part runs from after its
+    # mark to the start of the next present mark.
     positions: list[tuple[int, int, str]] = []
     for mark in marks:
-        idx = text.find(mark)
-        if idx != -1:
-            positions.append((idx, len(mark), mark))
+        m = _MARK_RE[mark].search(text)
+        if m is not None:
+            positions.append((m.start(), m.end(), mark))
     positions.sort()
 
     found: dict[str, str] = {}
-    for i, (idx, length, mark) in enumerate(positions):
-        start = idx + length
+    start_of: dict[str, int] = {}
+    for i, (start_idx, end_idx, mark) in enumerate(positions):
         end = positions[i + 1][0] if i + 1 < len(positions) else len(text)
-        found[mark] = text[start:end].strip()
+        found[mark] = text[end_idx:end].strip()
+        start_of[mark] = start_idx
 
     resume = found.get(RESUME_MARK, "")
     cover_letter = found.get(COVER_LETTER_MARK, "")
+
+    # Fallback: the model sometimes omits the RESUME delimiter but still emits the
+    # cover-letter one. Everything before the cover letter is then the resume, so
+    # we can recover a full draft instead of failing it outright.
+    if not resume and cover_letter and COVER_LETTER_MARK in start_of:
+        head = text[: start_of[COVER_LETTER_MARK]].strip()
+        if head:
+            resume = head
+
     if not resume:
         raise ValueError("LLM output had no resume section")
     if not cover_letter:

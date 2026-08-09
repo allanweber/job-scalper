@@ -43,6 +43,29 @@ def test_split_draft_requires_both_required_parts(text):
         split_draft(text)
 
 
+@pytest.mark.parametrize("resume_mark", [
+    "**<<<RESUME>>>**",   # bolded
+    "## <<<RESUME>>>",    # heading-decorated
+    "<<< RESUME >>>",     # inner spaces
+    "<<RESUME>>",         # doubled brackets
+])
+def test_split_draft_tolerates_decorated_delimiters(resume_mark):
+    text = f"{resume_mark}\n# Jane Dev\nBody.\n{_COVER}"
+    parts = split_draft(text)
+    assert parts.resume.startswith("# Jane Dev")
+    assert parts.cover_letter.startswith("# Jane Dev")
+
+
+def test_split_draft_recovers_when_resume_delimiter_missing():
+    # The model dropped the RESUME sentinel but kept COVER_LETTER; everything
+    # before the cover letter is the resume.
+    text = "# Jane Dev\nStaff Engineer\n\n## SUMMARY\n- Built things.\n" + _COVER
+    parts = split_draft(text)
+    assert parts.resume.startswith("# Jane Dev")
+    assert "SUMMARY" in parts.resume
+    assert parts.cover_letter.startswith("# Jane Dev")
+
+
 def test_parse_resume_structure():
     pytest.importorskip("markdown")
     from scalper.pdf import parse_resume
