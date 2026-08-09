@@ -240,6 +240,16 @@ def update_draft(draft_id: str, body: DraftUpdateRequest,
     return _draft_response(d, applied=applied, application_status=app_status)
 
 
+@router.delete("/drafts/{draft_id}", status_code=status.HTTP_204_NO_CONTENT,
+               tags=["drafts"])
+def delete_draft(draft_id: str, ctx: RequestContext = Depends(get_ctx),
+                 user: User = Depends(current_user)):
+    """Delete a draft (e.g. remove a failed application from the list)."""
+    if not DraftRepo(ctx.conn).delete(draft_id, user.id):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "draft not found")
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
 @router.get("/drafts/{draft_id}/{which}.pdf", tags=["drafts"])
 def get_draft_pdf(draft_id: str, which: str, ctx: RequestContext = Depends(get_ctx),
                   user: User = Depends(current_user)):

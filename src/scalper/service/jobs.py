@@ -174,10 +174,13 @@ def run_draft(container: "Container", conn: Any, job_id: str, user_id: str,
             text, comp = draft_application(decision.provider, decision.model,
                                            profile.name, resume_text, scored,
                                            tone=tone)
-            parts = split_draft(text)
+            # Record the LLM spend as soon as the call returns — before parsing —
+            # so a parse failure (e.g. the model omitted a section) still shows
+            # the real cost in admin usage instead of vanishing.
             router.record_usage(user_id, action="draft", decision=decision,
                                 input_tokens=comp.input_tokens,
                                 output_tokens=comp.output_tokens, job_id=job_id)
+            parts = split_draft(text)
 
             if draft_id:
                 DraftRepo(conn).mark_ready(

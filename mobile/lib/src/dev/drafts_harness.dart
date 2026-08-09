@@ -72,7 +72,7 @@ class FakeDraftsRepository implements DraftsRepository {
     this.delay,
     this.insights,
     Set<String>? pendingOnce,
-  })  : _items = items ?? demoDraftSummaries,
+  })  : _items = List.of(items ?? demoDraftSummaries),
         _pendingOnce = pendingOnce ?? const {};
 
   final List<DraftSummary> _items;
@@ -92,6 +92,7 @@ class FakeDraftsRepository implements DraftsRepository {
   final List<({String id, bool applied})> appliedCalls = [];
   final List<({String id, String? status})> statusCalls = [];
   final List<({String id, String? tone})> regenerateCalls = [];
+  final List<String> deletedCalls = [];
   final Map<String, Draft> _overrides = {};
 
   @override
@@ -119,6 +120,14 @@ class FakeDraftsRepository implements DraftsRepository {
       );
     }
     return _demoDraft(s);
+  }
+
+  @override
+  Future<void> deleteDraft(String id) async {
+    if (delay != null) await Future.delayed(delay!);
+    if (fails) throw Exception('Failed host lookup');
+    deletedCalls.add(id);
+    _items.removeWhere((d) => d.id == id);
   }
 
   @override

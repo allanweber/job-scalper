@@ -62,17 +62,64 @@ class ApplicationsScreen extends ConsumerWidget {
                           d.postingId != null && overrides.containsKey(d.postingId)
                               ? overrides[d.postingId]
                               : base;
-                      return _ApplicationCard(
-                        draft: d,
-                        stage: stage,
-                        onTap: () => context.push(
-                            '/applications/draft/${d.id}',
-                            extra: d),
+                      return Dismissible(
+                        key: ValueKey(d.id),
+                        direction: DismissDirection.endToStart,
+                        confirmDismiss: (_) => _confirmDelete(context, d),
+                        onDismissed: (_) => ctrl.delete(d.id),
+                        background: const _DeleteBackground(),
+                        child: _ApplicationCard(
+                          draft: d,
+                          stage: stage,
+                          onTap: () => context.push(
+                              '/applications/draft/${d.id}',
+                              extra: d),
+                        ),
                       );
                     },
                   ),
           ),
       },
+    );
+  }
+}
+
+Future<bool> _confirmDelete(BuildContext context, DraftSummary d) async {
+  final ok = await showDialog<bool>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: Text(
+          d.isFailed ? 'Remove failed application?' : 'Delete this application?'),
+      content: const Text(
+          'This removes the draft from your applications and can’t be undone.'),
+      actions: [
+        TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancel')),
+        FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Delete')),
+      ],
+    ),
+  );
+  return ok ?? false;
+}
+
+/// The red "swipe to delete" background revealed behind an Applications row.
+class _DeleteBackground extends StatelessWidget {
+  const _DeleteBackground();
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      alignment: Alignment.centerRight,
+      padding: const EdgeInsets.only(right: 22),
+      decoration: BoxDecoration(
+        color: scheme.errorContainer,
+        borderRadius: BorderRadius.circular(AppTokens.radiusCard),
+      ),
+      child: Icon(Icons.delete_outline_rounded, color: scheme.onErrorContainer),
     );
   }
 }

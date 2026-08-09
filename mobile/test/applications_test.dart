@@ -36,6 +36,25 @@ void main() {
     expect(find.textContaining('Linear'), findsWidgets);
   });
 
+  testWidgets('swipe-to-delete removes an application', (tester) async {
+    final repo = FakeDraftsRepository();
+    final container = _container(repo: repo);
+    await _pump(tester, container);
+    expect(container.read(applicationsControllerProvider).items, hasLength(3));
+
+    // Swipe a row left, then confirm the dialog.
+    await tester.drag(
+        find.text('Senior Backend Engineer'), const Offset(-500, 0));
+    await tester.pumpAndSettle();
+    expect(find.text('Delete this application?'), findsOneWidget);
+    await tester.tap(find.widgetWithText(FilledButton, 'Delete'));
+    await tester.pumpAndSettle();
+
+    expect(repo.deletedCalls, hasLength(1));
+    expect(container.read(applicationsControllerProvider).items, hasLength(2));
+    expect(find.text('Senior Backend Engineer'), findsNothing);
+  });
+
   testWidgets('empty state when there are no drafts', (tester) async {
     await _pump(tester, _container(repo: FakeDraftsRepository(items: const [])));
     expect(find.text('No applications yet'), findsOneWidget);

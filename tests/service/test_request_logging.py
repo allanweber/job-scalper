@@ -6,7 +6,8 @@ import logging
 def test_request_logging_emits_structured_line(client, auth_headers, caplog):
     """A normal request emits one scalper.request line with core fields, and the
     request id is echoed back to the caller."""
-    with caplog.at_level(logging.INFO, logger="scalper.request"):
+    # A successful request logs at DEBUG (kept quiet at the default INFO level).
+    with caplog.at_level(logging.DEBUG, logger="scalper.request"):
         r = client.get("/me", headers=auth_headers)
     assert r.status_code == 200
 

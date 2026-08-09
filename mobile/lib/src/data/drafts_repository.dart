@@ -25,6 +25,9 @@ abstract class DraftsRepository {
   /// Persist edited resume and/or cover-letter markdown (`PUT /drafts/{id}`).
   Future<Draft> updateDraft(String id, {String? resumeMd, String? coverLetterMd});
 
+  /// Delete a draft (`DELETE /drafts/{id}`), e.g. to remove a failed one.
+  Future<void> deleteDraft(String id);
+
   /// Mark (or unmark) this draft's posting as applied
   /// (`PUT /drafts/{id}/applied`). Returns the updated draft.
   Future<Draft> setApplied(String id, bool applied);
@@ -68,6 +71,10 @@ class HttpDraftsRepository implements DraftsRepository {
         data: {'tone': tone});
     return Draft.fromJson(r.data!);
   }
+
+  @override
+  Future<void> deleteDraft(String id) =>
+      _api.delete<void>('/drafts/$id');
 
   @override
   Future<Draft> updateDraft(String id,

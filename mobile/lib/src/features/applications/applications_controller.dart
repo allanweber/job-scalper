@@ -87,6 +87,21 @@ class ApplicationsController extends Notifier<ApplicationsState> {
 
   Future<void> refresh() => _load();
 
+  /// Delete a draft (e.g. a failed one) and drop it from the list. Optimistic:
+  /// the row disappears immediately; on failure the list reloads from the server
+  /// so nothing is lost, and [error] carries the reason.
+  Future<void> delete(String id) async {
+    state = state.copyWith(
+        items: state.items.where((d) => d.id != id).toList());
+    try {
+      await _repo.deleteDraft(id);
+    } catch (e) {
+      if (_disposed) return;
+      await _load();
+      state = state.copyWith(error: _humanize(e));
+    }
+  }
+
   String _humanize(Object e) => apiErrorMessage(e);
 }
 

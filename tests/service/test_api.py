@@ -291,6 +291,21 @@ def test_draft_tone_and_regenerate(client, auth_headers, conn):
     assert body["resume_md"].startswith("# Jane")
 
 
+def test_delete_draft_removes_it(client, auth_headers, conn):
+    client.get("/me", headers=auth_headers)
+    _user, pid = _seed_user_content(conn)
+    draft_id = client.post("/drafts", headers=auth_headers,
+                           json={"posting_id": pid}).json()["id"]
+    assert len(client.get("/drafts", headers=auth_headers).json()) == 1
+
+    r = client.request("DELETE", f"/drafts/{draft_id}", headers=auth_headers)
+    assert r.status_code == 204
+    assert client.get("/drafts", headers=auth_headers).json() == []
+    # A second delete is a clean 404.
+    assert client.request("DELETE", f"/drafts/{draft_id}",
+                          headers=auth_headers).status_code == 404
+
+
 def test_mark_applied_visible_everywhere(client, auth_headers, conn):
     client.get("/me", headers=auth_headers)
     _user, pid = _seed_user_content(conn)

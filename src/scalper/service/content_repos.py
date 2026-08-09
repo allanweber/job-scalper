@@ -908,6 +908,13 @@ class DraftRepo:
             counts[status or "applied"] = counts.get(status or "applied", 0) + n
         return total, counts
 
+    def delete(self, draft_id: str, user_id: str) -> bool:
+        """Delete a user's own draft. Returns False if it isn't theirs."""
+        cur = self._c.execute(
+            "DELETE FROM drafts WHERE id=? AND user_id=?", (draft_id, user_id))
+        self._c.commit()
+        return bool(cur.rowcount)
+
     def update_content(self, draft_id: str, user_id: str, *,
                        resume_md: str | None = None,
                        cover_letter_md: str | None = None) -> "Draft | None":
