@@ -157,16 +157,11 @@ def _client_ip(request: Request) -> str | None:
 
 
 def _level_for(path: str, status: int) -> int:
-    # Only surface problems by default: a successful request is DEBUG (silent at
-    # the default INFO level, so the mobile app's frequent polling doesn't flood
-    # the logs), while 4xx/5xx stay loud. Set LOG_LEVEL=debug to see everything.
-    if path in _HEALTH_PATHS:
-        return logging.DEBUG
-    if status >= 500:
-        return logging.ERROR
-    if status >= 400:
-        return logging.WARNING
-    return logging.DEBUG
+    # Only real server errors (5xx) are logged by default. Everything else —
+    # success, redirects, and routine client 4xx like the app's expected 401 on
+    # /me before it refreshes its token — is DEBUG, so the request log stays
+    # quiet at the default INFO level. Set LOG_LEVEL=debug to see every request.
+    return logging.ERROR if status >= 500 else logging.DEBUG
 
 
 class RequestLoggingMiddleware(BaseHTTPMiddleware):
