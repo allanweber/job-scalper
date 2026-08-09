@@ -5,10 +5,13 @@ lacks). This looks the other way — terms present in the **posting** but absent
 the user's **résumé text** — so the detail screen can tell the user, concretely, what
 this job asks for that their résumé doesn't yet mention.
 
-Deterministic and LLM-free: a curated vocabulary of common tech skills/tools/keywords
+Deterministic and LLM-free: a comprehensive gazetteer of tech skills/tools/keywords
 (plus any extra terms the caller passes, e.g. the user's own profile skills) is matched
 against the posting; anything found there but not in the résumé is a gap. Word-boundary
-matching (shared with scoring) keeps short tokens like ``go`` or ``r`` honest.
+matching (shared with scoring) keeps short tokens honest. Bare single letters (``c``,
+``r``) and other prose-colliding tokens are intentionally omitted — their false-positive
+rate outweighs their value; the multi-char aliases (``C++``, ``C#``, ``R (language)``)
+cover them where they matter.
 """
 
 from __future__ import annotations
@@ -17,35 +20,82 @@ import re
 
 from scalper.scoring import _contains_term
 
-#: Curated skills/tools/keywords worth flagging. Display casing is preserved (the
-#: matcher is case-insensitive) so labels render nicely in the UI. Kept broad but
-#: not exhaustive — the caller can union in the user's own profile terms.
+#: Comprehensive gazetteer of skills/tools/keywords worth flagging. Display casing is
+#: preserved (the matcher is case-insensitive) so labels render nicely in the UI. Broad
+#: by design so the gap genuinely reflects the posting rather than a tiny hand-list; the
+#: caller can still union in the user's own profile terms for anything niche.
 SKILL_VOCAB: tuple[str, ...] = (
-    # languages
-    "Python", "JavaScript", "TypeScript", "Java", "Kotlin", "Swift", "Go", "Rust",
-    "Ruby", "PHP", "C++", "C#", "Scala", "Elixir", "Clojure", "Dart", "R", "SQL",
-    "Bash", "PowerShell",
-    # frontend
-    "React", "React Native", "Vue", "Angular", "Svelte", "Next.js", "Nuxt",
-    "Redux", "Tailwind", "HTML", "CSS", "SASS", "Flutter", "Jetpack Compose",
-    "SwiftUI", "Webpack", "Vite",
-    # backend / frameworks
-    "Node.js", "Express", "Django", "Flask", "FastAPI", "Spring", "Spring Boot",
-    "Rails", "Laravel", ".NET", "GraphQL", "gRPC", "REST API", "Microservices",
-    # data / ml
-    "PostgreSQL", "MySQL", "MongoDB", "Redis", "Elasticsearch", "Cassandra",
-    "DynamoDB", "Snowflake", "BigQuery", "Kafka", "Spark", "Airflow", "dbt",
-    "Pandas", "NumPy", "PyTorch", "TensorFlow", "scikit-learn", "Machine Learning",
-    "Deep Learning", "NLP", "LLM", "Data Engineering", "ETL",
-    # cloud / devops
-    "AWS", "GCP", "Azure", "Docker", "Kubernetes", "Terraform", "Ansible",
-    "Jenkins", "CI/CD", "GitHub Actions", "GitLab", "Prometheus", "Grafana",
-    "Datadog", "Linux", "Nginx", "Serverless", "Lambda",
-    # practices / roles
-    "Agile", "Scrum", "TDD", "Microservice", "Distributed Systems", "System Design",
-    "Observability", "SRE", "DevOps", "Security", "OAuth", "SAML", "Accessibility",
-    "Unit Testing", "Integration Testing", "Playwright", "Cypress", "Selenium",
-    "Figma", "Product Management",
+    # --- languages ---
+    "Python", "JavaScript", "TypeScript", "Java", "Kotlin", "Swift", "Objective-C",
+    "Go", "Golang", "Rust", "Ruby", "PHP", "C++", "C#", "Scala", "Elixir", "Erlang",
+    "Clojure", "Haskell", "Dart", "Perl", "Lua", "Groovy", "F#", "OCaml", "Julia",
+    "MATLAB", "Solidity", "Assembly", "COBOL", "Fortran", "VBA", "Bash", "Shell",
+    "PowerShell", "SQL", "PL/SQL", "T-SQL", "GraphQL", "HTML", "CSS", "SASS", "SCSS",
+    "LESS", "XML", "YAML", "JSON", "Markdown",
+    # --- frontend ---
+    "React", "React Native", "Vue", "Vue.js", "Angular", "AngularJS", "Svelte",
+    "SvelteKit", "Next.js", "Nuxt", "Remix", "Gatsby", "Redux", "MobX", "RxJS",
+    "jQuery", "Bootstrap", "Tailwind", "Material UI", "Chakra UI", "Storybook",
+    "Webpack", "Vite", "Babel", "ESLint", "Prettier", "Three.js", "D3.js", "WebGL",
+    "WebSockets", "WebAssembly", "PWA", "SPA", "SSR", "Responsive Design",
+    # --- mobile ---
+    "Flutter", "SwiftUI", "UIKit", "Jetpack Compose", "Android", "iOS", "Xamarin",
+    "Ionic", "Cordova", "Expo", "Fastlane",
+    # --- backend / frameworks ---
+    "Node.js", "Express", "NestJS", "Deno", "Bun", "Django", "Flask", "FastAPI",
+    "Tornado", "Celery", "Spring", "Spring Boot", "Micronaut", "Quarkus", "Rails",
+    "Ruby on Rails", "Sinatra", "Laravel", "Symfony", "ASP.NET", ".NET", ".NET Core",
+    "Phoenix", "Gin", "Fiber", "Actix", "gRPC", "REST", "REST API", "SOAP",
+    "Microservices", "Message Queue", "RabbitMQ", "GraphQL API", "OpenAPI", "Swagger",
+    # --- databases / data stores ---
+    "PostgreSQL", "MySQL", "MariaDB", "SQLite", "SQL Server", "Oracle", "MongoDB",
+    "Redis", "Memcached", "Cassandra", "DynamoDB", "Couchbase", "Neo4j", "CouchDB",
+    "Elasticsearch", "OpenSearch", "Solr", "InfluxDB", "TimescaleDB", "Snowflake",
+    "BigQuery", "Redshift", "Databricks", "ClickHouse", "Firebase", "Firestore",
+    "Supabase", "Prisma", "SQLAlchemy", "Hibernate", "TypeORM",
+    # --- data / ML / AI ---
+    "Kafka", "Spark", "PySpark", "Hadoop", "Flink", "Airflow", "dbt", "Dagster",
+    "Luigi", "Pandas", "NumPy", "SciPy", "Polars", "Dask", "PyTorch", "TensorFlow",
+    "Keras", "scikit-learn", "XGBoost", "Hugging Face", "LangChain", "OpenAI",
+    "Machine Learning", "Deep Learning", "Reinforcement Learning", "NLP",
+    "Computer Vision", "LLM", "LLMs", "Generative AI", "MLOps", "Data Engineering",
+    "Data Science", "Data Analysis", "ETL", "ELT", "Data Warehouse", "Data Pipeline",
+    "Data Modeling", "Tableau", "Power BI", "Looker", "Metabase", "Superset",
+    "Jupyter", "R (language)",
+    # --- cloud / infra / devops ---
+    "AWS", "GCP", "Google Cloud", "Azure", "DigitalOcean", "Heroku", "Vercel",
+    "Netlify", "Cloudflare", "EC2", "S3", "Lambda", "ECS", "EKS", "RDS", "CloudFront",
+    "Docker", "Kubernetes", "Helm", "OpenShift", "Terraform", "Pulumi", "Ansible",
+    "Chef", "Puppet", "Vagrant", "Packer", "Jenkins", "CircleCI", "Travis CI",
+    "GitHub Actions", "GitLab CI", "ArgoCD", "Spinnaker", "CI/CD", "Prometheus",
+    "Grafana", "Datadog", "New Relic", "Splunk", "ELK", "Sentry", "PagerDuty",
+    "Nginx", "Apache", "HAProxy", "Envoy", "Istio", "Consul", "Vault", "Serverless",
+    "Linux", "Unix", "Bash Scripting", "Networking", "TCP/IP", "DNS", "Load Balancing",
+    # --- version control / tooling ---
+    "Git", "GitHub", "GitLab", "Bitbucket", "SVN", "Jira", "Confluence", "Notion",
+    "Figma", "Sketch", "Adobe XD", "Postman", "Insomnia",
+    # --- testing / quality ---
+    "Unit Testing", "Integration Testing", "End-to-End Testing", "TDD", "BDD",
+    "Playwright", "Cypress", "Selenium", "Jest", "Vitest", "Mocha", "Chai",
+    "Pytest", "JUnit", "TestNG", "RSpec", "Cucumber", "Appium", "Load Testing",
+    # --- architecture / practices ---
+    "Microservice", "Monorepo", "Event-Driven", "Domain-Driven Design",
+    "Distributed Systems", "System Design", "Design Patterns", "Clean Architecture",
+    "SOLID", "Scalability", "High Availability", "Observability", "SRE", "DevOps",
+    "DevSecOps", "Platform Engineering", "API Design", "OAuth", "OpenID", "SAML",
+    "JWT", "SSO", "Encryption", "Security", "Penetration Testing", "OWASP",
+    "Accessibility", "WCAG", "SEO", "Performance Optimization", "Caching",
+    "Concurrency", "Multithreading", "Functional Programming",
+    "Object-Oriented Programming",
+    # --- methodologies / soft / role ---
+    "Agile", "Scrum", "Kanban", "Waterfall", "SAFe", "Product Management",
+    "Project Management", "Stakeholder Management", "Technical Leadership",
+    "Mentoring", "Code Review", "Pair Programming", "Cross-Functional",
+    "Communication", "Problem Solving",
+    # --- domains ---
+    "Fintech", "Healthcare", "E-commerce", "SaaS", "B2B", "B2C", "Blockchain",
+    "Web3", "Cybersecurity", "IoT", "AR/VR", "Gaming", "Ad Tech", "MarTech",
+    "Embedded Systems", "Robotics",
 )
 
 
@@ -75,4 +125,15 @@ def resume_gap(posting_text: str, resume_text: str | None,
             m = re.search(rf"\b{re.escape(term.lower())}\b", posting_text)
             hits.append((m.start() if m else 1 << 30, term))
     hits.sort(key=lambda h: h[0])
-    return [term for _, term in hits[:limit]]
+
+    # Suppress a term when a longer matched term already contains it as whole
+    # words (e.g. drop "GitHub" when "GitHub Actions" matched) so the chips don't
+    # show a general term next to the specific one that subsumes it.
+    matched = [t for _, t in hits]
+    kept = [
+        (pos, term) for pos, term in hits
+        if not any(other != term and len(other) > len(term)
+                   and _contains_term(other.lower(), term.lower())
+                   for other in matched)
+    ]
+    return [term for _, term in kept[:limit]]

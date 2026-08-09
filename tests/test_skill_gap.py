@@ -32,6 +32,21 @@ def test_word_boundary_avoids_substring_false_positives():
     assert resume_gap(posting, "unrelated") == []
 
 
+def test_gazetteer_catches_varied_terms():
+    # A broad posting: many distinct tools, none in the résumé -> all flagged.
+    posting = ("Build data pipelines with Kafka, Snowflake and Airflow; deploy on "
+               "AWS with Terraform and Ansible.").lower()
+    gap = resume_gap(posting, "Generalist engineer.", limit=20)
+    for term in ["Kafka", "Snowflake", "Airflow", "AWS", "Terraform", "Ansible"]:
+        assert term in gap, term
+
+
+def test_bare_single_letters_are_not_flagged():
+    # Prose-colliding single letters are deliberately absent from the gazetteer.
+    posting = "We value clarity in c and r style thinking and product strategy."
+    assert resume_gap(posting, "unrelated résumé") == []
+
+
 def test_result_is_capped_and_posting_ordered():
     posting = ("kubernetes first, then terraform, then aws, then docker, "
                "then react, then graphql")
