@@ -318,5 +318,9 @@ void main() {
     expect(find.text("Couldn't finish this draft"), findsOneWidget);
     expect(find.textContaining('upload a resume first'), findsOneWidget);
     expect(find.text('Mark as applied'), findsNothing);
+    // A failed draft can be deleted from here — both an app-bar action and a
+    // prominent button.
+    expect(find.byTooltip('Delete'), findsOneWidget);
+    expect(find.text('Delete this draft'), findsOneWidget);
   });
 }

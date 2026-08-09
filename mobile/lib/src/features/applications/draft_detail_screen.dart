@@ -156,6 +156,14 @@ class _DraftDetailScreenState extends ConsumerState<DraftDetailScreen> {
               icon: const Icon(Icons.edit_outlined),
             ),
           ],
+          // Delete is available for a finished draft in any state — including a
+          // failed one, so you can clear it straight from here.
+          if (d != null && (d.isReady || d.isFailed))
+            IconButton(
+              tooltip: 'Delete',
+              onPressed: _delete,
+              icon: const Icon(Icons.delete_outline_rounded),
+            ),
         ],
       ),
       body: switch (state.status) {
@@ -169,6 +177,7 @@ class _DraftDetailScreenState extends ConsumerState<DraftDetailScreen> {
             error: d.error,
             postingId: d.postingId,
             draftId: d.id,
+            onDelete: _delete,
           ),
         DraftDetailStatus.ready => _Ready(
             draft: d!,
@@ -185,6 +194,37 @@ class _DraftDetailScreenState extends ConsumerState<DraftDetailScreen> {
           ),
       },
     );
+  }
+
+  Future<void> _delete() async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete this application?'),
+        content: const Text(
+            'This removes the draft from your applications and can’t be undone.'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('Cancel')),
+          FilledButton(
+              onPressed: () => Navigator.of(ctx).pop(true),
+              child: const Text('Delete')),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    try {
+      await ref.read(draftsRepositoryProvider).deleteDraft(widget.draftId);
+      // Let the Applications list drop the row when we return.
+      ref.read(draftsRevisionProvider.notifier).bump();
+      if (mounted) context.pop();
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text("Couldn't delete — try again.")));
+      }
+    }
   }
 
   Future<void> _regenerate(Draft d) async {
@@ -794,11 +834,13 @@ class _DraftFailed extends StatelessWidget {
     required this.error,
     required this.postingId,
     required this.draftId,
+    required this.onDelete,
   });
 
   final String? error;
   final String? postingId;
   final String draftId;
+  final VoidCallback onDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -825,15 +867,26 @@ class _DraftFailed extends StatelessWidget {
               style: TextStyle(
                   fontSize: 13, height: 1.45, color: scheme.onSurfaceVariant),
             ),
-            if (postingId != null) ...[
-              const SizedBox(height: 20),
-              OutlinedButton.icon(
-                onPressed: () => context.push(
-                    '/applications/draft/$draftId/job/$postingId'),
-                icon: const Icon(Icons.analytics_outlined, size: 18),
-                label: const Text('View the job'),
-              ),
-            ],
+            const SizedBox(height: 20),
+            Wrap(
+              alignment: WrapAlignment.center,
+              spacing: 10,
+              runSpacing: 10,
+              children: [
+                if (postingId != null)
+                  OutlinedButton.icon(
+                    onPressed: () => context.push(
+                        '/applications/draft/$draftId/job/$postingId'),
+                    icon: const Icon(Icons.analytics_outlined, size: 18),
+                    label: const Text('View the job'),
+                  ),
+                FilledButton.tonalIcon(
+                  onPressed: onDelete,
+                  icon: const Icon(Icons.delete_outline_rounded, size: 18),
+                  label: const Text('Delete this draft'),
+                ),
+              ],
+            ),
           ],
         ),
       ),
