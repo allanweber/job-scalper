@@ -57,6 +57,21 @@ void main() {
     expect(find.text('Draft application'), findsOneWidget);
   });
 
+  testWidgets('shows skills missing from the résumé', (tester) async {
+    tester.view.physicalSize = const Size(1170, 7000);
+    tester.view.devicePixelRatio = 3.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await _pump(tester, _container());
+
+    // The section label is upper-cased by _Label; the description is verbatim.
+    expect(find.textContaining('not in your résumé'), findsOneWidget);
+    // The gap terms from the harness detail render as chips.
+    expect(find.text('Terraform'), findsOneWidget);
+    expect(find.text('GraphQL'), findsOneWidget);
+  });
+
   testWidgets('save toggle from the app bar persists', (tester) async {
     final repo = FakeFeedRepository();
     await _pump(tester, _container(repo: repo)); // j1 is unsaved

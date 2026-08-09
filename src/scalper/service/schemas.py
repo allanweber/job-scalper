@@ -167,6 +167,8 @@ class PostingDetailResponse(BaseModel):
     matched_skills: list[str]
     missing_skills: list[str]
     matched_keywords: list[str]
+    #: Skills/keywords in the posting that the user's résumé doesn't mention.
+    resume_gap: list[str] = []
     sources: list[str]
     is_new: bool
     saved: bool

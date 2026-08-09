@@ -150,7 +150,9 @@ class _Body extends StatelessWidget {
             const SizedBox(height: 20),
             _Breakdown(breakdown: d.breakdown, score: d.score),
           ],
-          if (d.matchedSkills.isNotEmpty || d.missingSkills.isNotEmpty) ...[
+          if (d.matchedSkills.isNotEmpty ||
+              d.missingSkills.isNotEmpty ||
+              d.resumeGap.isNotEmpty) ...[
             const SizedBox(height: 20),
             _SkillsSection(detail: d),
           ],
@@ -432,9 +434,25 @@ class _SkillsSection extends StatelessWidget {
             icon: Icons.check_rounded,
           ),
         ],
+        if (detail.resumeGap.isNotEmpty) ...[
+          if (detail.matchedSkills.isNotEmpty) const SizedBox(height: 16),
+          _Label('Missing from your résumé'),
+          const SizedBox(height: 4),
+          Text(
+            'In this posting, but not in your résumé — worth addressing.',
+            style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
+          ),
+          const SizedBox(height: 8),
+          _Chips(
+            labels: detail.resumeGap,
+            bg: AppTokens.chipTanBgLight,
+            fg: AppTokens.chipTanTextLight,
+            icon: Icons.priority_high_rounded,
+          ),
+        ],
         if (detail.missingSkills.isNotEmpty) ...[
           const SizedBox(height: 16),
-          _Label('Gaps'),
+          _Label('Not in this posting'),
           const SizedBox(height: 8),
           _Chips(
             labels: detail.missingSkills,

@@ -120,6 +120,7 @@ class PostingDetail {
     this.matchedSkills = const [],
     this.missingSkills = const [],
     this.matchedKeywords = const [],
+    this.resumeGap = const [],
     this.sources = const [],
     this.isNew = false,
     this.saved = false,
@@ -144,6 +145,9 @@ class PostingDetail {
   final List<String> matchedSkills;
   final List<String> missingSkills;
   final List<String> matchedKeywords;
+
+  /// Skills/keywords the posting emphasises that the user's résumé doesn't show.
+  final List<String> resumeGap;
   final List<String> sources;
   final bool isNew;
   final bool saved;
@@ -169,6 +173,7 @@ class PostingDetail {
         matchedSkills: matchedSkills,
         missingSkills: missingSkills,
         matchedKeywords: matchedKeywords,
+        resumeGap: resumeGap,
         sources: sources,
         isNew: isNew,
         saved: saved ?? this.saved,
@@ -194,6 +199,7 @@ class PostingDetail {
         matchedSkills: FeedItem._strList(j['matched_skills']),
         missingSkills: FeedItem._strList(j['missing_skills']),
         matchedKeywords: FeedItem._strList(j['matched_keywords']),
+        resumeGap: FeedItem._strList(j['resume_gap']),
         sources: FeedItem._strList(j['sources']),
         isNew: (j['is_new'] as bool?) ?? false,
         saved: (j['saved'] as bool?) ?? false,

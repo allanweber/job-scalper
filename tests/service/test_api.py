@@ -134,6 +134,28 @@ def test_posting_detail_unknown_404(client, auth_headers):
     assert client.get("/postings/nope", headers=auth_headers).status_code == 404
 
 
+def test_posting_detail_reports_resume_gap(client, auth_headers, conn):
+    """The detail carries skills the posting emphasises that the résumé omits."""
+    client.get("/me", headers=auth_headers)
+    user = UserRepo(conn).get_by_email("user@example.com")
+    ResumeRepo(conn).upsert(user.id, filename="cv.txt", content_type="text/plain",
+                            blob=b"Jane. Python and FastAPI backend engineer.",
+                            extracted_text="Jane. Python and FastAPI backend engineer.")
+    ProfileRepo(conn).upsert(user.id, "default", {
+        "titles": ["Python Engineer"], "required_skills": ["python", "fastapi"],
+        "keywords": ["backend"]})
+    p = posting("remotive", "gap1", company="Acme", title="Senior Python Engineer",
+                description="Python and FastAPI on AWS with Kubernetes and Terraform.")
+    PostingRepo(conn).ingest([p])
+
+    body = client.get(f"/postings/{p.dedup_key}", headers=auth_headers).json()
+    gap = body["resume_gap"]
+    # Present in the posting, absent from the résumé -> flagged.
+    assert "Kubernetes" in gap and "AWS" in gap and "Terraform" in gap
+    # Present in both posting and résumé -> not a gap.
+    assert "Python" not in gap and "FastAPI" not in gap
+
+
 def test_user_payload_reports_profile_presence(client, auth_headers, conn):
     # A freshly signed-in account has no profile yet — the client uses this to
     # decide onboarding is needed, independent of any device-local flag.

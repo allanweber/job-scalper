@@ -13,11 +13,13 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from scalper.scoring import score_all, score_posting
+from scalper.skill_gap import resume_gap
 from scalper.service.content_repos import (
     OverlayRepo,
     PoolPosting,
     PostingRepo,
     ProfileRepo,
+    ResumeRepo,
     StoredProfile,
     UserSourceRepo,
 )
@@ -87,6 +89,9 @@ class PostingDetail:
     matched_skills: list[str]
     missing_skills: list[str]
     matched_keywords: list[str]
+    #: Skills/keywords the posting emphasises that the user's résumé doesn't show
+    #: (posting-minus-résumé gap; empty when the user has no résumé on file).
+    resume_gap: list[str]
     sources: list[str]
     is_new: bool
     saved: bool
@@ -181,10 +186,18 @@ class FeedService:
         source filter, so it also backs postings reached by URL import.
         """
         profile = profile or self._profiles.primary_for(user_id)
-        s = score_posting(profile.criteria(), posting.to_job_posting()) if profile else None
+        pj = posting.to_job_posting()
+        s = score_posting(profile.criteria(), pj) if profile else None
         if s is not None:
             self._overlay.upsert_score(user_id, posting.id, s.percent,
                                        s.breakdown.model_dump())
+        # Gap the résumé's way: what this posting asks for that the résumé omits.
+        # The user's own profile terms widen the vocabulary beyond the curated set.
+        resume_text = ResumeRepo(self._conn).get_text(user_id)
+        extra = list(profile.criteria().required_skills) + \
+            list(profile.criteria().nice_to_have_skills) + \
+            list(profile.criteria().keywords) if profile else []
+        gap = resume_gap(pj.search_text, resume_text, extra)
         ov = self._overlay.get_many(user_id, [posting.id]).get(posting.id)
         return PostingDetail(
             posting_id=posting.id, company=posting.company, title=posting.title,
@@ -196,6 +209,7 @@ class FeedService:
             matched_skills=s.matched_skills if s else [],
             missing_skills=s.missing_skills if s else [],
             matched_keywords=s.matched_keywords if s else [],
+            resume_gap=gap,
             sources=posting.sources,
             is_new=(ov is None or ov.seen_at is None),
             saved=bool(ov and ov.saved),

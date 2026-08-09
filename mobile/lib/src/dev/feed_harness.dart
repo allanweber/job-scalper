@@ -125,6 +125,7 @@ class FakeFeedRepository implements FeedRepository {
       matchedSkills: i.matchedSkills,
       missingSkills: i.missingSkills,
       matchedKeywords: i.matchedKeywords,
+      resumeGap: const ['Terraform', 'GraphQL', 'AWS'],
       sources: i.sources,
       isNew: i.isNew,
       saved: i.saved,
