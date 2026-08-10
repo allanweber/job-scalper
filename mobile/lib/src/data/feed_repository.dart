@@ -6,8 +6,10 @@ import 'models/feed_models.dart';
 /// An interface so widget tests and the screenshot harness can inject an
 /// in-memory fake; the app runs [HttpFeedRepository] against the FastAPI backend.
 abstract class FeedRepository {
-  /// The ranked feed (`GET /feed`), optionally filtered by a minimum score.
-  Future<Feed> getFeed({int limit = 100, int minScore = 1});
+  /// The ranked feed (`GET /feed`), optionally filtered by a minimum score and
+  /// ordered by `sort` — `'score'` (best match first) or `'newest'`.
+  Future<Feed> getFeed(
+      {int limit = 100, int minScore = 1, String sort = 'score'});
 
   /// A single posting's full detail (`GET /postings/{id}`).
   Future<PostingDetail> getPosting(String postingId);
@@ -33,9 +35,10 @@ class HttpFeedRepository implements FeedRepository {
   final ApiClient _api;
 
   @override
-  Future<Feed> getFeed({int limit = 100, int minScore = 1}) async {
+  Future<Feed> getFeed(
+      {int limit = 100, int minScore = 1, String sort = 'score'}) async {
     final r = await _api.get<Map<String, dynamic>>('/feed',
-        query: {'limit': limit, 'min_score': minScore});
+        query: {'limit': limit, 'min_score': minScore, 'sort': sort});
     return Feed.fromJson(r.data!);
   }
 

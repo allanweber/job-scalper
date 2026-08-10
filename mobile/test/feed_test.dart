@@ -178,6 +178,45 @@ void main() {
     expect(repo.seen, contains('j1'));
   });
 
+  testWidgets('sorting by newest reorders the feed by publish date',
+      (tester) async {
+    final now = DateTime.now();
+    // A strong-but-old posting and a weak-but-recent one, so score order and
+    // newest order disagree.
+    final items = [
+      FeedItem(
+          postingId: 'strong-old',
+          company: 'A',
+          title: 'Strong Old',
+          url: 'https://example.com/1',
+          score: 92,
+          publishedAt:
+              now.subtract(const Duration(days: 10)).toIso8601String()),
+      FeedItem(
+          postingId: 'weak-new',
+          company: 'B',
+          title: 'Weak New',
+          url: 'https://example.com/2',
+          score: 55,
+          publishedAt:
+              now.subtract(const Duration(hours: 1)).toIso8601String()),
+    ];
+    final container = _container(repo: FakeFeedRepository(items: items));
+    await _pump(tester, container);
+    // Default (score) order: the higher-scoring posting leads.
+    expect(container.read(feedControllerProvider).items.first.postingId,
+        'strong-old');
+
+    await tester.tap(find.byIcon(Icons.sort_rounded));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Newest').last);
+    await tester.pumpAndSettle();
+
+    final state = container.read(feedControllerProvider);
+    expect(state.sort, FeedSort.newest);
+    expect(state.items.first.postingId, 'weak-new'); // most recent leads now
+  });
+
   testWidgets('add-from-URL imports the link and opens its detail',
       (tester) async {
     final repo = FakeFeedRepository();

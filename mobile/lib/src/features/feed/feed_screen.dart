@@ -23,6 +23,20 @@ class FeedScreen extends ConsumerWidget {
         title: const Text('Feed'),
         centerTitle: false,
         actions: [
+          PopupMenuButton<FeedSort>(
+            icon: const Icon(Icons.sort_rounded),
+            tooltip: 'Sort',
+            initialValue: state.sort,
+            onSelected: ctrl.setSort,
+            itemBuilder: (context) => [
+              for (final s in FeedSort.values)
+                CheckedPopupMenuItem(
+                  value: s,
+                  checked: s == state.sort,
+                  child: Text(s.label),
+                ),
+            ],
+          ),
           IconButton(
             icon: const Icon(Icons.add_link_rounded),
             tooltip: 'Add job from URL',

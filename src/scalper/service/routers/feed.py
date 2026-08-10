@@ -6,6 +6,8 @@ the user's chosen sources and scored against their profile.
 
 from __future__ import annotations
 
+from typing import Literal
+
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from scalper.service.content_repos import OverlayRepo, PostingRepo
@@ -25,9 +27,10 @@ router = APIRouter(prefix="/feed", tags=["feed"])
 @router.get("", response_model=FeedResponse)
 def get_feed(ctx: RequestContext = Depends(get_ctx), user: User = Depends(current_user),
              limit: int = Query(default=100, ge=1, le=500),
-             min_score: int = Query(default=1, ge=0, le=100)):
+             min_score: int = Query(default=1, ge=0, le=100),
+             sort: Literal["score", "newest"] = Query(default="score")):
     svc = FeedService(ctx.conn, ctx.settings)
-    items = svc.build(user.id, limit=limit, min_score=min_score)
+    items = svc.build(user.id, limit=limit, min_score=min_score, sort=sort)
     meta = svc.meta(user.id)
     return FeedResponse(
         items=[FeedItemResponse(**item.__dict__) for item in items],

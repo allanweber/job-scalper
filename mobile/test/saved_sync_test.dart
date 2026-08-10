@@ -20,7 +20,8 @@ class _MutableFeedRepo implements FeedRepository {
       ];
 
   @override
-  Future<Feed> getFeed({int limit = 100, int minScore = 1}) async {
+  Future<Feed> getFeed(
+      {int limit = 100, int minScore = 1, String sort = 'score'}) async {
     feedLoads++;
     final items = _items.where((i) => i.score >= minScore).toList();
     return Feed(items: items, count: items.length);

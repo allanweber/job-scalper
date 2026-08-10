@@ -133,12 +133,18 @@ class FeedService:
         )
 
     def build(self, user_id: str, *, profile: StoredProfile | None = None,
-              limit: int = 100, min_score: int = 1,
+              limit: int = 100, min_score: int = 1, sort: str = "score",
               candidate_limit: int = 500) -> list[FeedItem]:
         """Score the user's visible pool and return ranked feed items.
 
         Persists each score to the overlay (setting first_matched_at on first
         match) so ordering and the "new" badge are stable across calls.
+
+        ``sort`` picks the ordering: ``"score"`` (default) keeps the best
+        matches first; ``"newest"`` orders by the posting's publish date, with
+        score as the tiebreaker. Either way the full matched set is scored and
+        persisted before the ``limit`` is applied, so "newest" isn't just the
+        top-scored page re-sorted.
         """
         profile = profile or self._profiles.primary_for(user_id)
         if profile is None:
@@ -174,9 +180,13 @@ class FeedService:
                 applied=bool(ov and ov.applied_at),
                 breakdown=s.breakdown.components(),
             ))
-            if len(items) >= limit:
-                break
-        return items
+
+        # `items` is score-desc (from score_all). For "newest", re-sort by
+        # publish date — stable, so equal dates keep the score order as the
+        # tiebreaker; postings with no date sink to the bottom.
+        if sort == "newest":
+            items.sort(key=lambda it: it.published_at or "", reverse=True)
+        return items[:limit]
 
     def detail(self, user_id: str, posting: PoolPosting,
                *, profile: StoredProfile | None = None) -> PostingDetail:

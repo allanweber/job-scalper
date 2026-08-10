@@ -10,12 +10,24 @@ import '../../util/api_error.dart';
 
 enum FeedStatus { loading, ready, error }
 
+/// Feed ordering. `score` (default) puts the best matches first; `newest`
+/// orders by the posting's publish date. The name maps 1:1 to the `sort` query
+/// param the backend expects.
+enum FeedSort {
+  score('Best match'),
+  newest('Newest');
+
+  const FeedSort(this.label);
+  final String label;
+}
+
 @immutable
 class FeedState {
   const FeedState({
     this.status = FeedStatus.loading,
     this.items = const [],
     this.minScore = 1,
+    this.sort = FeedSort.score,
     this.meta = const FeedMeta(),
     this.error,
   });
@@ -25,6 +37,9 @@ class FeedState {
 
   /// The active minimum-score filter (`min_score` query param).
   final int minScore;
+
+  /// The active ordering (`sort` query param).
+  final FeedSort sort;
 
   /// Thin-feed context from the last load, powering the first-run nudges.
   final FeedMeta meta;
@@ -37,6 +52,7 @@ class FeedState {
     FeedStatus? status,
     List<FeedItem>? items,
     int? minScore,
+    FeedSort? sort,
     FeedMeta? meta,
     Object? error = _noChange,
   }) =>
@@ -44,6 +60,7 @@ class FeedState {
         status: status ?? this.status,
         items: items ?? this.items,
         minScore: minScore ?? this.minScore,
+        sort: sort ?? this.sort,
         meta: meta ?? this.meta,
         error: error == _noChange ? this.error : error as String?,
       );
@@ -68,7 +85,8 @@ class FeedController extends Notifier<FeedState> {
 
   Future<void> _load() async {
     try {
-      final feed = await _repo.getFeed(minScore: state.minScore);
+      final feed =
+          await _repo.getFeed(minScore: state.minScore, sort: state.sort.name);
       state = state.copyWith(
           status: FeedStatus.ready, items: feed.items, meta: feed.meta,
           error: null);
@@ -84,6 +102,13 @@ class FeedController extends Notifier<FeedState> {
   Future<void> setMinScore(int value) async {
     if (value == state.minScore) return;
     state = state.copyWith(minScore: value, status: FeedStatus.loading);
+    await _load();
+  }
+
+  /// Change the ordering and reload.
+  Future<void> setSort(FeedSort value) async {
+    if (value == state.sort) return;
+    state = state.copyWith(sort: value, status: FeedStatus.loading);
     await _load();
   }
 

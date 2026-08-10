@@ -72,6 +72,37 @@ def test_min_score_filters(conn, settings, seeded):
     assert all(i.score >= 90 for i in high)
 
 
+def test_sort_newest_orders_by_publish_date(conn, settings):
+    from datetime import datetime, timezone
+
+    user = UserRepo(conn).upsert_from_google(
+        GoogleIdentity(sub="srt", email="srt@example.com"), role="user")
+    ProfileRepo(conn).upsert(user.id, "default", {
+        "titles": ["Python Engineer"], "required_skills": ["python", "fastapi"],
+        "keywords": ["backend"]})
+    # A strong match published long ago, and a weaker one published recently, so
+    # score order and newest order disagree.
+    PostingRepo(conn).ingest([
+        posting("remotive", "old-strong", company="Acme",
+                title="Senior Python Engineer",
+                description="python fastapi backend",
+                published_at=datetime(2026, 1, 1, tzinfo=timezone.utc)),
+        posting("remotive", "new-weak", company="Beta", title="Python Backend",
+                description="python backend",
+                published_at=datetime(2026, 6, 1, tzinfo=timezone.utc)),
+    ])
+    UserSourceRepo(conn).set_for(user.id, ["remotive"])
+    svc = FeedService(conn, settings)
+
+    by_score = svc.build(user.id, min_score=0)  # default sort
+    assert by_score[0].title == "Senior Python Engineer"  # higher score leads
+
+    by_newest = svc.build(user.id, min_score=0, sort="newest")
+    assert by_newest[0].title == "Python Backend"  # most recent leads
+    # Same postings, just reordered.
+    assert {i.title for i in by_newest} == {i.title for i in by_score}
+
+
 def test_meta_reports_pool_and_sources(conn, settings, seeded):
     UserSourceRepo(conn).set_for(seeded.id, ["remotive"])
     meta = FeedService(conn, settings).meta(seeded.id)

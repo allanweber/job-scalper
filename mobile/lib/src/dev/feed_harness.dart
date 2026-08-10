@@ -96,10 +96,15 @@ class FakeFeedRepository implements FeedRepository {
   final Set<String> seen = {};
 
   @override
-  Future<Feed> getFeed({int limit = 100, int minScore = 1}) async {
+  Future<Feed> getFeed(
+      {int limit = 100, int minScore = 1, String sort = 'score'}) async {
     if (delay != null) await Future.delayed(delay!);
     if (fails) throw Exception('Failed host lookup');
     final filtered = _items.where((i) => i.score >= minScore).toList();
+    if (sort == 'newest') {
+      filtered.sort(
+          (a, b) => (b.publishedAt ?? '').compareTo(a.publishedAt ?? ''));
+    }
     return Feed(items: filtered, count: filtered.length, meta: meta);
   }
 
