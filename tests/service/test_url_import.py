@@ -15,7 +15,10 @@ _HTML = """
   <meta property="og:site_name" content="Railbird">
   <meta property="og:description" content="Own our Kubernetes platform.">
 </head><body>
-  Fully remote. Compensation $130,000 – 160,000 USD. kubernetes terraform aws.
+  <p>Fully remote role. You will own our Kubernetes platform end to end,
+  running kubernetes and terraform on aws for a fast-growing product team,
+  building the tooling other engineers depend on every single day.</p>
+  <p>Compensation $130,000 – 160,000 USD plus equity.</p>
 </body></html>
 """
 
@@ -32,7 +35,10 @@ def test_parse_extracts_core_fields():
 
 
 def test_parse_falls_back_to_domain_for_company():
-    html = "<html><head><title>Backend Engineer</title></head><body>work here</body></html>"
+    html = ("<html><head><title>Backend Engineer</title></head><body>"
+            "We are hiring a backend engineer to design and ship the APIs at the "
+            "core of our product, working in Python across a modern cloud stack "
+            "with a small senior team that ships every week.</body></html>")
     p = parse_posting("https://www.acme-jobs.io/x", html)
     assert p.company == "Acme-Jobs"  # derived from the domain when no og:site_name
 
@@ -40,6 +46,43 @@ def test_parse_falls_back_to_domain_for_company():
 def test_parse_rejects_titleless_page():
     with pytest.raises(UrlImportError):
         parse_posting("https://x.example/y", "<html><body>no title here</body></html>")
+
+
+def test_parse_rejects_js_app_shell():
+    # A single-page-app apply page: a title but no readable job content in the
+    # server-rendered HTML. We refuse rather than pool a contentless posting.
+    html = ("<html><head><title>Career Website</title></head>"
+            "<body><div id=\"root\">Career Website</div>"
+            "<script>window.__DATA__={}</script></body></html>")
+    with pytest.raises(UrlImportError, match="JavaScript"):
+        parse_posting("https://people-jobs.example/apply/abc", html)
+
+
+def test_parse_reads_json_ld_job_posting():
+    # ATS/career pages often render the body client-side but still embed the
+    # posting as schema.org JSON-LD — which must win over the empty app shell.
+    html = """
+    <html><head>
+      <title>Careers</title>
+      <script type="application/ld+json">
+      {"@context":"https://schema.org","@type":"JobPosting",
+       "title":"Staff Backend Engineer",
+       "description":"<p>Build <b>distributed</b> systems in Python and Go at large scale. You will own critical backend services end to end, mentor the wider engineering team, and shape our platform roadmap over the coming year.</p>",
+       "hiringOrganization":{"@type":"Organization","name":"Huspy"},
+       "jobLocationType":"TELECOMMUTE",
+       "baseSalary":{"@type":"MonetaryAmount","currency":"USD",
+         "value":{"@type":"QuantitativeValue","minValue":150000,"maxValue":190000}}}
+      </script>
+    </head><body><div id="root"></div></body></html>
+    """
+    p = parse_posting("https://people-jobs.example/huspy/apply/abc", html)
+    assert p.title == "Staff Backend Engineer"       # from JSON-LD, not <title>
+    assert p.company == "Huspy"
+    assert "distributed systems" in p.description.lower()
+    assert "<b>" not in p.description                 # HTML stripped
+    assert p.remote is True                           # TELECOMMUTE
+    assert p.salary_min == 150000 and p.salary_max == 190000
+    assert p.salary_currency == "USD"
 
 
 @pytest.mark.parametrize("url", [

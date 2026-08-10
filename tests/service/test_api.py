@@ -219,7 +219,10 @@ def test_import_url_pools_and_returns_detail(container, conn):
     html = ("<html><head><title>Staff Backend Engineer</title>"
             "<meta property='og:site_name' content='Finch Payments'>"
             "<meta property='og:description' content='Build payment APIs in python.'>"
-            "</head><body>Remote role. Salary $120,000 - 150,000. python fastapi</body></html>")
+            "</head><body>Remote role building payment APIs. You will design and "
+            "ship python and fastapi services that move money reliably for "
+            "customers across the region, owning them end to end. "
+            "Salary $120,000 - 150,000.</body></html>")
     container.url_fetcher = lambda url: html
     with TestClient(create_app(container)) as c:
         h = {"Authorization": f"Bearer "
