@@ -12,6 +12,10 @@ abstract class FeedRepository {
   /// A single posting's full detail (`GET /postings/{id}`).
   Future<PostingDetail> getPosting(String postingId);
 
+  /// Fetch, parse, score, and pool a posting from an arbitrary URL
+  /// (`POST /import/url`); returns its full detail, ready to draft against.
+  Future<PostingDetail> importUrl(String url);
+
   /// Save / unsave a posting (`POST` / `DELETE /feed/{id}/save`).
   Future<void> save(String postingId);
   Future<void> unsave(String postingId);
@@ -38,6 +42,13 @@ class HttpFeedRepository implements FeedRepository {
   @override
   Future<PostingDetail> getPosting(String postingId) async {
     final r = await _api.get<Map<String, dynamic>>('/postings/$postingId');
+    return PostingDetail.fromJson(r.data!);
+  }
+
+  @override
+  Future<PostingDetail> importUrl(String url) async {
+    final r = await _api.post<Map<String, dynamic>>('/import/url',
+        data: {'url': url});
     return PostingDetail.fromJson(r.data!);
   }
 

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 import 'package:job_scalper/src/data/feed_repository.dart';
 import 'package:job_scalper/src/data/models/feed_models.dart';
 import 'package:job_scalper/src/data/providers.dart';
@@ -21,6 +22,29 @@ Future<void> _pump(WidgetTester tester, ProviderContainer container) async {
   await tester.pumpWidget(UncontrolledProviderScope(
     container: container,
     child: const MaterialApp(home: FeedScreen()),
+  ));
+  await tester.pumpAndSettle();
+}
+
+/// Router-backed pump for the URL-import flow, whose success path navigates to
+/// the imported posting's detail. The detail route is a stub so the test stays
+/// focused on the feed screen and its dialog.
+Future<void> _pumpRouter(WidgetTester tester, ProviderContainer container) async {
+  final router = GoRouter(
+    initialLocation: '/feed',
+    routes: [
+      GoRoute(path: '/feed', builder: (_, _) => const FeedScreen(), routes: [
+        GoRoute(
+          path: 'job/:id',
+          builder: (_, s) =>
+              Scaffold(body: Text('job ${s.pathParameters['id']}')),
+        ),
+      ]),
+    ],
+  );
+  await tester.pumpWidget(UncontrolledProviderScope(
+    container: container,
+    child: MaterialApp.router(routerConfig: router),
   ));
   await tester.pumpAndSettle();
 }
@@ -152,6 +176,47 @@ void main() {
     final repo = FakeFeedRepository();
     await _pump(tester, _container(repo: repo));
     expect(repo.seen, contains('j1'));
+  });
+
+  testWidgets('add-from-URL imports the link and opens its detail',
+      (tester) async {
+    final repo = FakeFeedRepository();
+    await _pumpRouter(tester, _container(repo: repo));
+
+    await tester.tap(find.byIcon(Icons.add_link_rounded));
+    await tester.pumpAndSettle();
+    expect(find.text('Add job from URL'), findsOneWidget);
+
+    await tester.enterText(
+        find.byType(TextField), 'https://jobs.example.com/123');
+    await tester.tap(find.widgetWithText(FilledButton, 'Add'));
+    await tester.pumpAndSettle();
+
+    // The URL was imported and we navigated to the new posting's detail.
+    expect(repo.importedUrls, contains('https://jobs.example.com/123'));
+    expect(find.text('job imported-1'), findsOneWidget);
+  });
+
+  testWidgets('add-from-URL surfaces a failure without leaving the dialog',
+      (tester) async {
+    // fails:true makes the feed error out, but the app-bar action still works;
+    // the import itself throws, so the dialog stays open with the message.
+    final repo = FakeFeedRepository(fails: true);
+    await _pumpRouter(tester, _container(repo: repo));
+
+    await tester.tap(find.byIcon(Icons.add_link_rounded));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), 'https://bad.example.com');
+    await tester.tap(find.widgetWithText(FilledButton, 'Add'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Add job from URL'), findsOneWidget); // still open
+    // The message shows inside the dialog (the feed behind it also errored).
+    expect(
+        find.descendant(
+            of: find.byType(AlertDialog),
+            matching: find.textContaining('Failed host lookup')),
+        findsOneWidget);
   });
 
   testWidgets('an applied posting shows the APPLIED badge', (tester) async {
