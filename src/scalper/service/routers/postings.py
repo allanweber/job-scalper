@@ -15,8 +15,16 @@ from scalper.service.content_repos import PostingRepo
 from scalper.service.deps import RequestContext, current_user, get_ctx
 from scalper.service.feed import FeedService
 from scalper.service.models import User
-from scalper.service.schemas import ImportUrlRequest, PostingDetailResponse
-from scalper.service.url_import import UrlImportError, import_posting_from_url
+from scalper.service.schemas import (
+    ImportTextRequest,
+    ImportUrlRequest,
+    PostingDetailResponse,
+)
+from scalper.service.url_import import (
+    UrlImportError,
+    import_posting_from_text,
+    import_posting_from_url,
+)
 
 router = APIRouter(tags=["postings"])
 
@@ -42,6 +50,19 @@ def import_url(body: ImportUrlRequest, ctx: RequestContext = Depends(get_ctx),
     try:
         posting_id = import_posting_from_url(
             ctx.conn, str(body.url), fetcher=ctx.container.url_fetcher)
+    except UrlImportError as e:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(e)) from e
+    return _detail_response(ctx, user, posting_id)
+
+
+@router.post("/import/text", response_model=PostingDetailResponse,
+             status_code=status.HTTP_201_CREATED)
+def import_text(body: ImportTextRequest, ctx: RequestContext = Depends(get_ctx),
+                user: User = Depends(current_user)):
+    try:
+        posting_id = import_posting_from_text(
+            ctx.conn, body.text, title=body.title, company=body.company,
+            url=str(body.url) if body.url else None)
     except UrlImportError as e:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(e)) from e
     return _detail_response(ctx, user, posting_id)

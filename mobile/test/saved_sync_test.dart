@@ -45,6 +45,10 @@ class _MutableFeedRepo implements FeedRepository {
 
   @override
   Future<PostingDetail> importUrl(String url) => throw UnimplementedError();
+
+  @override
+  Future<PostingDetail> importText(String text, {String? title, String? url}) =>
+      throw UnimplementedError();
 }
 
 FeedItem _item(String id, {bool saved = false, int score = 80}) => FeedItem(

@@ -234,6 +234,17 @@ class ImportUrlRequest(BaseModel):
     url: HttpUrl
 
 
+class ImportTextRequest(BaseModel):
+    """Create a posting from a pasted job description — the fallback when a URL
+    can't be fetched (e.g. a JavaScript-only apply page). `title`/`company`/`url`
+    are optional; a missing title is derived from the first line of the text."""
+
+    text: str = Field(min_length=1)
+    title: str | None = None
+    company: str | None = None
+    url: HttpUrl | None = None
+
+
 class DraftUpdateRequest(BaseModel):
     """Edit a draft's resume and/or cover-letter markdown (mobile edit sheets)."""
 

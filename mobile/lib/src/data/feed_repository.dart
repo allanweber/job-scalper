@@ -18,6 +18,11 @@ abstract class FeedRepository {
   /// (`POST /import/url`); returns its full detail, ready to draft against.
   Future<PostingDetail> importUrl(String url);
 
+  /// Pool a posting from a pasted job description (`POST /import/text`) — the
+  /// fallback for pages that can't be fetched (JavaScript-only apply pages).
+  /// `title`/`url` are optional; returns the scored posting's full detail.
+  Future<PostingDetail> importText(String text, {String? title, String? url});
+
   /// Save / unsave a posting (`POST` / `DELETE /feed/{id}/save`).
   Future<void> save(String postingId);
   Future<void> unsave(String postingId);
@@ -52,6 +57,17 @@ class HttpFeedRepository implements FeedRepository {
   Future<PostingDetail> importUrl(String url) async {
     final r = await _api.post<Map<String, dynamic>>('/import/url',
         data: {'url': url});
+    return PostingDetail.fromJson(r.data!);
+  }
+
+  @override
+  Future<PostingDetail> importText(String text,
+      {String? title, String? url}) async {
+    final r = await _api.post<Map<String, dynamic>>('/import/text', data: {
+      'text': text,
+      if (title != null && title.isNotEmpty) 'title': title,
+      if (url != null && url.isNotEmpty) 'url': url,
+    });
     return PostingDetail.fromJson(r.data!);
   }
 

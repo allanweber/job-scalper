@@ -5,6 +5,8 @@ import pytest
 from scalper.service.url_import import (
     UrlImportError,
     _guard_public_host,
+    build_posting_from_text,
+    import_posting_from_text,
     import_posting_from_url,
     parse_posting,
 )
@@ -96,6 +98,46 @@ def test_parse_reads_json_ld_job_posting():
 def test_ssrf_guard_blocks_non_public_targets(url):
     with pytest.raises(UrlImportError):
         _guard_public_host(url)
+
+
+_PASTED = (
+    "We are hiring a Senior Backend Engineer to build distributed payment "
+    "systems in Python and Go. Remote-friendly. You will own critical services "
+    "end to end, mentor teammates, and shape the platform. Salary $140,000 - "
+    "180,000 USD."
+)
+
+
+def test_build_from_text_derives_title_and_fields():
+    p = build_posting_from_text(_PASTED)
+    # No title given → taken from the first line of the pasted text.
+    assert p.title.startswith("We are hiring a Senior Backend Engineer")
+    assert p.company == "Pasted posting"        # no url/company → generic label
+    assert p.remote is True
+    assert p.salary_min == 140000 and p.salary_max == 180000
+    assert "distributed payment" in p.description.lower()
+    assert p.source == "url"
+
+
+def test_build_from_text_uses_explicit_title_and_url_company():
+    p = build_posting_from_text(_PASTED, title="Staff Engineer",
+                                url="https://boards.greenhouse.io/acme/jobs/9")
+    assert p.title == "Staff Engineer"
+    assert p.company == "Boards"                 # from the URL host
+    assert p.url == "https://boards.greenhouse.io/acme/jobs/9"
+
+
+def test_build_from_text_rejects_too_short():
+    with pytest.raises(UrlImportError, match="too short"):
+        build_posting_from_text("Backend engineer wanted.")
+
+
+def test_import_from_text_pools_and_is_fetchable(conn):
+    pid = import_posting_from_text(conn, _PASTED, company="Acme")
+    from scalper.service.content_repos import PostingRepo
+    stored = PostingRepo(conn).get(pid)
+    assert stored is not None and stored.company == "Acme"
+    assert stored.sources == ["url"]
 
 
 def test_import_ingests_via_injected_fetcher(conn):

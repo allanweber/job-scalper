@@ -68,54 +68,69 @@ class FeedScreen extends ConsumerWidget {
   }
 }
 
-/// Opens the "add job from URL" dialog; on a successful import, navigates to the
+/// Opens the "add a job" dialog; on a successful import, navigates to the
 /// imported posting's detail so the user can draft an application against it.
 Future<void> _showImportDialog(BuildContext context, WidgetRef ref) async {
   final repo = ref.read(feedRepositoryProvider);
   final detail = await showDialog<PostingDetail>(
     context: context,
-    builder: (_) => _ImportUrlDialog(onImport: repo.importUrl),
+    builder: (_) => _ImportJobDialog(
+      onImportUrl: repo.importUrl,
+      onImportText: repo.importText,
+    ),
   );
   if (detail != null && context.mounted) {
     context.push('/feed/job/${detail.postingId}');
   }
 }
 
-/// Paste-a-link dialog. Fetches/scores the URL via the repository, showing a
-/// busy state while it runs and the backend's message inline on failure; pops
-/// the imported [PostingDetail] on success.
-class _ImportUrlDialog extends StatefulWidget {
-  const _ImportUrlDialog({required this.onImport});
-  final Future<PostingDetail> Function(String url) onImport;
+/// How the user is supplying the posting: a link we fetch, or text they paste.
+enum _ImportMode { link, text }
+
+/// Add-a-job dialog with two paths: paste a **link** (we fetch/parse/score it)
+/// or paste the **description text** directly — the fallback for pages we can't
+/// read (JavaScript-only apply pages). Shows a busy state while it runs and the
+/// backend's message inline on failure; pops the imported [PostingDetail] on
+/// success.
+class _ImportJobDialog extends StatefulWidget {
+  const _ImportJobDialog({required this.onImportUrl, required this.onImportText});
+  final Future<PostingDetail> Function(String url) onImportUrl;
+  final Future<PostingDetail> Function(String text, {String? title, String? url})
+      onImportText;
 
   @override
-  State<_ImportUrlDialog> createState() => _ImportUrlDialogState();
+  State<_ImportJobDialog> createState() => _ImportJobDialogState();
 }
 
-class _ImportUrlDialogState extends State<_ImportUrlDialog> {
-  final _controller = TextEditingController();
+class _ImportJobDialogState extends State<_ImportJobDialog> {
+  _ImportMode _mode = _ImportMode.link;
+  final _urlCtrl = TextEditingController();
+  final _titleCtrl = TextEditingController();
+  final _textCtrl = TextEditingController();
   bool _busy = false;
   String? _error;
 
   @override
   void dispose() {
-    _controller.dispose();
+    _urlCtrl.dispose();
+    _titleCtrl.dispose();
+    _textCtrl.dispose();
     super.dispose();
   }
 
   Future<void> _submit() async {
-    final url = _controller.text.trim();
-    if (url.isEmpty) {
-      setState(() => _error = 'Paste a job posting link.');
-      return;
-    }
+    final detail = switch (_mode) {
+      _ImportMode.link => _validatedLink(),
+      _ImportMode.text => _validatedText(),
+    };
+    if (detail == null) return; // validation set an inline error
     setState(() {
       _busy = true;
       _error = null;
     });
     try {
-      final detail = await widget.onImport(url);
-      if (mounted) Navigator.of(context).pop(detail);
+      final result = await detail();
+      if (mounted) Navigator.of(context).pop(result);
     } catch (e) {
       if (mounted) {
         setState(() {
@@ -126,39 +141,69 @@ class _ImportUrlDialogState extends State<_ImportUrlDialog> {
     }
   }
 
+  /// Returns a thunk that runs the URL import, or null after flagging an error.
+  Future<PostingDetail> Function()? _validatedLink() {
+    final url = _urlCtrl.text.trim();
+    if (url.isEmpty) {
+      setState(() => _error = 'Paste a job posting link.');
+      return null;
+    }
+    return () => widget.onImportUrl(url);
+  }
+
+  Future<PostingDetail> Function()? _validatedText() {
+    final text = _textCtrl.text.trim();
+    if (text.length < 40) {
+      setState(() => _error = 'Paste the full job description.');
+      return null;
+    }
+    final title = _titleCtrl.text.trim();
+    final url = _urlCtrl.text.trim();
+    return () => widget.onImportText(text,
+        title: title.isEmpty ? null : title, url: url.isEmpty ? null : url);
+  }
+
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     return AlertDialog(
-      title: const Text('Add job from URL'),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            "Paste a link to a job posting. We'll fetch it, score it against "
-            'your profile, and let you draft an application.',
-            style: TextStyle(fontSize: 13, color: scheme.onSurfaceVariant),
-          ),
-          const SizedBox(height: 14),
-          TextField(
-            controller: _controller,
-            autofocus: true,
-            enabled: !_busy,
-            keyboardType: TextInputType.url,
-            textInputAction: TextInputAction.go,
-            onSubmitted: (_) => _busy ? null : _submit(),
-            decoration: const InputDecoration(
-              hintText: 'https://…',
-              prefixIcon: Icon(Icons.link_rounded),
+      title: const Text('Add a job'),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SegmentedButton<_ImportMode>(
+              segments: const [
+                ButtonSegment(
+                    value: _ImportMode.link,
+                    icon: Icon(Icons.link_rounded),
+                    label: Text('Link')),
+                ButtonSegment(
+                    value: _ImportMode.text,
+                    icon: Icon(Icons.notes_rounded),
+                    label: Text('Paste text')),
+              ],
+              selected: {_mode},
+              onSelectionChanged: _busy
+                  ? null
+                  : (s) => setState(() {
+                        _mode = s.first;
+                        _error = null;
+                      }),
             ),
-          ),
-          if (_error != null) ...[
-            const SizedBox(height: 10),
-            Text(_error!,
-                style: TextStyle(fontSize: 12.5, color: scheme.error)),
+            const SizedBox(height: 16),
+            if (_mode == _ImportMode.link)
+              ..._linkFields(scheme)
+            else
+              ..._textFields(scheme),
+            if (_error != null) ...[
+              const SizedBox(height: 10),
+              Text(_error!,
+                  style: TextStyle(fontSize: 12.5, color: scheme.error)),
+            ],
           ],
-        ],
+        ),
       ),
       actions: [
         TextButton(
@@ -177,6 +222,62 @@ class _ImportUrlDialogState extends State<_ImportUrlDialog> {
       ],
     );
   }
+
+  List<Widget> _linkFields(ColorScheme scheme) => [
+        Text(
+          "Paste a link to a job posting. We'll fetch it, score it against "
+          'your profile, and let you draft an application.',
+          style: TextStyle(fontSize: 13, color: scheme.onSurfaceVariant),
+        ),
+        const SizedBox(height: 14),
+        TextField(
+          key: const Key('import-url-field'),
+          controller: _urlCtrl,
+          autofocus: true,
+          enabled: !_busy,
+          keyboardType: TextInputType.url,
+          textInputAction: TextInputAction.go,
+          onSubmitted: (_) => _busy ? null : _submit(),
+          decoration: const InputDecoration(
+            hintText: 'https://…',
+            prefixIcon: Icon(Icons.link_rounded),
+          ),
+        ),
+      ];
+
+  List<Widget> _textFields(ColorScheme scheme) => [
+        Text(
+          "Can't fetch the page (some apply pages load with JavaScript)? "
+          'Paste the job description here and we\'ll score it.',
+          style: TextStyle(fontSize: 13, color: scheme.onSurfaceVariant),
+        ),
+        const SizedBox(height: 14),
+        TextField(
+          key: const Key('import-title-field'),
+          controller: _titleCtrl,
+          enabled: !_busy,
+          textInputAction: TextInputAction.next,
+          decoration: const InputDecoration(
+            labelText: 'Job title (optional)',
+            hintText: 'e.g. Senior Backend Engineer',
+          ),
+        ),
+        const SizedBox(height: 12),
+        TextField(
+          key: const Key('import-text-field'),
+          controller: _textCtrl,
+          autofocus: true,
+          enabled: !_busy,
+          minLines: 4,
+          maxLines: 8,
+          keyboardType: TextInputType.multiline,
+          decoration: const InputDecoration(
+            labelText: 'Job description',
+            hintText: 'Paste the full posting text…',
+            alignLabelWithHint: true,
+          ),
+        ),
+      ];
 }
 
 class _FeedList extends StatelessWidget {

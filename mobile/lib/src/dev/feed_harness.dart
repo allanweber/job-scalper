@@ -93,6 +93,7 @@ class FakeFeedRepository implements FeedRepository {
   final List<String> unsavedCalls = [];
   final List<String> draftCalls = [];
   final List<String> importedUrls = [];
+  final List<String> importedTexts = [];
   final Set<String> seen = {};
 
   @override
@@ -164,6 +165,26 @@ class FakeFeedRepository implements FeedRepository {
       resumeGap: ['Kubernetes'],
       sources: ['url-import'],
       breakdown: {'skills': 0.6, 'keywords': 0.2, 'title': 0.15, 'salary': 0.05},
+    );
+  }
+
+  @override
+  Future<PostingDetail> importText(String text,
+      {String? title, String? url}) async {
+    if (delay != null) await Future.delayed(delay!);
+    importedTexts.add(text);
+    if (fails) throw Exception('Failed host lookup');
+    return PostingDetail(
+      postingId: 'text-imported-1',
+      company: 'Pasted posting',
+      title: title ?? 'Pasted Role',
+      url: url ?? '',
+      description: text,
+      score: 72,
+      matchedSkills: const ['Python'],
+      resumeGap: const ['Kubernetes'],
+      sources: const ['url-import'],
+      breakdown: const {'skills': 0.6, 'keywords': 0.2, 'title': 0.15, 'salary': 0.05},
     );
   }
 

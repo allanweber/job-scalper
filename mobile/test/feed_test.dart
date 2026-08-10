@@ -224,16 +224,55 @@ void main() {
 
     await tester.tap(find.byIcon(Icons.add_link_rounded));
     await tester.pumpAndSettle();
-    expect(find.text('Add job from URL'), findsOneWidget);
+    expect(find.text('Add a job'), findsOneWidget);
 
     await tester.enterText(
-        find.byType(TextField), 'https://jobs.example.com/123');
+        find.byKey(const Key('import-url-field')), 'https://jobs.example.com/123');
     await tester.tap(find.widgetWithText(FilledButton, 'Add'));
     await tester.pumpAndSettle();
 
     // The URL was imported and we navigated to the new posting's detail.
     expect(repo.importedUrls, contains('https://jobs.example.com/123'));
     expect(find.text('job imported-1'), findsOneWidget);
+  });
+
+  testWidgets('add-from-text pastes a description and opens its detail',
+      (tester) async {
+    final repo = FakeFeedRepository();
+    await _pumpRouter(tester, _container(repo: repo));
+
+    await tester.tap(find.byIcon(Icons.add_link_rounded));
+    await tester.pumpAndSettle();
+
+    // Switch to the paste-text mode and paste a full description.
+    await tester.tap(find.text('Paste text'));
+    await tester.pumpAndSettle();
+    const jd = 'Senior Backend Engineer building distributed payment systems '
+        'in Python. Remote role, you will own services end to end.';
+    await tester.enterText(find.byKey(const Key('import-text-field')), jd);
+    await tester.tap(find.widgetWithText(FilledButton, 'Add'));
+    await tester.pumpAndSettle();
+
+    expect(repo.importedTexts, contains(jd));
+    expect(find.text('job text-imported-1'), findsOneWidget);
+  });
+
+  testWidgets('add-from-text rejects a too-short paste without a network call',
+      (tester) async {
+    final repo = FakeFeedRepository();
+    await _pumpRouter(tester, _container(repo: repo));
+
+    await tester.tap(find.byIcon(Icons.add_link_rounded));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Paste text'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const Key('import-text-field')), 'too short');
+    await tester.tap(find.widgetWithText(FilledButton, 'Add'));
+    await tester.pumpAndSettle();
+
+    // Client-side guard: no import attempted, dialog stays open with a hint.
+    expect(repo.importedTexts, isEmpty);
+    expect(find.text('Paste the full job description.'), findsOneWidget);
   });
 
   testWidgets('add-from-URL surfaces a failure without leaving the dialog',
@@ -245,11 +284,12 @@ void main() {
 
     await tester.tap(find.byIcon(Icons.add_link_rounded));
     await tester.pumpAndSettle();
-    await tester.enterText(find.byType(TextField), 'https://bad.example.com');
+    await tester.enterText(
+        find.byKey(const Key('import-url-field')), 'https://bad.example.com');
     await tester.tap(find.widgetWithText(FilledButton, 'Add'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Add job from URL'), findsOneWidget); // still open
+    expect(find.text('Add a job'), findsOneWidget); // still open
     // The message shows inside the dialog (the feed behind it also errored).
     expect(
         find.descendant(

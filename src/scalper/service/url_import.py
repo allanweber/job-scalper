@@ -14,6 +14,7 @@ posting is scored per-user by the normal feed path once stored.
 
 from __future__ import annotations
 
+import hashlib
 import ipaddress
 import json
 import re
@@ -247,5 +248,56 @@ def import_posting_from_url(conn: Any, url: str, *,
     """Fetch, parse, and pool a posting from `url`; return its pool posting id."""
     html = (fetcher or default_url_fetch)(url)
     posting = parse_posting(url, html)
+    PostingRepo(conn).ingest([posting])
+    return posting.dedup_key
+
+
+def build_posting_from_text(text: str, *, title: str | None = None,
+                            company: str | None = None,
+                            url: str | None = None) -> JobPosting:
+    """Turn a pasted job description into a JobPosting.
+
+    The fallback for pages we can't fetch/parse (JavaScript-only apply pages):
+    the user pastes the posting text directly. Title/company/url are optional —
+    a missing title is taken from the first line, company from the URL host or a
+    generic label — so the result still scores against the user's profile.
+    """
+    text = re.sub(r"[ \t]+", " ", text).strip()
+    if len(text.split()) < _MIN_DESC_WORDS:
+        raise UrlImportError(
+            "that job description looks too short — paste the full posting text.")
+
+    title = _clean(title)
+    if not title:
+        first_line = next((ln.strip() for ln in text.splitlines() if ln.strip()), "")
+        title = _clean(first_line) or "Pasted job posting"
+    title = title[:200]
+
+    company = _clean(company)
+    if not company and url:
+        company = _clean((urlparse(url).hostname or "")
+                         .replace("www.", "").split(".")[0].title())
+    company = (company or "Pasted posting")[:120]
+
+    src_url = url or ""
+    # Without a URL, key off the text so re-pasting the same posting dedupes.
+    source_id = src_url or f"text:{hashlib.sha1(text.encode('utf-8')).hexdigest()}"
+
+    haystack = f"{title} {text}".lower()
+    remote = "remote" in haystack
+    lo, hi, cur = _parse_salary(text)
+
+    return JobPosting(
+        source="url", source_id=source_id, url=src_url, company=company,
+        title=title, description=text[:8000], remote=remote,
+        salary_min=lo, salary_max=hi, salary_currency=cur,
+    )
+
+
+def import_posting_from_text(conn: Any, text: str, *, title: str | None = None,
+                             company: str | None = None,
+                             url: str | None = None) -> str:
+    """Pool a posting built from pasted text; return its pool posting id."""
+    posting = build_posting_from_text(text, title=title, company=company, url=url)
     PostingRepo(conn).ingest([posting])
     return posting.dedup_key

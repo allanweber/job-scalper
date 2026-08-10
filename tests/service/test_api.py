@@ -256,6 +256,28 @@ def test_import_url_rejects_unfetchable(container):
         assert r.status_code == 422
 
 
+def test_import_text_pools_pasted_description(client, auth_headers):
+    text = ("Senior Platform Engineer\nRemote role owning our Kubernetes "
+            "platform. You will run kubernetes and terraform on aws, build "
+            "internal tooling, and support the engineering team day to day.")
+    r = client.post("/import/text", headers=auth_headers,
+                    json={"text": text, "company": "Railbird"})
+    assert r.status_code == 201, r.text
+    body = r.json()
+    assert body["title"] == "Senior Platform Engineer"   # first line
+    assert body["company"] == "Railbird"
+    assert body["remote"] is True
+    # Fetchable by its pool id afterwards.
+    assert client.get(f"/postings/{body['posting_id']}",
+                      headers=auth_headers).status_code == 200
+
+
+def test_import_text_rejects_too_short(client, auth_headers):
+    r = client.post("/import/text", headers=auth_headers,
+                    json={"text": "hire me"})
+    assert r.status_code == 422
+
+
 def test_feed_and_draft_flow(client, auth_headers, conn):
     client.get("/me", headers=auth_headers)  # ensure user row exists
     _user, pid = _seed_user_content(conn)
