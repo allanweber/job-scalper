@@ -10,6 +10,7 @@ from scalper.sources import (  # noqa: E402,F401
     hackernews,
     himalayas,
     indeed,
+    instahyre,
     jobgether,
     jobicy,
     jobspresso,
