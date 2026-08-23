@@ -1,13 +1,18 @@
 name: Mobile
 
-# Builds the Android APK and publishes it to a GitHub Release so it can be
-# installed directly (no artifact-zip to extract). A `mobile-v*` tag cuts a
-# normal release named from the tag; a manual run (workflow_dispatch) cuts a
-# prerelease tagged `mobile-v<version>-build.<run>` from the current branch, so
-# you always have a tap-to-install APK. PRs that touch the app only run the
-# checks + build (no release). Release signing uses an upload keystore when the
-# corresponding repository secrets are set; otherwise the build falls back to
-# debug signing (installable, but not Play-Store publishable).
+# Builds the Android app and publishes it to a GitHub Release so it can be
+# installed directly (no artifact-zip to extract). Two outputs: an APK for
+# direct/tap-to-install sideloading (attached to the Release) and an AAB (App
+# Bundle) for Play — the only format Play accepts for new apps. The AAB isn't
+# directly installable, so it's kept as a build artifact rather than put on the
+# public Release, where a non-installable download would confuse. A `mobile-v*`
+# tag cuts a normal release named from the tag; a manual run (workflow_dispatch)
+# cuts a prerelease tagged `mobile-v<version>-build.<run>` from the current
+# branch, so you always have a tap-to-install APK. PRs that touch the app only
+# run the checks + build (no release). Release signing uses an upload keystore
+# when the corresponding repository secrets are set; the same config signs both
+# the APK and the AAB. Otherwise the build falls back to debug signing
+# (installable, but not Play-Store publishable).
 on:
   pull_request:
     paths:
@@ -27,7 +32,7 @@ permissions:
 
 jobs:
   build:
-    name: build apk
+    name: build
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -109,6 +114,38 @@ jobs:
         with:
           name: job-scalper-release-apk
           path: mobile/build/app/outputs/flutter-apk/app-release.apk
+          if-no-files-found: error
+
+      - name: Build release App Bundle
+        # The .aab is what Play accepts for new apps. Same version args and
+        # signing config as the APK above (the gradle `release` signingConfig
+        # covers both build outputs), so this produces a signed, upload-ready
+        # bundle whenever the keystore secrets are set.
+        run: >-
+          flutter build appbundle --release ${{ steps.ver.outputs.args }}
+          --dart-define=GOOGLE_SERVER_CLIENT_ID=${{ secrets.GOOGLE_SERVER_CLIENT_ID }}
+
+      - name: Verify App Bundle with bundletool
+        # Acceptance gate for PLAY-1: prove the .aab is structurally sound and
+        # readable before we'd ever hand it to Play. `validate` is the right
+        # depth here — it catches a corrupt/malformed bundle without re-deriving
+        # APKs (which `flutter build appbundle` already did) or pulling the
+        # signing key into a verification step.
+        env:
+          BUNDLETOOL_VERSION: '1.17.2'
+        run: |
+          curl -fsSL -o "$RUNNER_TEMP/bundletool.jar" \
+            "https://github.com/google/bundletool/releases/download/${BUNDLETOOL_VERSION}/bundletool-all-${BUNDLETOOL_VERSION}.jar"
+          java -jar "$RUNNER_TEMP/bundletool.jar" validate \
+            --bundle build/app/outputs/bundle/release/app-release.aab
+
+      - name: Upload AAB artifact
+        # Artifact only — an .aab isn't tap-to-install, so it stays off the
+        # public Release (below) and is retained here for Play upload.
+        uses: actions/upload-artifact@v4
+        with:
+          name: job-scalper-release-aab
+          path: mobile/build/app/outputs/bundle/release/app-release.aab
           if-no-files-found: error
 
       - name: Publish GitHub Release
