@@ -20,7 +20,11 @@ if (hasReleaseKeystore) {
 
 android {
     namespace = "dev.allanweber.job_scalper"
-    compileSdk = flutter.compileSdkVersion
+    // Pinned explicitly (not `flutter.compileSdkVersion`) so the SDK the app
+    // compiles and targets can't drift with a Flutter upgrade — Play rejects a
+    // submission whose targetSdk is below its current floor, so this value is
+    // release-critical and shouldn't move by accident. Keep compileSdk == targetSdk.
+    compileSdk = 35
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
@@ -29,13 +33,14 @@ android {
     }
 
     defaultConfig {
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
         applicationId = "dev.allanweber.job_scalper"
-        // You can update the following values to match your application needs.
-        // For more information, see: https://flutter.dev/to/review-gradle-config.
         // google_sign_in_android (Credential Manager) requires API 24+.
         minSdk = maxOf(flutter.minSdkVersion, 24)
-        targetSdk = flutter.targetSdkVersion
+        // Pinned, not inherited from Flutter. Play's minimum target API rises
+        // roughly once a year (API 35 / Android 15 was the 2025 floor for new
+        // apps); confirm the current requirement in Play Console at submission
+        // and bump this — and compileSdk above — together when it moves.
+        targetSdk = 35
         versionCode = flutter.versionCode
         versionName = flutter.versionName
     }
