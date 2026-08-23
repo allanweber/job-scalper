@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<!-- Google Play feature graphic: 1024×500. Rendered to feature-graphic.png by
+     build.sh (headless Chromium). Keep the important content away from the
+     edges — Play can crop/overlay a play button on top. -->
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@500;700;800;900&family=Space+Grotesk:wght@600;700&display=swap" rel="stylesheet" />
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  /* Solid dark base so no pixel can ever render white. */
+  html, body { width: 1024px; height: 500px; overflow: hidden; background-color: #07100e; }
+  /* Body fills the viewport absolutely (not by content flow), then carries the
+     gradient — guarantees the full 1024×500 canvas is painted edge to edge. */
+  body {
+    position: fixed; inset: 0;
+    font-family: 'Inter', system-ui, sans-serif;
+    color: #e8f2ef;
+    background:
+      radial-gradient(760px 420px at 88% -20%, rgba(45,212,191,0.28), transparent 60%),
+      radial-gradient(620px 380px at -8% 120%, rgba(20,184,166,0.20), transparent 55%),
+      linear-gradient(135deg, #07100e 0%, #0c1917 60%, #0f201d 100%);
+  }
+  .stage { display: flex; align-items: center; height: 100%; padding: 0 72px; gap: 40px; }
+  .left { flex: 1; }
+  .mark-row { display: flex; align-items: center; gap: 16px; margin-bottom: 22px; }
+  .mark {
+    width: 66px; height: 66px; border-radius: 18px;
+    background: linear-gradient(140deg, #2dd4bf, #14b8a6);
+    display: grid; place-items: center; font-size: 38px;
+    box-shadow: 0 10px 30px rgba(20,184,166,0.35);
+  }
+  .wordmark { font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 44px; letter-spacing: -0.02em; }
+  h1 {
+    font-family: 'Space Grotesk', sans-serif; font-weight: 700;
+    font-size: 52px; line-height: 1.05; letter-spacing: -0.02em; margin-bottom: 18px;
+  }
+  h1 .accent { color: #2dd4bf; }
+  p.sub { font-size: 23px; color: #b6ccc6; font-weight: 500; max-width: 560px; line-height: 1.35; }
+  .chips { display: flex; gap: 12px; margin-top: 28px; }
+  .chip {
+    font-weight: 700; font-size: 16px; padding: 9px 16px; border-radius: 999px;
+    background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12); color: #d7e7e2;
+  }
+  .chip.brand { background: rgba(45,212,191,0.16); border-color: rgba(45,212,191,0.4); color: #7ef0e0; }
+  /* Right: a stylized "match" card motif */
+  .card {
+    width: 300px; flex-shrink: 0;
+    background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.10);
+    border-radius: 22px; padding: 22px 22px 24px; backdrop-filter: blur(4px);
+    box-shadow: 0 20px 60px rgba(0,0,0,0.35);
+  }
+  .card .co { font-size: 15px; color: #9db3ad; font-weight: 600; }
+  .card .role { font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 22px; margin: 4px 0 16px; }
+  .ring-row { display: flex; align-items: center; gap: 14px; }
+  .ring {
+    width: 74px; height: 74px; border-radius: 50%;
+    background: conic-gradient(#2dd4bf 0 82%, rgba(255,255,255,0.10) 82% 100%);
+    display: grid; place-items: center; flex-shrink: 0;
+  }
+  .ring .inner { width: 58px; height: 58px; border-radius: 50%; background: #0c1917; display: grid; place-items: center; }
+  .ring b { font-family: 'Space Grotesk'; font-size: 20px; }
+  .ring b small { font-size: 12px; color: #9db3ad; }
+  .mlabel { font-size: 15px; color: #9db3ad; font-weight: 600; }
+  .mlabel strong { color: #e8f2ef; display: block; font-size: 17px; }
+  .bars { margin-top: 18px; display: flex; flex-direction: column; gap: 9px; }
+  .bar { height: 9px; border-radius: 6px; background: rgba(255,255,255,0.08); position: relative; }
+  .bar::after { content: ''; position: absolute; inset: 0; width: var(--w); border-radius: 6px; background: linear-gradient(90deg, #14b8a6, #2dd4bf); }
+</style>
+</head>
+<body>
+  <div class="stage">
+    <div class="left">
+      <div class="mark-row">
+        <div class="mark">🎯</div>
+        <div class="wordmark">Job Scalper</div>
+      </div>
+      <h1>Remote tech jobs,<br /><span class="accent">matched to your resume.</span></h1>
+      <p class="sub">Rank the whole market against your profile, tailor resumes and cover letters with AI, and track every application to offer.</p>
+      <div class="chips">
+        <div class="chip brand">Match score</div>
+        <div class="chip">AI-tailored applications</div>
+        <div class="chip">Application tracker</div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="co">Acme Cloud · Remote</div>
+      <div class="role">Senior Backend Engineer</div>
+      <div class="ring-row">
+        <div class="ring"><div class="inner"><b>92<small>%</small></b></div></div>
+        <div class="mlabel"><strong>Strong match</strong>Skills · title · keywords</div>
+      </div>
+      <div class="bars">
+        <div class="bar" style="--w:88%"></div>
+        <div class="bar" style="--w:74%"></div>
+        <div class="bar" style="--w:61%"></div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
