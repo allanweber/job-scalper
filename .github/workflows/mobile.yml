@@ -8,17 +8,27 @@ name: Mobile
 # public Release, where a non-installable download would confuse. A `mobile-v*`
 # tag cuts a normal release named from the tag; a manual run (workflow_dispatch)
 # cuts a prerelease tagged `mobile-v<version>-build.<run>` from the current
-# branch, so you always have a tap-to-install APK. PRs that touch the app only
-# run the checks + build (no release). Release signing uses an upload keystore
+# branch, so you always have a tap-to-install APK. App CI (checks + build, no
+# release) runs on every app-touching PR and every app-touching merge to main;
+# a merge that doesn't touch the app skips the build. Release signing uses an
+# upload keystore
 # when the corresponding repository secrets are set; the same config signs both
 # the APK and the AAB. Otherwise the build falls back to debug signing
 # (installable, but not Play-Store publishable).
 on:
+  # PRs are path-filtered natively, so a PR only spins this up when it touches
+  # the app. Pushes can't be path-filtered here without breaking releases: a
+  # `mobile-v*` tag is pushed onto an existing commit (zero new commits), so a
+  # `paths` filter would match nothing and silently skip the release build.
+  # Instead the push fires on every main commit and every release tag, and the
+  # `changes` job below decides whether the heavy build is actually warranted.
   pull_request:
     paths:
       - 'mobile/**'
       - '.github/workflows/mobile.yml'
   push:
+    branches:
+      - main
     tags:
       - 'mobile-v*'
   workflow_dispatch:
@@ -31,8 +41,40 @@ permissions:
   contents: write # create the release + upload the APK asset
 
 jobs:
+  # Cheap gate (~seconds) so a main push that doesn't touch the app doesn't cost
+  # a full Flutter build. It only guards the main-branch case; PRs are already
+  # path-filtered, and releases bypass it (see the build job's `if`).
+  changes:
+    name: detect app changes
+    runs-on: ubuntu-latest
+    outputs:
+      app: ${{ steps.filter.outputs.app }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            app:
+              - 'mobile/**'
+              - '.github/workflows/mobile.yml'
+
   build:
     name: build
+    needs: changes
+    # Build when the app actually changed, or on any release path (a mobile-v*
+    # tag or a manual run) regardless of the diff. On a PR the trigger is
+    # already app-scoped, so `changes` reports true there too. The net effect:
+    # app CI runs on every app-touching PR and main merge, and every release,
+    # but a backend-only merge to main skips the ~8-minute build.
+    # `always()` guards the release path: without it, a hiccup in the `changes`
+    # job would leave `needs` unsatisfied and silently skip a tagged release.
+    if: >-
+      ${{ always() && (
+        needs.changes.outputs.app == 'true'
+        || startsWith(github.ref, 'refs/tags/mobile-v')
+        || github.event_name == 'workflow_dispatch'
+      ) }}
     runs-on: ubuntu-latest
     defaults:
       run:
