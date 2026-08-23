@@ -15,6 +15,13 @@ name: Mobile
 # when the corresponding repository secrets are set; the same config signs both
 # the APK and the AAB. Otherwise the build falls back to debug signing
 # (installable, but not Play-Store publishable).
+#
+# On a `mobile-v*` tag, the signed AAB is also uploaded to Play's internal
+# testing track automatically (PLAY-2), so a release lands for internal testers
+# with no manual console upload. This uses a Play service-account key in the
+# PLAY_SERVICE_ACCOUNT_JSON secret; the step runs only for real tag releases
+# (not PRs or manual builds) and fails the run if the secret is missing on a
+# tag, so a tagged release can never silently skip the Play upload.
 on:
   # PRs are path-filtered natively, so a PR only spins this up when it touches
   # the app. Pushes can't be path-filtered here without breaking releases: a
@@ -180,6 +187,27 @@ jobs:
             "https://github.com/google/bundletool/releases/download/${BUNDLETOOL_VERSION}/bundletool-all-${BUNDLETOOL_VERSION}.jar"
           java -jar "$RUNNER_TEMP/bundletool.jar" validate \
             --bundle build/app/outputs/bundle/release/app-release.aab
+
+      - name: Publish to Play internal track
+        # PLAY-2: on a real `mobile-v*` tag, hand the signed bundle to Play's
+        # internal testing track via the Play Developer Publishing API, so a
+        # release reaches internal testers with no manual upload. `status:
+        # completed` releases it immediately (a `draft` would reintroduce the
+        # manual "release" click this story removes). PRs and manual builds are
+        # excluded by the tag `if`; on a tag the run fails loudly if
+        # PLAY_SERVICE_ACCOUNT_JSON is unset, so a tagged release can't quietly
+        # skip Play. The versionCode is the run number (see "Derive version"),
+        # which is monotonic across builds — Play requires each upload's
+        # versionCode to exceed the last. Path is repo-root-relative because a
+        # `uses:` step ignores the job's `working-directory: mobile`.
+        if: ${{ startsWith(github.ref, 'refs/tags/mobile-v') }}
+        uses: r0adkll/upload-google-play@e738b9dd8f2476ea806d921b64aacd24f34515a5 # v1.1.5
+        with:
+          serviceAccountJsonPlainText: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+          packageName: dev.allanweber.job_scalper
+          releaseFiles: mobile/build/app/outputs/bundle/release/app-release.aab
+          track: internal
+          status: completed
 
       - name: Upload AAB artifact
         # Artifact only — an .aab isn't tap-to-install, so it stays off the
