@@ -16,8 +16,9 @@ Live after this change merges to `main` and the Pages workflow deploys:
 
 - **Privacy policy:** https://allanweber.github.io/job-scalper/privacy.html
 - **Terms of service:** https://allanweber.github.io/job-scalper/terms.html
+- **Account deletion:** https://allanweber.github.io/job-scalper/delete-account.html
 
-Both are required by the store listing and the Data safety form.
+The privacy and deletion URLs are required by the store listing and the Data safety form.
 
 ---
 
@@ -109,7 +110,8 @@ messages, audio, calendar, browsing history, advertising ID.
 ### Security section answers
 
 - **Is data encrypted in transit?** Yes (HTTPS/TLS).
-- **Can users request that data be deleted?** Yes (in-app *Delete account* + web deletion route).
+- **Can users request that data be deleted?** Yes. In-app *Delete account*, plus a public deletion page (no app needed):
+  `https://allanweber.github.io/job-scalper/delete-account.html`. Paste this into Play's **Account deletion / data deletion** field.
 - **Is data collection required or optional?** Account data required; the resume is optional.
 
 ### * The LLM-processing nuance (get this right)
