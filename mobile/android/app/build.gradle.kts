@@ -24,7 +24,9 @@ android {
     // compiles and targets can't drift with a Flutter upgrade — Play rejects a
     // submission whose targetSdk is below its current floor, so this value is
     // release-critical and shouldn't move by accident. Keep compileSdk == targetSdk.
-    compileSdk = 35
+    // 36 is also the minimum some androidx deps (e.g. androidx.core 1.17) require
+    // us to compile against, so this can't go below 36 without breaking the build.
+    compileSdk = 36
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
@@ -37,10 +39,10 @@ android {
         // google_sign_in_android (Credential Manager) requires API 24+.
         minSdk = maxOf(flutter.minSdkVersion, 24)
         // Pinned, not inherited from Flutter. Play's minimum target API rises
-        // roughly once a year (API 35 / Android 15 was the 2025 floor for new
-        // apps); confirm the current requirement in Play Console at submission
-        // and bump this — and compileSdk above — together when it moves.
-        targetSdk = 35
+        // roughly once a year (API 35 / Android 15 was the 2025 floor); this
+        // targets 36 (Android 16). Confirm the current requirement in Play
+        // Console at submission and bump this — and compileSdk above — together.
+        targetSdk = 36
         versionCode = flutter.versionCode
         versionName = flutter.versionName
     }

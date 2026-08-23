@@ -11,8 +11,8 @@ from `flutter.*`, so a Flutter upgrade can't silently change what the app target
 | Setting | Value | Notes |
 | --- | --- | --- |
 | `minSdk` | 24 | Floor required by google_sign_in (Credential Manager). |
-| `targetSdk` | 35 | Android 15 — the 2025 floor for new apps. **Confirm the current Play requirement at submission and bump if it has risen (e.g. 36).** |
-| `compileSdk` | 35 | Kept equal to `targetSdk`. |
+| `targetSdk` | 36 | Android 16. (35/Android 15 was the 2025 floor; `androidx.core:1.17` also requires compiling against ≥36.) **Confirm the current Play requirement at submission.** |
+| `compileSdk` | 36 | Kept equal to `targetSdk`; also the minimum some androidx deps require. |
 
 > Play raises the minimum target API about once a year. When it moves, bump
 > `targetSdk` **and** `compileSdk` together and re-run the mobile build.
