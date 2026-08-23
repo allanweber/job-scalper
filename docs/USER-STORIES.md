@@ -14,7 +14,7 @@ Phases 1–6 of `DESIGN.md` are built. What exists, grounded in the tree:
 | API | 40+ endpoints across auth / account / feed / postings / drafts / jobs / system | no billing surface, no feed search, no pagination cursor |
 | Mobile | 4-tab shell (Feed / Saved / Applications / Profile), onboarding, drafts + PDFs, FCM push, delete-account | no paywall, no purchase flow, no in-app search/filters, no reminders |
 | Admin | users, plans, quota overrides, settings, jobs/queue, usage, postings, sources, audit | no revenue/subscription views, no support tooling, no cohort metrics |
-| Monetization | `plan` column, `_PLANS = ["free", "pro"]`, quota engine (`service/quota.py`), LLM cost estimates (`service/pricing.py`) | **nothing charges money** — no Play Billing, no entitlement sync |
+| Monetization | `plan` column, `_PLANS = ["free", "pro"]`, quota engine (`service/quota.py`), LLM cost estimates (`service/pricing.py`) | **nothing charges money** — no Play Billing, no entitlement sync, no promotional grants |
 | Release | `mobile.yml` builds a signed **APK** to a GitHub Release | Play needs an **AAB**; no Play Console upload; no track automation |
 | Legal | ToS + Privacy served as hard-coded stubs from `routers/system.py` | Play needs **publicly reachable URLs**; stubs are too thin for a resume-handling app |
 
@@ -163,6 +163,103 @@ Proposed split (numbers are the knob, mechanism already exists):
 
 ---
 
+## Phase 2b — Coupons and promotional grants
+
+Goal: the operator can hand a specific user a code that lifts their limits, and that code
+works exactly once.
+
+The quota engine already resolves a limit as *per-user override, else plan default*
+(`service/quota.py:limit_for`). Coupons must **not** reuse `user_quota_overrides` — an
+override is an absolute replacement set by an admin, so a coupon written into it would
+silently overwrite (and be overwritten by) manual support grants and could never expire
+cleanly. Coupons are a separate, **additive, expiring** layer.
+
+### COUP-1 — Coupon model and redemption ledger
+**As the operator, I want coupons stored with their grant and their redemption history, so that a code can never be used twice.**
+- New migration (next in sequence after `0010_draft_tone.sql`) adding:
+  - `coupons` — `code` (unique, stored case-folded), label, description, grant payload,
+    `valid_from` / `valid_until`, `max_redemptions` (global cap, null = unlimited),
+    `targeting` (`selected` | `open`), `created_by`, `revoked_at`.
+  - `coupon_targets` — `coupon_id` + `user_id`/`email`, for `selected` coupons.
+  - `coupon_redemptions` — `coupon_id`, `user_id`, **`email`**, `redeemed_at`, and a snapshot
+    of what was granted. **Unique on `(coupon_id, email)`.**
+- The unique constraint is keyed on **email, not `user_id`**, mirroring the existing durable
+  usage ledger (`0009_usage_ledger_email.sql`): deleting and recreating an account must not
+  reset a redemption, exactly as it must not reset consumed quota.
+- Grant payload shape (JSON, so new grant kinds don't need a migration):
+  ```json
+  {"metrics": {"draft": 25, "enrich": 50}, "plan": "pro", "duration_days": 30}
+  ```
+  — extra units per metric, and/or a temporary plan upgrade. Absent keys grant nothing.
+- Acceptance: a second redemption of the same code by the same identity is rejected with a
+  distinct, testable error; concurrent redemptions of a `max_redemptions: 1` coupon settle so
+  exactly one wins.
+
+### COUP-2 — Additive grants in the quota engine
+**As a user with a coupon, I want my extra units to actually raise my limit, so that the grant is real.**
+- `limit_for` becomes: `base = override ?? plan_default`, then `base + sum(active grants)`.
+- Unlimited stays absorbing: if `base == -1` or a grant is unlimited, the result is `-1`.
+- A grant is active when it is unexpired and, for period-scoped grants, matches the current
+  period key (`QuotaService.period()`, `YYYY-MM`).
+- `QuotaStatus` gains `base_limit` and `granted` so callers can show *where* the headroom came
+  from; `consume` / `refund` are untouched — coupons move the ceiling, never the counter.
+- Acceptance: unit tests covering grant + override interaction, expiry mid-period, unlimited
+  absorption, and that a refund after a coupon-funded call restores the right number.
+
+### COUP-3 — Admin: create, target, and manage coupons
+**As the operator, I want to create a coupon and assign it to a named user, so that I can compensate or onboard someone individually.**
+- New admin section (`/coupons`) beside the existing users/settings/jobs pages:
+  - Create: code (or generate one), grant payload built from a form — extra units per metric,
+    optional temporary plan upgrade and its duration — validity window, targeting.
+  - Target: pick specific users by email (typeahead over the user list), or mark the coupon
+    open with a global redemption cap.
+  - List: code, grant, targets, redeemed count / cap, validity, state.
+  - Revoke: stops future redemptions; **already-redeemed grants keep running** unless
+    explicitly clawed back (a separate, audited action).
+- Every create/revoke/clawback writes to `admin_audit` with before→after, like the existing
+  plan and quota actions.
+- From a user's detail page, a one-click "issue coupon to this user" shortcut, since
+  support-driven issuance is the common case.
+- Acceptance: an operator can go from a support email to a targeted, single-use code in under
+  a minute, and the audit log shows who issued it.
+
+### COUP-4 — Mobile: redeem a code and see the grant
+**As a user, I want to enter my code and immediately see my new limits, so that I trust it worked.**
+- `POST /account/coupons/redeem` with the code; typed failures the app can phrase properly:
+  unknown, expired, revoked, not targeted at you, already redeemed, globally exhausted.
+- Redemption entry point in Profile → Usage, and as a secondary action on the paywall
+  (MON-4) — "have a code?" — so a coupon is an alternative to paying, in context.
+- After redeeming, the usage screen shows the boosted limit with its origin and expiry
+  ("50 drafts — 25 from LAUNCH25, expires 30 Sep").
+- `GET /account/quota` returns active grants so this renders without a second call.
+- Acceptance: redeeming updates the usage screen without a restart; every failure mode has
+  human copy, never a raw error.
+
+### COUP-5 — Expiry, downgrade interaction, and notification
+**As a user whose coupon is ending, I want to know before it lapses, so that I'm not surprised mid-application.**
+- A scheduled sweep (the scheduler already owns periodic work) expires grants and, for
+  plan-upgrade coupons, returns the user to their underlying plan.
+- Interaction with MON-5: expiry reduces *limits only*. Drafts, applications, resumes, and
+  board selections survive; anything now over-limit becomes read-only until the user chooses,
+  never silently truncated.
+- Optional push a few days before a grant expires (reuses the existing FCM sender).
+- Acceptance: a plan-upgrade coupon on a free account reverts cleanly, and a user who paid for
+  Pro during a coupon window keeps Pro afterwards.
+
+### COUP-6 — Abuse and policy guardrails
+**As the operator, I want coupons to be safe to hand out, so that a leaked code isn't a bill.**
+- Rate-limit redemption attempts per account and per IP; codes generated with enough entropy
+  that guessing is impractical; never expose a code-existence oracle (unknown and
+  not-targeted-at-you should be indistinguishable to an untargeted caller).
+- Every coupon grant is LLM-bound spend — surface coupon-funded usage separately in the admin
+  cost view (ADM-4) so promotional cost is visible alongside plan cost.
+- **Play policy:** a coupon here is a *free operator-issued grant*, which is fine. It must not
+  become a way to sell Pro outside Play Billing — discounted or paid promotions belong in
+  Play's own promo codes and subscription offers. Keep the two mechanisms distinct.
+- Acceptance: a leaked open coupon is capped by `max_redemptions` and revocable in one action.
+
+---
+
 ## Phase 3 — Usefulness (the "would I keep this on my phone" phase)
 
 ### APP-1 — Search and filter the feed
@@ -276,13 +373,18 @@ Proposed split (numbers are the knob, mechanism already exists):
 ```
 Phase 1 (Play-ready) ──> Phase 2 (Monetization) ──> Phase 3 (Usefulness)
         │                        │
-        └── PLAY-8 clock starts early, runs in background
-                                 └── Phase 4 (Admin) tracks alongside 2 and 3
+        │                        ├── Phase 2b (Coupons) — needs MON-1's ladder, not Billing
+        └── PLAY-8 clock          └── Phase 4 (Admin) tracks alongside 2 and 3
+            starts early
 Phase 5 runs continuously.
 ```
 
 **Critical path to a paid app:** PLAY-1 → PLAY-2 → PLAY-4 → PLAY-6 → PLAY-8 (clock) →
 MON-1 → MON-2 → MON-3 → MON-4.
+
+Coupons are **off** that path — COUP-1/COUP-2 touch only the quota engine and can land
+before Billing exists, which makes them a useful way to compensate closed-testing testers
+(PLAY-8) while the payment work is still in flight.
 
 **Biggest risks:**
 1. **The testing-window clock.** It is calendar time you cannot compress — start it first.
@@ -292,4 +394,8 @@ MON-1 → MON-2 → MON-3 → MON-4.
 3. **Privacy scrutiny.** Resumes are sensitive personal data; a stub policy is a rejection
    risk and a real liability. PLAY-4 deserves proper drafting, not a paraphrase.
 4. **Unit economics.** Platform LLM spend per free user is currently unbounded except by
-   quota; ADM-4 should land before any marketing push.
+   quota; ADM-4 should land before any marketing push. Coupons raise that ceiling by design,
+   so coupon-funded usage needs to be visible (COUP-6) before codes go out widely.
+5. **Coupon replay.** Keying single-use on `user_id` would let a delete-and-recreate redeem
+   again — the same hole the email-keyed usage ledger already closes. COUP-1 keys on email
+   for that reason.
